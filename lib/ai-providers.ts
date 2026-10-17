@@ -2,7 +2,7 @@
 // Never persist BYOK credentials, put them in URLs, or log them.
 export type AIProvider = "openai" | "gemini" | "openrouter" | "groq" | "deepseek" | "mistral" | "together" | "anthropic";
 
-export type AISelection = { provider?: unknown; apiKey?: unknown; model?: unknown; keySource?: unknown };
+export type AISelection = { provider?: unknown; apiKey?: unknown; model?: unknown; imageModel?: unknown; keySource?: unknown };
 
 const textDefaults: Record<AIProvider, string> = {
   openai: "gpt-4.1-mini",
@@ -73,7 +73,7 @@ export function resolveAIConfig(selection: AISelection | undefined, purpose: "te
     ? (provider === "gemini" ? "gemini-2.5-flash-image" : process.env.OPENAI_IMAGE_MODEL || "gpt-image-1")
     : (provider === "openai" ? process.env.OPENAI_AGENT_MODEL || textDefaults.openai : textDefaults[provider]);
   // An image model is independent from the text-model field.
-  const model = purpose === "image" ? defaultModel : selection?.model || defaultModel;
+  const model = purpose === "image" ? (selection?.imageModel || defaultModel) : (selection?.model || defaultModel);
   if (typeof model !== "string" || !/^[a-zA-Z0-9][a-zA-Z0-9._:/-]{1,120}$/.test(model)) {
     throw new Error("AI_MODEL_INVALID");
   }
