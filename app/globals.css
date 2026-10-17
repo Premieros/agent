@@ -641,3 +641,25 @@ td>b { font-weight: 700; color: #233944; }
 .studio-file-input:has(input:disabled){opacity:.5;cursor:not-allowed}
 .studio-file-input input{position:absolute;width:1px;height:1px;opacity:0;overflow:hidden}
 @media(max-width:620px){.studio-template-fields{grid-template-columns:1fr}}
+
+
+/* Free-only automatic provider routing UI. */
+.studio-auto-routing{background:#fff;border:1px solid #cfe6dc;padding:12px 13px;border-radius:10px;margin-bottom:12px}
+.studio-auto-head{display:flex;align-items:center;justify-content:space-between;gap:14px}
+.studio-auto-head strong{display:flex;gap:7px;align-items:center;color:#19785f;font-size:12px}
+.studio-auto-head p{font-size:10px;color:#84979e;margin:4px 0 0;line-height:1.8}
+.studio-auto-head select{border:1px solid #cee6da;border-radius:8px;background:#eff9f4;color:#237960;padding:8px 11px;min-width:215px;font:700 11px "Cairo",Tahoma,sans-serif}
+.studio-auto-opt{display:flex;gap:8px;align-items:start;margin-top:12px;font-size:11px;color:#866c39;line-height:1.8;cursor:pointer}
+.studio-auto-opt input{margin-top:7px;flex:0 0 auto;accent-color:#168269}
+.studio-auto-controls{display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-top:10px}
+.studio-auto-controls button{display:inline-flex;align-items:center;gap:7px;background:#167d66;color:#fff;border:0;border-radius:8px;padding:8px 12px;font:700 11px "Cairo",Tahoma,sans-serif}
+.studio-auto-controls button:disabled{opacity:.55}
+.studio-auto-controls>span{color:#678b83;font-size:11px}
+.studio-auto-providers{display:flex;flex-wrap:wrap;gap:6px;margin-top:11px}
+.studio-auto-providers>span{background:#f4f8f7;border:1px solid #e4eceb;border-radius:6px;padding:4px 7px;color:#57777b;font-size:10px}
+.studio-auto-candidates{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:6px;margin-top:10px}
+.studio-auto-candidates>div{display:flex;align-items:flex-start;gap:5px;flex-direction:column;padding:9px 11px;background:#f7faf9;border:1px solid #e5efeb;border-radius:8px}
+.studio-auto-candidates span{font-size:11px;color:#2d6166;overflow-wrap:anywhere}
+.studio-auto-candidates small{color:#79928e;font-size:10px}
+.studio-auto-warning{color:#956f32;font-size:11px;padding:10px;background:#fff9ec;border:1px solid #f5e7c7;border-radius:8px;line-height:1.9;margin-top:10px}
+@media(max-width:660px){.studio-auto-head{align-items:stretch;flex-direction:column}.studio-auto-head select{width:100%}.studio-auto-candidates{grid-template-columns:1fr}}
