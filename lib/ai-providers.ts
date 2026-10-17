@@ -186,7 +186,7 @@ export async function askSelectedAgent(
           contents: [{ role: "user", parts: [{ text: context }] }],
           generationConfig: {
             maxOutputTokens: Math.min(4096, Math.max(850, tokenLimit + 350)),
-            ...( /^gemini-2\\.5-flash(?:-lite)?(?:$|-)/.test(config.model)
+            ...( config.model.startsWith("gemini-2.5-flash")
               ? { thinkingConfig: { thinkingBudget: 0 } }
               : {} )
           }
