@@ -80,7 +80,7 @@ export async function POST(req: NextRequest) {
         ? await askAutoAgent(candidates, "مدير الوكلاء الاقتصادي", economyInstructions, context, 3650)
         : await askSelectedAgent(ai!, "مدير الوكلاء الاقتصادي", economyInstructions, context, 3650);
       usedModel = drafted.model;
-      apiCalls = routing === "auto" ? ("tried" in drafted ? drafted.tried : 1) : 1;
+      apiCalls = routing === "auto" && "tried" in drafted && typeof drafted.tried === "number" ? drafted.tried : 1;
       let parsed: Record<string, unknown>;
       try {
         const raw = drafted.text.trim().replace(/^\x60\x60\x60(?:json)?\s*/i, "").replace(/\s*\x60\x60\x60$/, "");
