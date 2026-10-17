@@ -133,7 +133,7 @@ export default function SalesWorkspace() {
             <button className="icon-button mobile-menu" aria-label="فتح القائمة" onClick={() => setMobileMenu(true)}><Menu size={22}/></button>
             <span>مساحة العمل</span><ChevronLeft size={15}/><strong>{pageTitle[view]}</strong>
           </div>
-          <div className="topbar-right"><Link href="/crm" className="live-crm-link">الدخول إلى CRM الفعلي</Link><span className="demo-pill"><span /> وضع تجريبي</span><div className="profile-avatar top-avatar">PM</div></div>
+          <div className="topbar-right"><Link href="/studio" className="live-crm-link">مدير الوكلاء</Link><Link href="/crm" className="live-crm-link">الدخول إلى CRM الفعلي</Link><span className="demo-pill"><span /> وضع تجريبي</span><div className="profile-avatar top-avatar">PM</div></div>
         </header>
         <main className="main-content">
           {notice && <div className="notice" role="status"><CheckCircle2 size={18}/><span>{notice}</span><button onClick={() => setNotice("")} aria-label="إغلاق الإشعار"><X size={16}/></button></div>}
