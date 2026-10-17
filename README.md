@@ -17,6 +17,12 @@ Arabic-first web workspace for running multiple Facebook and Instagram brand wor
 - **CRM and internal inbox:** actual authenticated customer storage, notes, follow-up task creation, human-takeover mode. Internal notes are never sent to external channels.
 - **Original UI prototype:** `/` still contains demo conversations and does not represent real customer activity.
 
+## Economical agent execution (default)
+
+The Studio defaults to **Economy — 1 AI request**. It creates director, strategist, copywriter, designer, media-buyer, support, and initial-reviewer sections from a **single model call** and saves all seven sections separately for the UI. The reviewer section is an initial self-review within the same model response, **not an independent agent audit**. Keep human sign-off. For an independent model-based review, switch to **Full — 7 AI requests**; this uses more API calls and can consume more quota. Provider pricing is not guaranteed and depends on response size, actual model rates, and billing tier.
+
+Production `GEMINI_API_KEY` is read only on the server from a Vercel Sensitive environment variable. The Studio can therefore run Gemini without retyping the key after a successful production redeploy. The default model is based on the model successfully tested in the Studio, but availability can change; use model discovery when necessary. The environment variable key should never be a `NEXT_PUBLIC_` value.
+
 ## Bring your own API key — 8 AI providers
 
 In `/studio`, choose **Gemini, OpenAI, OpenRouter, Groq, DeepSeek, Mistral, Together AI, or Anthropic**; enter the matching API key and model ID, then click **Test key** (makes a small real provider request). After a successful test, create a mission and launch the agents. The API key stays in the current page's React memory: it is submitted to the authenticated server API for the action, never saved to Supabase, localStorage, GitHub, or visible server logs. **Refreshing the page clears it.** Always use HTTPS and trust the site before entering a credential.
