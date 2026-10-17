@@ -71,15 +71,79 @@ export function resolveAIConfig(selection: AISelection | undefined, purpose: "te
   return { provider, apiKey, model };
 }
 
+// Provider errors are classified without passing raw upstream error messages,
+// requests or user-supplied credentials to browser responses or logs.
+function classifyProviderError(status: number, body: unknown): string {
+  const payload = typeof body === "object" && body !== null ? body as Record<string, unknown> : {};
+  const error = typeof payload.error === "object" && payload.error !== null ? payload.error as Record<string, unknown> : {};
+  const errorMessage = typeof error.message === "string" ? error.message : "";
+  const errorStatus = typeof error.status === "string" ? error.status : "";
+  const errorCode = typeof error.code === "string" ? error.code : "";
+  const msg = [errorMessage, errorStatus, errorCode].join(" ").toLowerCase();
+
+  if (status === 429 || /resource_exhausted|rate.limit|quota.exceeded/.test(msg)) return "AI_QUOTA_EXCEEDED";
+  if (/api.key.not.valid|invalid.api.key|invalid.*api.key|api.key.*invalid|api_key_invalid|key.*expired|revoked.*key/.test(msg)) return "AI_CREDENTIALS_REJECTED";
+  if (/location.*not.supported|country.*not.supported|region.*not.supported|billing.*required|paid.plan.*required|precondition/.test(msg)) return "AI_ACCESS_RESTRICTED";
+  if (status === 401 || status === 403) return "AI_CREDENTIALS_REJECTED";
+  if (status === 404 || /model.*not.found|model.*not.supported|model.*not.available/.test(msg)) return "AI_MODEL_UNAVAILABLE";
+  if (status === 400 || status === 422) return "AI_REQUEST_INVALID";
+  return "AI_PROVIDER_FAILURE";
+}
+
 async function providerFetch(url: string, options: RequestInit) {
   const response = await fetch(url, { ...options, cache: "no-store", signal: AbortSignal.timeout(50000) });
   if (!response.ok) {
-    if (response.status === 401 || response.status === 403) throw new Error("AI_CREDENTIALS_REJECTED");
-    if (response.status === 429) throw new Error("AI_QUOTA_EXCEEDED");
-    if (response.status === 400 || response.status === 404) throw new Error("AI_MODEL_UNAVAILABLE");
-    throw new Error("AI_PROVIDER_FAILURE");
+    let payload: unknown = null;
+    try { payload = await response.json(); } catch { /* fallback to status */ }
+    throw new Error(classifyProviderError(response.status, payload));
   }
   return response.json() as Promise<unknown>;
+}
+
+// Discovery uses only fixed, trusted API hosts. This is a metadata request,
+// not a model invocation; no content is generated and no key is persisted.
+export async function listAvailableTextModels(config: AIConfig): Promise<Array<{ id: string; label: string }>> {
+  let url: string;
+  let headers: Record<string, string> = {};
+  if (config.provider === "gemini") {
+    url = "https://generativelanguage.googleapis.com/v1beta/models?pageSize=1000";
+    headers = { "x-goog-api-key": config.apiKey };
+  } else if (config.provider === "anthropic") {
+    url = "https://api.anthropic.com/v1/models?limit=100";
+    headers = { "x-api-key": config.apiKey, "anthropic-version": "2023-06-01" };
+  } else {
+    const modelUrls: Partial<Record<AIProvider,string>> = {
+      openai: "https://api.openai.com/v1/models",
+      openrouter: "https://openrouter.ai/api/v1/models",
+      groq: "https://api.groq.com/openai/v1/models",
+      deepseek: "https://api.deepseek.com/models",
+      mistral: "https://api.mistral.ai/v1/models",
+      together: "https://api.together.xyz/v1/models"
+    };
+    url = modelUrls[config.provider] || "";
+    if (!url) throw new Error("AI_PROVIDER_UNSUPPORTED");
+    headers = { Authorization: `Bearer ${config.apiKey}` };
+  }
+  const payload = await providerFetch(url, { headers }) as {
+    models?: Array<{ name?: string; displayName?: string; supportedGenerationMethods?: string[] }>;
+    data?: Array<{ id?: string; name?: string; display_name?: string; type?: string }>;
+  };
+  const results: Array<{id:string; label:string}> = config.provider === "gemini"
+    ? (payload.models || [])
+       .filter(m => m.supportedGenerationMethods?.includes("generateContent"))
+       .map(m => ({ id: (m.name || "").replace(/^models\\//, ""), label: m.displayName || (m.name || "").replace(/^models\\//, "") }))
+    : (payload.data || []).map(m => ({ id: m.id || "", label: m.display_name || m.name || m.id || "" }));
+
+  const candidates = results.filter(m => /^[a-zA-Z0-9][a-zA-Z0-9._:/-]{1,120}$/.test(m.id))
+    .filter(m => !/(embedding|rerank|whisper|tts|transcri|moderation|veo|imagen|audio|vision-embedding|realtime|image-gen)/i.test(m.id))
+    .filter(m => config.provider !== "openai" || /^(gpt-|o[134]|chatgpt-)/.test(m.id));
+  const unique = Array.from(new Map(candidates.map(item => [item.id, item])).values());
+  // Favor available inexpensive models, while allowing the user to choose freely.
+  unique.sort((a,b) => {
+    const score=(id:string)=> /flash-lite|:free|small|mini|haiku|instant/i.test(id) ? 0 : /flash|fast|turbo/i.test(id) ? 1 : 2;
+    return score(a.id) - score(b.id) || a.id.localeCompare(b.id);
+  });
+  return unique.slice(0, 120);
 }
 
 export async function askSelectedAgent(
