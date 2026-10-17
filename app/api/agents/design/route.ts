@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { errorResponse, getMissionContext, requireAgentSession } from "@/lib/agent-server";
-import { generateSelectedImage, resolveAIConfig, type AISelection } from "@/lib/ai-providers";
+import { AIProviderError, generateSelectedImage, resolveAIConfig, type AISelection } from "@/lib/ai-providers";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -48,8 +48,22 @@ Create a high-quality modern composition. Avoid fictitious logos, unsupported st
     if (saveError) throw saveError;
     return NextResponse.json({ ok: true, message: "تم حفظ التصميم الخاص في مكتبة المهمة." });
   } catch (error) {
+    // Quota is independent for images vs text: do not retry automatically.
+    const quotaError = error instanceof AIProviderError && error.code === "AI_QUOTA_EXCEEDED";
+    const modelError = error instanceof AIProviderError && error.code === "AI_MODEL_UNAVAILABLE";
     console.error("Creative generator error", error instanceof Error ? error.message : "Unknown error");
     const response = errorResponse(error);
-    return NextResponse.json({ error: response.message }, { status: response.status });
+    const message = quotaError
+      ? "حصة توليد الصور لدى مزوّد الذكاء الاصطناعي انتهت أو وصلت للحد المسموح. اشتغال الوكلاء النصيين لا يعني توفر حصة للصور. استخدم «تصميم بالقالب مجانًا» أو ارفع تصميم جاهز؛ مش هنعيد المحاولة تلقائيًا."
+      : modelError
+        ? "نموذج الصور غير متاح لحسابك. غيّر «نموذج الصور» إلى نموذج يسمح بتوليد الصور من حسابك، أو استخدم القالب المجاني."
+        : response.message;
+    return NextResponse.json({
+      error: message,
+      code: quotaError ? "IMAGE_QUOTA_EXCEEDED" : modelError ? "IMAGE_MODEL_UNAVAILABLE" : response.status >= 500 ? "IMAGE_GENERATION_FAILED" : "IMAGE_PROVIDER_REJECTED",
+      upstream: error instanceof AIProviderError
+        ? { httpStatus: error.status, providerStatus: error.providerStatus || null }
+        : null
+    }, { status: response.status, headers: { "Cache-Control": "no-store" } });
   }
 }
