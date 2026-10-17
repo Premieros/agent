@@ -70,7 +70,7 @@ export async function POST(req: NextRequest) {
     }));
 
     const { error: savedError } = await session.db.from("agent_outputs")
-      .upsert(records, { onConflict: "mission_id,agent_role" });
+      .insert(records);
     if (savedError) throw savedError;
     const { error: statusError } = await session.db.from("agent_missions")
       .update({ status: "review" })
