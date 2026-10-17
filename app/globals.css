@@ -576,3 +576,21 @@ td>b { font-weight: 700; color: #233944; }
  .studio-mission-row{align-items:flex-start;flex-direction:column;gap:7px}
  .studio-image-grid{grid-template-columns:1fr 1fr}
 }
+
+
+/* In-memory BYOK provider switcher. Never show an entered secret in plain text. */
+.studio-ai-settings{background:#fff;border:1px solid #dae9e3;border-radius:10px;padding:12px 13px;margin-bottom:11px}
+.studio-ai-settings-head{display:flex;justify-content:space-between;align-items:center;gap:12px}
+.studio-ai-settings-head strong{display:flex;align-items:center;gap:7px;font-size:12px;color:#2b6659}
+.studio-ai-settings-head p{margin:4px 0 0;font-size:11px;color:#8b9ba2}
+.studio-ai-settings-head>button{border:1px solid #d8e8e0;border-radius:7px;background:#f5faf7;color:#24806a;font:700 11px "Cairo",Tahoma,sans-serif;padding:6px 10px;white-space:nowrap}
+.studio-ai-config{display:grid;grid-template-columns:1fr 1.4fr 1fr auto;align-items:end;gap:9px;margin:12px 0 6px}
+.studio-ai-config label{display:block;color:#56747b;font-size:11px;font-weight:700;min-width:0}
+.studio-ai-config input,.studio-ai-config select{display:block;width:100%;min-width:0;border:1px solid #d9e5e5;border-radius:7px;background:#fafdfc;color:#334d56;font:11px "Cairo",Tahoma,sans-serif;padding:8px 9px;margin-top:5px;height:36px}
+.studio-ai-config input[type="password"]{direction:ltr;text-align:left}
+.studio-ai-config>button{height:36px;border:1px solid #e0e7e6;border-radius:7px;background:#fff;color:#718b90;padding:7px 10px;font:700 11px "Cairo",Tahoma,sans-serif}
+.studio-ai-config>button:disabled{opacity:.45}
+.studio-privacy-note{display:flex;align-items:flex-start;gap:6px;font-size:10px;line-height:1.8;color:#849b9d;margin:8px 0 0}
+.studio-privacy-note svg{flex-shrink:0;margin-top:2px;color:#3a937c}
+@media(max-width:1150px){.studio-ai-config{grid-template-columns:repeat(2,minmax(0,1fr))}.studio-ai-config>button{justify-self:start}}
+@media(max-width:560px){.studio-ai-config{grid-template-columns:1fr}.studio-ai-settings-head{align-items:flex-start;flex-wrap:wrap}}
