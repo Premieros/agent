@@ -34,6 +34,9 @@ export function errorResponse(error: unknown): { message: string; status: number
   if (message === "SESSION_REQUIRED") return { message: "يرجى تسجيل الدخول من جديد.", status: 401 };
   if (message === "PERMISSION_DENIED") return { message: "هذه العملية تحتاج مديرًا أو مسؤول تسويق.", status: 403 };
   if (message === "AI_NOT_CONFIGURED") return { message: "اختار المزوّد وأدخل مفتاح API صالحًا، أو أضفه إلى إعدادات Vercel.", status: 503 };
+  if (message === "AUTO_NO_FREE_MODELS") return { message: "مافيش نماذج مجانية معلنة متاحة بالمفاتيح المحفوظة. أضف OPENROUTER_API_KEY في Vercel وابحث من جديد، أو فعّل استخدام مرشحي الحصة المجانية مع العلم إنها قد تكون مدفوعة حسب حسابك.", status: 503 };
+  if (message === "AUTO_ALL_FAILED") return { message: "كل بدائل التشغيل التلقائي المتاحة فشلت أو وصلت لحد الاستخدام، واتوقّفنا من غير تشغيل نموذج مدفوع بديل. جرّب لاحقًا أو زوّد مزوّد مجاني آخر.", status: 503 };
+  if (message === "AUTO_ECONOMY_ONLY") return { message: "التبديل التلقائي شغال حاليًا في الوضع الاقتصادي فقط لتقييد عدد الطلبات. اختار اقتصادي، أو بدّل للوضع اليدوي.", status: 400 };
   if (message === "AI_PROVIDER_UNSUPPORTED") return { message: "المزوّد غير مدعوم. اختر واحدًا من القائمة.", status: 400 };
   if (message === "AI_IMAGE_UNSUPPORTED") return { message: "توليد الصور متاح حاليًا بمفتاح OpenAI أو Gemini وبنموذج صور مدعوم فقط.", status: 400 };
   if (message === "AI_KEY_INVALID" || message === "AI_MODEL_INVALID") return { message: "المفتاح أو اسم النموذج غير صالح.", status: 400 };
