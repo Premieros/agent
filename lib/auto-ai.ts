@@ -60,7 +60,15 @@ export async function discoverAutoModels(includeFreeTier: boolean): Promise<Auto
       return [] as AutoCandidate[];
     }
   }));
-  const candidates = found.flat();
+  // Round-robin provider candidates so an exhausted OpenRouter account
+  // does not consume all three attempts before Gemini/Groq gets a turn.
+  const candidates: AutoCandidate[] = [];
+  const maxItems = Math.max(0, ...found.map(items => items.length));
+  for (let i = 0; i < maxItems; i++) {
+    for (const items of found) {
+      if (items[i]) candidates.push(items[i]);
+    }
+  }
   // Cache provider model metadata for three minutes, never cache secrets.
   if (candidates.length) snapshot.set(cacheKey, { expires: Date.now() + 180_000, candidates });
   return candidates;
