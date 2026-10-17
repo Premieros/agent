@@ -1,17 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
 import { errorResponse, getMissionContext, requireAgentSession } from "@/lib/agent-server";
+import { generateSelectedImage, resolveAIConfig, type AISelection } from "@/lib/ai-providers";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
 export async function POST(req: NextRequest) {
   try {
-    const body = await req.json() as { missionId?: unknown };
+    const body = await req.json() as { missionId?: unknown; ai?: AISelection };
     if (typeof body.missionId !== "string") return NextResponse.json({ error: "المهمة غير صحيحة." }, { status: 400 });
     const session = await requireAgentSession(req);
     const { mission, page } = await getMissionContext(session, body.missionId);
-    const apiKey = process.env.OPENAI_API_KEY;
-    if (!apiKey) throw new Error("AI_NOT_CONFIGURED");
+    const ai = resolveAIConfig(body.ai, "image");
     if (!["review", "approved"].includes(mission.status)) {
       return NextResponse.json({ error: "شغّل وكلاء المحتوى الأول وراجع المسودات." }, { status: 409 });
     }
@@ -33,30 +33,11 @@ Campaign brief: ${mission.brief.slice(0,950)}
 Visual designer instructions: ${plan.content.slice(0,1650)}
 Create a high-quality modern composition. Avoid fictitious logos, unsupported stats, fictional hardware specifications, fake badges, or prices. Leave clean breathing room for Arabic copy that can be added later. Do not depict a published advertisement or an actual Meta interface.`.slice(0,4800);
 
-    const resp = await fetch("https://api.openai.com/v1/images/generations", {
-      method: "POST",
-      headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-      body: JSON.stringify({
-        model: process.env.OPENAI_IMAGE_MODEL || "gpt-image-1",
-        prompt, size: "1024x1024", quality: "medium", n: 1
-      }),
-      cache: "no-store",
-      signal: AbortSignal.timeout(55000)
-    });
-    if (!resp.ok) {
-      console.error("Creative generation provider status", resp.status);
-      return NextResponse.json({ error: "فشل توليد الصورة. راجع صلاحية نموذج الصور ورصيد واجهة OpenAI." }, { status: 502 });
-    }
-    const result = await resp.json() as { data?: Array<{ b64_json?: string }> };
-    const base64 = result.data?.[0]?.b64_json;
-    if (!base64) return NextResponse.json({ error: "لم ترجع خدمة الصور ملفًا صالحًا." }, { status: 502 });
-    const binary = Buffer.from(base64, "base64");
-    if (binary.length < 100 || binary.length > 10485760) {
-      return NextResponse.json({ error: "حجم الملف الناتج خارج الحدود." }, { status: 502 });
-    }
-    const path = `${session.organizationId}/${mission.id}/${crypto.randomUUID()}.png`;
+    const { image: binary, contentType } = await generateSelectedImage(ai, prompt);
+    const ext = contentType === "image/jpeg" ? "jpg" : contentType === "image/webp" ? "webp" : "png";
+    const path = `${session.organizationId}/${mission.id}/${crypto.randomUUID()}.${ext}`;
     const { error: uploadError } = await session.db.storage.from("marketing-creatives")
-      .upload(path, binary, { contentType: "image/png", upsert: false });
+      .upload(path, binary, { contentType, upsert: false });
     if (uploadError) throw uploadError;
     const { error: saveError } = await session.db.from("creative_assets").insert({
       organization_id: session.organizationId,
