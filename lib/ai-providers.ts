@@ -131,7 +131,7 @@ export async function listAvailableTextModels(config: AIConfig): Promise<Array<{
   const results: Array<{id:string; label:string}> = config.provider === "gemini"
     ? (payload.models || [])
        .filter(m => m.supportedGenerationMethods?.includes("generateContent"))
-       .map(m => ({ id: (m.name || "").replace(/^models\\//, ""), label: m.displayName || (m.name || "").replace(/^models\\//, "") }))
+       .map(m => ({ id: (m.name || "").replace("models/", ""), label: m.displayName || (m.name || "").replace("models/", "") }))
     : (payload.data || []).map(m => ({ id: m.id || "", label: m.display_name || m.name || m.id || "" }));
 
   const candidates = results.filter(m => /^[a-zA-Z0-9][a-zA-Z0-9._:/-]{1,120}$/.test(m.id))
