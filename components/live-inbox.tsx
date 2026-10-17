@@ -162,7 +162,7 @@ export default function LiveInbox() {
   return <div className="crm-root live-inbox">
     <div className="crm-wrap">
       <header className="crm-header"><div><strong>AGENT</strong><span> · مركز المحادثات</span></div>
-        <div className="crm-actions"><Link href="/crm"><ArrowRight size={17}/> إدارة العملاء</Link><Link href="/">الواجهة التجريبية</Link></div>
+        <div className="crm-actions"><Link href="/studio">مدير الوكلاء</Link><Link href="/crm"><ArrowRight size={17}/> إدارة العملاء</Link><Link href="/">الواجهة التجريبية</Link></div>
       </header>
       <div className="crm-title"><div><span className="crm-overline">Team Inbox</span><h1>مركز المحادثات والمتابعة</h1><p>متابعة فعلية محفوظة على Supabase، مع فصل الملاحظات الداخلية عن الرسائل المرسلة للعملاء.</p></div><span className="crm-status"><ShieldCheck size={15}/> بيانات محمية</span></div>
       <div className="inbox-safety"><CircleAlert size={18}/><span>واتساب وماسنجر لم يتم ربطهما بعد. أي ملاحظة تكتبها هنا <b>داخلية فقط</b> ولن تُرسل لأي عميل.</span></div>
