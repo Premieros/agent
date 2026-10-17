@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAgentSession, errorResponse } from "@/lib/agent-server";
-import { resolveAIConfig, askSelectedAgent, type AISelection } from "@/lib/ai-providers";
+import { resolveAIConfig, askSelectedAgent, AIProviderError, type AISelection } from "@/lib/ai-providers";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -21,6 +21,11 @@ export async function POST(req: NextRequest) {
   } catch (error) {
     console.error("Provider test", error instanceof Error ? error.message : "unknown");
     const response = errorResponse(error);
-    return NextResponse.json({ error: response.message }, { status: response.status, headers: { "Cache-Control": "no-store" } });
+    const upstream = error instanceof AIProviderError
+      ? { httpStatus: error.status, providerStatus: error.providerStatus || null, category: error.code }
+      : null;
+    return NextResponse.json({ error: response.message, upstream }, {
+      status: response.status, headers: { "Cache-Control": "no-store" }
+    });
   }
 }
