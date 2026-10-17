@@ -67,6 +67,7 @@ export default function AgentStudio() {
   const [ready, setReady] = useState<ReadyStatus | null>(null);
   const [aiProvider, setAiProvider] = useState<ProviderId>("gemini");
   const [aiKey, setAiKey] = useState("");
+  const [keySource, setKeySource] = useState<"server" | "manual">("server");
   const [aiModel, setAiModel] = useState("gemini-3.5-flash-lite");
   const [showAiSettings, setShowAiSettings] = useState(true);
   const [runMode, setRunMode] = useState<"economy" | "full">("economy");
@@ -89,7 +90,14 @@ export default function AgentStudio() {
   const selectedMission = missions.find(m => m.id === missionId) || null;
   const approvedCount = missions.filter(m => m.status === "approved").length;
   const selectedProvider = providers.find(p => p.id === aiProvider) || providers[0];
-  const aiReady = Boolean(aiKey.trim()) || Boolean(ready?.configuredProviders?.includes(aiProvider));
+  const serverKeyConfigured = Boolean(ready?.configuredProviders?.includes(aiProvider));
+  const aiReady = keySource === "server" ? serverKeyConfigured : Boolean(aiKey.trim());
+  const selectedAI = () => ({
+    provider: aiProvider,
+    model: aiModel.trim(),
+    keySource,
+    ...(keySource === "manual" ? { apiKey: aiKey.trim() } : {})
+  });
   const canGenerateImage = aiReady && selectedProvider.image;
 
   const loadWorkspace = useCallback(async (activeUser: User | null) => {
@@ -222,7 +230,7 @@ export default function AgentStudio() {
       const response = await fetch("/api/agents/models", {
         method: "POST",
         headers: await authHeaders(),
-        body: JSON.stringify({ ai: { provider: aiProvider, apiKey: aiKey.trim(), model: aiModel.trim() } })
+        body: JSON.stringify({ ai: selectedAI() })
       });
       const data = await response.json() as { error?: string; models?: Array<{ id: string; label: string }>; count?: number };
       if (!response.ok) { setError(data.error || "تعذر الاستعلام عن نماذج المزوّد."); return; }
@@ -270,7 +278,7 @@ export default function AgentStudio() {
     try {
       const response = await fetch(endpoint, {
         method: "POST", headers: await authHeaders(),
-        body: JSON.stringify({ missionId: id, mode: runMode, ai: { provider: aiProvider, model: aiModel.trim(), apiKey: aiKey.trim() } })
+        body: JSON.stringify({ missionId: id, mode: runMode, ai: selectedAI() })
       });
       const result = await response.json() as { error?: string; agents?: number; mode?: "economy" | "full"; apiCalls?: number };
       if (!response.ok) { setError(result.error || "تعذر تشغيل الوكيل."); return; }
@@ -350,19 +358,30 @@ export default function AgentStudio() {
               <select value={aiProvider} onChange={e=>{
                 const picked = providers.find(p=>p.id===e.target.value);
                 if (!picked) return;
-                setAiProvider(picked.id); setAiModel(picked.model); setAiKey(""); setAiTestResult(""); setAvailableModels([]); setModelLookupMessage("");
+                setAiProvider(picked.id); setAiModel(picked.model); setAiKey(""); setKeySource(ready?.configuredProviders?.includes(picked.id) ? "server" : "manual"); setAiTestResult(""); setAvailableModels([]); setModelLookupMessage("");
               }}>
                 {providers.map(p=><option key={p.id} value={p.id}>{p.title}</option>)}
               </select>
             </label>
-            <label>مفتاح API الخاص بالمزوّد
-              <input type="password" autoComplete="off" spellCheck={false} placeholder="الصق المفتاح هنا" value={aiKey} onChange={e=>{setAiKey(e.target.value);setAiTestResult("");setAvailableModels([]);setModelLookupMessage("");}} />
+            <label>مصدر مفتاح API
+              <select value={keySource} onChange={e=>{
+                setKeySource(e.target.value as "server" | "manual");
+                setAiTestResult("");setAvailableModels([]);setModelLookupMessage("");setError("");
+              }}>
+                {serverKeyConfigured && <option value="server">مفتاح Vercel المحفوظ (موصى به)</option>}
+                {!serverKeyConfigured && keySource==="server" && <option value="server">لا يوجد مفتاح محفوظ للمزوّد</option>}
+                <option value="manual">إدخال مفتاح يدوي مؤقت</option>
+              </select>
             </label>
+            {keySource==="manual" && <label>مفتاح API المؤقت
+              <input type="password" autoComplete="off" spellCheck={false} placeholder="الصق المفتاح هنا" value={aiKey} onChange={e=>{setAiKey(e.target.value);setAiTestResult("");setAvailableModels([]);setModelLookupMessage("");}} />
+            </label>}
+            {keySource==="server" && <div className="studio-key-active"><ShieldCheck size={15}/>{serverKeyConfigured?"المفتاح محفوظ على Vercel. اختبره أولًا بدون كتابة أي مفتاح.":"لم يتم العثور على مفتاح لهذه الخدمة في Vercel. اختار الإدخال اليدوي."}</div>}
             <label>نموذج الكتابة
               <input dir="ltr" spellCheck={false} autoComplete="off" value={aiModel} onChange={e=>{setAiModel(e.target.value);setAiTestResult("");}} placeholder="Model ID"/>
             </label>
             <button type="button" className="studio-test-provider" disabled={!aiReady||Boolean(busy)} onClick={()=>void discoverModels()}>{busy==="models"?"جارٍ التحميل...":"عرض النماذج المتاحة"}</button>
-            <button type="button" disabled={!aiKey} onClick={()=>{setAiKey("");setAiTestResult("");}}>مسح المفتاح</button>
+            {keySource==="manual" && <button type="button" disabled={!aiKey} onClick={()=>{setAiKey("");setAiTestResult("");}}>مسح المفتاح</button>}
             <button type="button" className="studio-test-provider" disabled={!aiReady||Boolean(busy)} onClick={()=>void testProvider()}>{busy==="test"?"جارٍ الاختبار...":"اختبار المفتاح"}</button>
           </div>}
           {modelLookupMessage && <p className="studio-model-hint">{modelLookupMessage}</p>}
@@ -373,7 +392,7 @@ export default function AgentStudio() {
             </select>
           </label>}
           {aiTestResult && <p className="studio-success-note">{aiTestResult}</p>}
-          <p className="studio-privacy-note"><ShieldCheck size={13}/> المفتاح موجود في الصفحة دي مؤقتًا فقط، مش بيتحفظ في قاعدة البيانات أو المتصفح. عند تحديث الصفحة هتحتاج تدخله تاني. لو فيه مفتاح مُعدّ على Vercel للمزوّد المختار تقدر تسيب الخانة فاضية.</p>
+          <p className="studio-privacy-note"><ShieldCheck size={13}/> مفتاح Vercel بيتستخدم على الخادم بدون إرساله للمتصفح. أما المفتاح اليدوي فبيفضل مؤقتًا في الصفحة ومش بيتحفظ في قاعدة البيانات. اختبر المصدر المختار قبل تشغيل المهمة.</p>
         </section>
         <div className="studio-run-mode">
           <div><strong>طريقة تشغيل الفريق</strong><p>الوضع الاقتصادي بيجهّز مخرجات الفريق في طلب واحد؛ المراجعة فيه أولية، مش تدقيق مستقل.</p></div>
@@ -384,7 +403,7 @@ export default function AgentStudio() {
         </div>
         <div className="studio-readiness">
           <CircleAlert size={16}/>
-          <span>{aiReady ? `مزوّد ${selectedProvider.title} جاهز من ناحية إدخال المفتاح (لسه محتاج اختبار صلاحية المفتاح)` : `اختار مفتاح ${selectedProvider.title} لتشغيل الوكلاء`} · {selectedProvider.image ? "يدعم توليد الصور بنموذج صور منفصل حسب الحصة" : "هذا المزوّد مخصص للمهام النصية هنا"} · {ready?.metaConnected ? "Meta متصل" : "Meta غير متصل، لا نشر ولا إعلان ممول ولا رد خارجي"}</span>
+          <span>{aiReady ? `${selectedProvider.title}: ${keySource==="server"?"مفتاح Vercel محدد":"مفتاح يدوي محدد"} — اختبار الصلاحية مطلوب` : `اختار مفتاح ${selectedProvider.title} لتشغيل الوكلاء`} · {selectedProvider.image ? "يدعم توليد الصور بنموذج صور منفصل حسب الحصة" : "هذا المزوّد مخصص للمهام النصية هنا"} · {ready?.metaConnected ? "Meta متصل" : "Meta غير متصل، لا نشر ولا إعلان ممول ولا رد خارجي"}</span>
           <button type="button" onClick={()=>void statusCheck()} title="فحص الإعدادات"><RefreshCcw size={15}/></button>
         </div>
         <div className="studio-layout">
