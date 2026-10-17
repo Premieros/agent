@@ -23,6 +23,15 @@ type ProviderId = "openai" | "gemini" | "openrouter" | "groq" | "deepseek" | "mi
 type ReadyStatus = { aiReady: boolean; imageReady: boolean; metaConnected: boolean; canPublish: boolean; configuredProviders?: ProviderId[] };
 type AutoCandidate = { provider: "openrouter" | "gemini" | "groq"; model: string; label: string; tier: "free-model" | "free-tier-conditional" };
 type AutoProvider = { provider: string; configured: boolean; costClass: string };
+type AutoDiagnostic = {
+  provider: string;
+  configured: boolean;
+  status: "missing_key" | "not_selected" | "ready" | "no_candidates" | "request_failed";
+  availableModels?: number;
+  eligibleModels?: number;
+  failureCode?: string;
+  httpStatus?: number;
+};
 const providers: { id: ProviderId; title: string; model: string; image: boolean }[] = [
   { id: "gemini", title: "Google Gemini", model: "gemini-3.5-flash-lite", image: true },
   { id: "openai", title: "OpenAI", model: "gpt-4.1-mini", image: true },
@@ -81,6 +90,7 @@ export default function AgentStudio() {
   const [allowConditionalFreeTier, setAllowConditionalFreeTier] = useState(false);
   const [autoCandidates, setAutoCandidates] = useState<AutoCandidate[]>([]);
   const [autoProviders, setAutoProviders] = useState<AutoProvider[]>([]);
+  const [autoDiagnostics, setAutoDiagnostics] = useState<AutoDiagnostic[]>([]);
   const [autoScanComplete, setAutoScanComplete] = useState(false);
   const [aiTestResult, setAiTestResult] = useState("");
   const [availableModels, setAvailableModels] = useState<Array<{ id: string; label: string }>>([]);
@@ -238,17 +248,18 @@ export default function AgentStudio() {
 
   async function scanAutoModels() {
     if (!db || busy) return;
-    setBusy("auto-scan"); setError(""); setNotice(""); setAutoScanComplete(false); setAutoCandidates([]);
+    setBusy("auto-scan"); setError(""); setNotice(""); setAutoScanComplete(false); setAutoCandidates([]);setAutoDiagnostics([]);
     try {
       const { data: { session } } = await db.auth.getSession();
       if (!session?.access_token) throw new Error("برجاء تسجيل الدخول.");
       const resp = await fetch("/api/agents/free-models?includeFreeTier=" + String(allowConditionalFreeTier), {
         method: "GET", headers: { Authorization: `Bearer ${session.access_token}` }
       });
-      const result = await resp.json() as { error?: string; candidates?: AutoCandidate[]; providers?: AutoProvider[] };
+      const result = await resp.json() as { error?: string; candidates?: AutoCandidate[]; providers?: AutoProvider[]; diagnostics?: AutoDiagnostic[] };
       if (!resp.ok) throw new Error(result.error || "تعذر الاستعلام عن نماذج المزوّدين.");
       setAutoCandidates(result.candidates || []);
       setAutoProviders(result.providers || []);
+      setAutoDiagnostics(result.diagnostics || []);
       setAutoScanComplete(true);
     } catch (err) { setError(err instanceof Error ? err.message : "فشل اكتشاف النماذج."); }
     finally { setBusy(""); }
@@ -467,7 +478,7 @@ export default function AgentStudio() {
           </div>
           {routing==="auto" && <>
             <label className="studio-auto-opt"><input type="checkbox" checked={allowConditionalFreeTier}
-              onChange={e=>{setAllowConditionalFreeTier(e.target.checked);setAutoCandidates([]);setAutoScanComplete(false);}}/>
+              onChange={e=>{setAllowConditionalFreeTier(e.target.checked);setAutoCandidates([]);setAutoDiagnostics([]);setAutoScanComplete(false);}}/>
               السماح بحصص Gemini وGroq المجانية المشروطة (ممكن تتحاسب حسب نوع حسابك)
             </label>
             <div className="studio-auto-controls">
@@ -478,6 +489,18 @@ export default function AgentStudio() {
             </div>
             {autoProviders.length>0 && <div className="studio-auto-providers">
               {autoProviders.map(p=><span key={p.provider}>{p.provider}: {p.configured?"مفتاح موجود":"لم يُضف مفتاح"}</span>)}
+            </div>}
+            {autoScanComplete && autoDiagnostics.length>0 && <div className="studio-auto-diagnostics">
+              {autoDiagnostics.map(d=><div key={d.provider} className={d.status==="ready"?"ready":"pending"}>
+                <strong>{d.provider}</strong>
+                <span>{d.status==="ready"
+                  ? `جاهز · ${d.eligibleModels || 0} نموذج مؤهل`
+                  : d.status==="missing_key" ? "المفتاح غير موجود في Vercel"
+                  : d.status==="not_selected" ? "حصته المجانية المشروطة غير مفعلة"
+                  : d.status==="no_candidates"
+                    ? `تم الاتصال وعرض ${d.availableModels || 0} نموذج، لكن مفيش نموذج مناسب في القائمة`
+                    : `تعذر جلب النماذج · ${d.failureCode || "DISCOVERY_FAILED"}${d.httpStatus ? " (HTTP "+d.httpStatus+")" : ""}`}</span>
+              </div>)}
             </div>}
             {autoScanComplete && autoCandidates.length===0 && <p className="studio-auto-warning">
               لا يوجد نموذج مجاني مؤهل بالمفاتيح الحالية. أضف OPENROUTER_API_KEY إلى Vercel، أو اسمح بحصة Gemini المشروطة.
