@@ -5,6 +5,7 @@ import Link from "next/link";
 import { ArrowRight, Bot, CheckCircle2, CircleAlert, ClipboardList, Image as ImageIcon, LoaderCircle, Megaphone, MessageCircle, Plus, RefreshCcw, Rocket, ShieldCheck, Sparkles, WandSparkles } from "lucide-react";
 import type { User } from "@supabase/supabase-js";
 import { getSupabase } from "@/lib/supabase-browser";
+import { renderFreeCreative } from "@/lib/free-creative";
 
 type Member = { organization_id: string; role: string };
 type Page = {
@@ -69,6 +70,9 @@ export default function AgentStudio() {
   const [aiKey, setAiKey] = useState("");
   const [keySource, setKeySource] = useState<"server" | "manual">("server");
   const [aiModel, setAiModel] = useState("gemini-3.5-flash-lite");
+  const [imageModel, setImageModel] = useState("gemini-2.5-flash-image");
+  const [designHeadline, setDesignHeadline] = useState("طوّر إدارة نشاطك");
+  const [designSubline, setDesignSubline] = useState("حلول عملية لتنظيم المبيعات ومتابعة شغلك");
   const [showAiSettings, setShowAiSettings] = useState(true);
   const [runMode, setRunMode] = useState<"economy" | "full">("economy");
   const [aiTestResult, setAiTestResult] = useState("");
@@ -95,6 +99,7 @@ export default function AgentStudio() {
   const selectedAI = () => ({
     provider: aiProvider,
     model: aiModel.trim(),
+    imageModel: imageModel.trim(),
     keySource,
     ...(keySource === "manual" ? { apiKey: aiKey.trim() } : {})
   });
@@ -280,14 +285,76 @@ export default function AgentStudio() {
         method: "POST", headers: await authHeaders(),
         body: JSON.stringify({ missionId: id, mode: runMode, ai: selectedAI() })
       });
-      const result = await response.json() as { error?: string; agents?: number; mode?: "economy" | "full"; apiCalls?: number };
-      if (!response.ok) { setError(result.error || "تعذر تشغيل الوكيل."); return; }
+      const result = await response.json() as { error?: string; code?: string; agents?: number; mode?: "economy" | "full"; apiCalls?: number };
+      if (!response.ok) {
+        setError(result.error || "تعذر تشغيل الوكيل.");
+        if (busyKey==="design" && result.code==="IMAGE_QUOTA_EXCEEDED") setNotice("تقدر تعمل تصميم مجاني بالقالب الموجود تحت، أو ترفع صورة جاهزة. مش هنكرر طلب Gemini بشكل تلقائي.");
+        return;
+      }
       setNotice(busyKey==="design" ? "تم إنشاء تصميم حقيقي وحفظه في مكتبة خاصة." : `اتحفظت ${result.agents || 7} أقسام في نتائج الوكلاء باستخدام ${result.apiCalls || 1} طلب AI. المسودات تنتظر مراجعتك.`);
       setActiveTab(busyKey==="design"?"creatives":"output");
       await loadWorkspace(user);
       await loadDetails(id, member.organization_id);
     } catch (e) { setError(e instanceof Error ? e.message : "حدث خطأ أثناء التنفيذ."); }
     finally { setBusy(""); }
+  }
+
+  // Both non-AI workflows save to the same private creative library.
+  // They remain reviewable and are never published to Meta.
+  async function saveCreativeBlob(blob: Blob, source: "template" | "upload") {
+    if (!db || !member || !selectedMission || !["review","approved"].includes(selectedMission.status)) return;
+    if (busy) return;
+    if (assets.length >= 3) { setError("مكتبة المهمة وصلت للحد الأقصى (3 تصميمات)."); return; }
+    if (!["image/png", "image/jpeg", "image/webp"].includes(blob.type) || blob.size <= 0 || blob.size > 10 * 1024 * 1024) {
+      setError("مسموح ملفات PNG أو JPG أو WebP بحد أقصى 10 ميجابايت."); return;
+    }
+    setBusy(source); setError(""); setNotice("");
+    try {
+      const type = blob.type as "image/png" | "image/jpeg" | "image/webp";
+      const extension = type === "image/png" ? "png" : type === "image/webp" ? "webp" : "jpg";
+      const name = `${member.organization_id}/${selectedMission.id}/${crypto.randomUUID()}.${extension}`;
+      const { error: uploadError } = await db.storage.from("marketing-creatives")
+        .upload(name, blob, { upsert: false, contentType: type });
+      if (uploadError) throw uploadError;
+      const description = source==="template"
+        ? `قالب تصميم مجاني (غير مولّد بالذكاء الاصطناعي): ${designHeadline.slice(0,115)}`
+        : "تصميم مرفوع يدويًا بواسطة صاحب الصفحة";
+      const { error: saveError } = await db.from("creative_assets").insert({
+        organization_id: member.organization_id,
+        mission_id: selectedMission.id,
+        storage_path: name,
+        prompt: description
+      });
+      if (saveError) throw saveError;
+      await loadDetails(selectedMission.id, member.organization_id);
+      setNotice(source==="template"
+        ? "اتحفظ التصميم المجاني في مكتبة المهمة من غير استهلاك رصيد صور AI."
+        : "اترفعت الصورة إلى مكتبة المهمة الخاصة بنجاح.");
+      setActiveTab("creatives");
+    } catch (err) {
+      setError(err instanceof Error ? "تعذر حفظ الصورة: " + err.message : "تعذر حفظ الصورة.");
+    } finally { setBusy(""); }
+  }
+
+  async function createTemplate() {
+    if (!designHeadline.trim()) { setError("اكتب عنوان التصميم أولًا."); return; }
+    try {
+      const blob = await renderFreeCreative({
+        brand: selectedPage?.name || "علامتك التجارية",
+        headline: designHeadline,
+        subline: designSubline
+      });
+      await saveCreativeBlob(blob, "template");
+    } catch (e) { setError(e instanceof Error ? e.message : "تعذر إنشاء القالب."); }
+  }
+
+  async function uploadCreative(file: File | undefined) {
+    if (!file) return;
+    if (file.size > 10 * 1024 * 1024 || !["image/png","image/jpeg","image/webp"].includes(file.type)) {
+      setError("اختار صورة PNG أو JPG أو WebP بحجم لا يتجاوز 10 ميجابايت.");
+      return;
+    }
+    await saveCreativeBlob(file, "upload");
   }
 
   async function approveMission() {
@@ -467,12 +534,35 @@ export default function AgentStudio() {
                   {selectedMission.status==="approved" && <p className="studio-success-note">المسودات معتمدة داخليًا فقط. لم يحدث نشر أو إنفاق.</p>}
                 </div>}
                 {activeTab==="creatives" && <div className="studio-creatives">
-                  <p>صورة دعائية مولّدة فعليًا عبر OpenAI أو Gemini عند توفر نموذج صور في حسابك؛ تُحفظ في مساحة خاصة ولا تُنشر دون موافقة.</p>
-                  <button disabled={Boolean(busy)||!canGenerateImage||!["review","approved"].includes(selectedMission.status)||assets.length>=3} onClick={()=>void callAgentAPI("/api/agents/design",selectedMission.id,"design")}><ImageIcon size={17}/>{busy==="design"?"جارٍ توليد الصورة...":"توليد تصميم بالذكاء الاصطناعي"}</button>
-                  {assets.length>=3 && <small>وصلت للحد الأقصى 3 تصاميم لهذه المهمة.</small>}
+                  <div className="studio-image-quota-note"><CircleAlert size={17}/><span>حصة Gemini للصور منفصلة عن النصوص. لو ظهر خطأ نفاد الحصة، متكررّش المحاولة؛ اختار القالب المجاني أو ارفع تصميمك. جميع الصور تفضل خاصة وغير منشورة.</span></div>
+                  <div className="studio-design-method">
+                    <h3><ImageIcon size={17}/> 1. توليد صورة بالذكاء الاصطناعي</h3>
+                    <p>يحتاج حصة صور متاحة لدى المزوّد. اسم نموذج الصور منفصل عن نموذج الكتابة الاقتصادي.</p>
+                    {selectedProvider.image && <label>نموذج الصور <input dir="ltr" spellCheck={false} value={imageModel} onChange={e=>setImageModel(e.target.value)} placeholder="gemini-2.5-flash-image" /></label>}
+                    <button disabled={Boolean(busy)||!canGenerateImage||!imageModel.trim()||!["review","approved"].includes(selectedMission.status)||assets.length>=3}
+                      onClick={()=>void callAgentAPI("/api/agents/design",selectedMission.id,"design")}><WandSparkles size={16}/>{busy==="design"?"جارٍ توليد الصورة...":"توليد صورة عبر المزوّد"}</button>
+                  </div>
+                  <div className="studio-design-method">
+                    <h3><ImageIcon size={17}/> 2. تصميم دعائي بالقالب — بدون رصيد AI</h3>
+                    <p>قالب عربي نظيف قابل لتعديل العنوان والنص، وليس صورة مولّدة بالذكاء الاصطناعي. بيتحفظ كصورة PNG.</p>
+                    <div className="studio-template-fields">
+                      <label>عنوان التصميم<input maxLength={115} value={designHeadline} onChange={e=>setDesignHeadline(e.target.value)} placeholder="اكتب عنوان الإعلان"/></label>
+                      <label>النص الصغير<input maxLength={170} value={designSubline} onChange={e=>setDesignSubline(e.target.value)} placeholder="وصف أو دعوة للتواصل"/></label>
+                    </div>
+                    <button disabled={Boolean(busy)||!designHeadline.trim()||assets.length>=3} onClick={()=>void createTemplate()}><ImageIcon size={16}/>{busy==="template"?"جارٍ حفظ القالب...":"إنشاء وحفظ التصميم مجانًا"}</button>
+                  </div>
+                  <div className="studio-design-method">
+                    <h3>3. رفع تصميم جاهز</h3>
+                    <p>لو عملت التصميم بأداة أخرى، تقدر تضيفه لمكتبة المهمة، لحد 10MB بصيغة PNG أو JPG أو WebP.</p>
+                    <label className="studio-file-input">اختيار صورة من الجهاز
+                      <input type="file" accept="image/png,image/jpeg,image/webp" disabled={Boolean(busy)||assets.length>=3}
+                        onChange={e=>{const file=e.currentTarget.files?.[0];e.currentTarget.value="";void uploadCreative(file);}}/>
+                    </label>
+                  </div>
+                  {assets.length>=3 && <small>وصلت للحد الأقصى 3 تصميمات لهذه المهمة.</small>}
                   <div className="studio-image-grid">{assets.map(a=><figure key={a.id}>
-                    {a.signedUrl ? <img src={a.signedUrl} alt="تصميم دعائي مولّد بالذكاء الاصطناعي" /> : <div className="studio-image-missing">تعذر تحميل الصورة</div>}
-                    <figcaption>صورة خاصة · لم تُنشر</figcaption>
+                    {a.signedUrl ? <img src={a.signedUrl} alt="تصميم في المكتبة الخاصة" /> : <div className="studio-image-missing">تعذر تحميل الصورة</div>}
+                    <figcaption>{a.prompt.startsWith("قالب تصميم")?"قالب مجاني":a.prompt.startsWith("تصميم مرفوع")?"صورة مرفوعة":"صورة مولّدة بالذكاء الاصطناعي"} · لم تُنشر</figcaption>
                   </figure>)}</div>
                 </div>}
               </section>}
