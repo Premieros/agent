@@ -73,7 +73,20 @@ export function resolveAIConfig(selection: AISelection | undefined, purpose: "te
 
 // Provider errors are classified without passing raw upstream error messages,
 // requests or user-supplied credentials to browser responses or logs.
-function classifyProviderError(status: number, body: unknown): string {
+export class AIProviderError extends Error {
+  readonly status: number;
+  readonly providerStatus: string;
+  readonly code: string;
+  constructor(code: string, status: number, providerStatus: string) {
+    super(code);
+    this.name = "AIProviderError";
+    this.code = code;
+    this.status = status;
+    this.providerStatus = providerStatus;
+  }
+}
+
+function classifyProviderError(status: number, body: unknown): AIProviderError {
   const payload = typeof body === "object" && body !== null ? body as Record<string, unknown> : {};
   const error = typeof payload.error === "object" && payload.error !== null ? payload.error as Record<string, unknown> : {};
   const errorMessage = typeof error.message === "string" ? error.message : "";
@@ -81,13 +94,17 @@ function classifyProviderError(status: number, body: unknown): string {
   const errorCode = typeof error.code === "string" ? error.code : "";
   const msg = [errorMessage, errorStatus, errorCode].join(" ").toLowerCase();
 
-  if (status === 429 || /resource_exhausted|rate.limit|quota.exceeded/.test(msg)) return "AI_QUOTA_EXCEEDED";
-  if (/api.key.not.valid|invalid.api.key|invalid.*api.key|api.key.*invalid|api_key_invalid|key.*expired|revoked.*key/.test(msg)) return "AI_CREDENTIALS_REJECTED";
-  if (/location.*not.supported|country.*not.supported|region.*not.supported|billing.*required|paid.plan.*required|precondition/.test(msg)) return "AI_ACCESS_RESTRICTED";
-  if (status === 401 || status === 403) return "AI_CREDENTIALS_REJECTED";
-  if (status === 404 || /model.*not.found|model.*not.supported|model.*not.available/.test(msg)) return "AI_MODEL_UNAVAILABLE";
-  if (status === 400 || status === 422) return "AI_REQUEST_INVALID";
-  return "AI_PROVIDER_FAILURE";
+  let code = "AI_PROVIDER_FAILURE";
+  if (status === 429 || /resource_exhausted|rate.limit|quota.exceeded/.test(msg)) code = "AI_QUOTA_EXCEEDED";
+  else if (/api.key.not.valid|invalid.api.key|invalid.*api.key|api.key.*invalid|api_key_invalid|key.*expired|revoked.*key/.test(msg)) code = "AI_CREDENTIALS_REJECTED";
+  else if (/location.*not.supported|country.*not.supported|region.*not.supported|billing.*required|paid.plan.*required|precondition/.test(msg)) code = "AI_ACCESS_RESTRICTED";
+  else if (status === 401 || status === 403) code = "AI_CREDENTIALS_REJECTED";
+  else if (status === 404 || /model.*not.found|model.*not.supported|model.*not.available/.test(msg)) code = "AI_MODEL_UNAVAILABLE";
+  else if (status === 400 || status === 422) code = "AI_REQUEST_INVALID";
+  // Show only the upstream status enum, never a provider's freeform error message:
+  // it might echo headers, authentication info, or user input.
+  const safeStatus = /^[A-Z_]{1,40}$/.test(errorStatus) ? errorStatus : "";
+  return new AIProviderError(code, status, safeStatus);
 }
 
 async function providerFetch(url: string, options: RequestInit) {
@@ -95,7 +112,7 @@ async function providerFetch(url: string, options: RequestInit) {
   if (!response.ok) {
     let payload: unknown = null;
     try { payload = await response.json(); } catch { /* fallback to status */ }
-    throw new Error(classifyProviderError(response.status, payload));
+    throw classifyProviderError(response.status, payload);
   }
   return response.json() as Promise<unknown>;
 }
@@ -167,7 +184,12 @@ export async function askSelectedAgent(
         body: JSON.stringify({
           systemInstruction: { parts: [{ text: sys }] },
           contents: [{ role: "user", parts: [{ text: context }] }],
-          generationConfig: { maxOutputTokens: Math.min(4096, tokenLimit + 350) }
+          generationConfig: {
+            maxOutputTokens: Math.min(4096, Math.max(850, tokenLimit + 350)),
+            ...( /^gemini-2\\.5-flash(?:-lite)?(?:$|-)/.test(config.model)
+              ? { thinkingConfig: { thinkingBudget: 0 } }
+              : {} )
+          }
         })
       }
     ) as { candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }> };
