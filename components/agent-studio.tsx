@@ -69,6 +69,7 @@ export default function AgentStudio() {
   const [aiKey, setAiKey] = useState("");
   const [aiModel, setAiModel] = useState("gemini-2.5-flash-lite");
   const [showAiSettings, setShowAiSettings] = useState(true);
+  const [aiTestResult, setAiTestResult] = useState("");
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [busy, setBusy] = useState("");
@@ -211,6 +212,23 @@ export default function AgentStudio() {
     setBusy("");
   }
 
+  async function testProvider() {
+    if (!aiReady || busy) return;
+    if (!window.confirm("اختبار الاتصال يرسل طلب AI واحدًا، وقد يُخصم من حصة المزوّد. هل توافق؟")) return;
+    setBusy("test"); setError(""); setAiTestResult("");
+    try {
+      const response = await fetch("/api/agents/test", {
+        method: "POST",
+        headers: await authHeaders(),
+        body: JSON.stringify({ ai: { provider: aiProvider, apiKey: aiKey.trim(), model: aiModel.trim() } })
+      });
+      const data = await response.json() as { ok?: boolean; error?: string; model?: string };
+      if (!response.ok) setError(data.error || "فشل اختبار المفتاح.");
+      else setAiTestResult(`نجح اتصال ${selectedProvider.title} بالنموذج ${data.model || aiModel}.`);
+    } catch (e) { setError(e instanceof Error ? e.message : "فشل الاختبار."); }
+    finally { setBusy(""); }
+  }
+
   async function callAgentAPI(endpoint: string, id: string, busyKey: string) {
     if (!db || !member) return;
     if (!aiReady) { setShowAiSettings(true); setError("اختار مزوّد الذكاء الاصطناعي وحط مفتاحه الأول."); return; }
@@ -299,19 +317,21 @@ export default function AgentStudio() {
               <select value={aiProvider} onChange={e=>{
                 const picked = providers.find(p=>p.id===e.target.value);
                 if (!picked) return;
-                setAiProvider(picked.id); setAiModel(picked.model); setAiKey("");
+                setAiProvider(picked.id); setAiModel(picked.model); setAiKey(""); setAiTestResult("");
               }}>
                 {providers.map(p=><option key={p.id} value={p.id}>{p.title}</option>)}
               </select>
             </label>
             <label>مفتاح API الخاص بالمزوّد
-              <input type="password" autoComplete="off" spellCheck={false} placeholder="الصق المفتاح هنا" value={aiKey} onChange={e=>setAiKey(e.target.value)} />
+              <input type="password" autoComplete="off" spellCheck={false} placeholder="الصق المفتاح هنا" value={aiKey} onChange={e=>{setAiKey(e.target.value);setAiTestResult("");}} />
             </label>
             <label>نموذج الكتابة
-              <input dir="ltr" spellCheck={false} autoComplete="off" value={aiModel} onChange={e=>setAiModel(e.target.value)} placeholder="Model ID"/>
+              <input dir="ltr" spellCheck={false} autoComplete="off" value={aiModel} onChange={e=>{setAiModel(e.target.value);setAiTestResult("");}} placeholder="Model ID"/>
             </label>
-            <button type="button" disabled={!aiKey} onClick={()=>setAiKey("")}>مسح المفتاح</button>
+            <button type="button" disabled={!aiKey} onClick={()=>{setAiKey("");setAiTestResult("");}}>مسح المفتاح</button>
+            <button type="button" className="studio-test-provider" disabled={!aiReady||Boolean(busy)} onClick={()=>void testProvider()}>{busy==="test"?"جارٍ الاختبار...":"اختبار المفتاح"}</button>
           </div>}
+          {aiTestResult && <p className="studio-success-note">{aiTestResult}</p>}
           <p className="studio-privacy-note"><ShieldCheck size={13}/> المفتاح موجود في الصفحة دي مؤقتًا فقط، مش بيتحفظ في قاعدة البيانات أو المتصفح. عند تحديث الصفحة هتحتاج تدخله تاني. لو فيه مفتاح مُعدّ على Vercel للمزوّد المختار تقدر تسيب الخانة فاضية.</p>
         </section>
         <div className="studio-readiness">
