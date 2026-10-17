@@ -425,7 +425,7 @@ export default function AgentStudio() {
               <select value={aiProvider} onChange={e=>{
                 const picked = providers.find(p=>p.id===e.target.value);
                 if (!picked) return;
-                setAiProvider(picked.id); setAiModel(picked.model); setAiKey(""); setKeySource(ready?.configuredProviders?.includes(picked.id) ? "server" : "manual"); setAiTestResult(""); setAvailableModels([]); setModelLookupMessage("");
+                setAiProvider(picked.id); setAiModel(picked.model); setImageModel(picked.id==="openai"?"gpt-image-1":"gemini-2.5-flash-image"); setAiKey(""); setKeySource(ready?.configuredProviders?.includes(picked.id) ? "server" : "manual"); setAiTestResult(""); setAvailableModels([]); setModelLookupMessage("");
               }}>
                 {providers.map(p=><option key={p.id} value={p.id}>{p.title}</option>)}
               </select>
@@ -562,7 +562,9 @@ export default function AgentStudio() {
                   {assets.length>=3 && <small>وصلت للحد الأقصى 3 تصميمات لهذه المهمة.</small>}
                   <div className="studio-image-grid">{assets.map(a=><figure key={a.id}>
                     {a.signedUrl ? <img src={a.signedUrl} alt="تصميم في المكتبة الخاصة" /> : <div className="studio-image-missing">تعذر تحميل الصورة</div>}
-                    <figcaption>{a.prompt.startsWith("قالب تصميم")?"قالب مجاني":a.prompt.startsWith("تصميم مرفوع")?"صورة مرفوعة":"صورة مولّدة بالذكاء الاصطناعي"} · لم تُنشر</figcaption>
+                    <figcaption>{a.prompt.startsWith("قالب تصميم")?"قالب مجاني":a.prompt.startsWith("تصميم مرفوع")?"صورة مرفوعة":"صورة مولّدة بالذكاء الاصطناعي"} · لم تُنشر
+                      {a.signedUrl && <a href={a.signedUrl} target="_blank" rel="noopener noreferrer" className="studio-creative-open">فتح الصورة للحفظ</a>}
+                    </figcaption>
                   </figure>)}</div>
                 </div>}
               </section>}
