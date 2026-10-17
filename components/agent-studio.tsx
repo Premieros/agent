@@ -440,6 +440,7 @@ export default function AgentStudio() {
       <header className="crm-header">
         <div><strong>AGENT</strong><span> · استوديو الوكلاء الذكي</span></div>
         <nav className="crm-actions" aria-label="التنقل">
+          <Link href="/assistant"><Sparkles size={16}/> المساعد العام</Link>
           <Link href="/crm"><ArrowRight size={16}/> العملاء</Link>
           <Link href="/crm/inbox">المحادثات</Link>
           <Link href="/">النموذج الأولي</Link>
