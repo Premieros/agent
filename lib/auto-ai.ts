@@ -51,7 +51,7 @@ export async function discoverAutoModelsDetailed(includeFreeTier: boolean): Prom
         eligible = models.filter(m => m.id.endsWith(":free")).slice(0, 25);
       } else if (provider === "gemini") {
         // The account's free-tier eligibility cannot be established from /models.
-        eligible = models.filter(m => /^gemini-[\\d.]+-flash(?:-lite)?(?:$|-)/.test(m.id))
+        eligible = models.filter(m => /^gemini-[0-9.]+-flash(?:-lite)?(?:$|-)/.test(m.id))
           .filter(m => !/(image|preview|exp|tts|live|audio)/i.test(m.id));
         eligible.sort((a,b) => {
           const rank = (id:string) => /flash-lite/.test(id) ? 0 : 1;
