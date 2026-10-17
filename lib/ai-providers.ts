@@ -2,7 +2,7 @@
 // Never persist BYOK credentials, put them in URLs, or log them.
 export type AIProvider = "openai" | "gemini" | "openrouter" | "groq" | "deepseek" | "mistral" | "together" | "anthropic";
 
-export type AISelection = { provider?: unknown; apiKey?: unknown; model?: unknown };
+export type AISelection = { provider?: unknown; apiKey?: unknown; model?: unknown; keySource?: unknown };
 
 const textDefaults: Record<AIProvider, string> = {
   openai: "gpt-4.1-mini",
@@ -58,7 +58,16 @@ export function resolveAIConfig(selection: AISelection | undefined, purpose: "te
   if (selection?.apiKey != null && typeof selection.apiKey !== "string") throw new Error("AI_KEY_INVALID");
   const clientKey = (selection?.apiKey as string | undefined)?.trim() || "";
   if (clientKey.length > 2048 || /[\r\n]/.test(clientKey)) throw new Error("AI_KEY_INVALID");
-  const apiKey = clientKey || process.env[keys[provider]]?.trim() || "";
+  if (selection?.keySource != null && !["server", "manual"].includes(String(selection.keySource))) {
+    throw new Error("AI_KEY_INVALID");
+  }
+  const serverKey = process.env[keys[provider]]?.trim() || "";
+  // Explicit source prevents a previously typed key from overriding Vercel.
+  const apiKey = selection?.keySource === "server"
+    ? serverKey
+    : selection?.keySource === "manual"
+      ? clientKey
+      : (clientKey || serverKey);
   if (!apiKey) throw new Error("AI_NOT_CONFIGURED");
   const defaultModel = purpose === "image"
     ? (provider === "gemini" ? "gemini-2.5-flash-image" : process.env.OPENAI_IMAGE_MODEL || "gpt-image-1")
