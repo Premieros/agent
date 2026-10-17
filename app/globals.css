@@ -670,3 +670,94 @@ td>b { font-weight: 700; color: #233944; }
 .studio-auto-diagnostics>div.ready{background:#f0faf5;border-color:#cae7d7}
 .studio-auto-diagnostics strong{font-size:11px;color:#315b63}
 .studio-auto-diagnostics span{font-size:10px;color:#697e85;line-height:1.7;overflow-wrap:anywhere}
+
+
+/* General, multi-skill assistant — private chat workspace */
+.general-assistant-root .crm-wrap{max-width:1600px}
+.assistant-title{display:flex;justify-content:space-between;align-items:center;gap:22px;margin:24px 0 18px}
+.assistant-title h1{font:800 clamp(22px,2.4vw,31px) "Cairo",Tahoma,sans-serif;color:#16374b;margin:8px 0 3px}
+.assistant-title p{color:#7e929e;font-size:12px;margin:0;line-height:1.85}
+.assistant-tag{display:inline-flex;align-items:center;gap:7px;border:1px solid #d2e9df;background:#eef8f3;color:#188168;border-radius:8px;padding:8px 13px;white-space:nowrap;font-size:11px}
+.assistant-layout{display:grid;grid-template-columns:275px minmax(0,1fr);direction:rtl;gap:14px;height:min(78vh,830px);min-height:600px}
+.assistant-sidebar{background:#fff;border:1px solid #e2eaea;border-radius:13px;padding:13px;display:flex;flex-direction:column;overflow:hidden}
+.assistant-new-chat{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;border:1px solid #cde7db;background:#edf8f2;color:#118267;padding:12px;border-radius:9px;font:700 12px "Cairo",Tahoma,sans-serif}
+.assistant-new-chat:disabled{opacity:.5}
+.assistant-sidebar-title{font-size:11px;color:#8599a4;font-weight:700;margin:23px 5px 10px}
+.assistant-sidebar-empty{font-size:11px;color:#a5afb7;line-height:2}
+.assistant-thread-list{overflow-y:auto;flex:1;min-height:0;display:flex;flex-direction:column;gap:5px}
+.assistant-thread{display:flex;align-items:center;gap:2px;border-radius:9px;border:1px solid transparent}
+.assistant-thread.active{background:#eff8f4;border-color:#d5eadf}
+.assistant-thread>button:first-child{display:flex;align-items:center;gap:8px;min-width:0;flex:1;text-align:right;border:0;background:transparent;padding:10px 8px;color:#436270;font:600 11px "Cairo",Tahoma,sans-serif}
+.assistant-thread span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1}
+.assistant-thread .assistant-remove{display:flex;align-items:center;justify-content:center;flex:0 0 auto;border:0;background:transparent;color:#9ea9ac;width:30px;height:33px;border-radius:8px}
+.assistant-thread .assistant-remove:hover{background:#fff2f0;color:#ac4c42}
+.assistant-sidebar-footer{display:flex;align-items:start;gap:6px;border-top:1px solid #edf0f0;color:#9aaab0;font-size:10px;line-height:1.8;padding:15px 2px 3px}
+.assistant-sidebar-footer svg{flex:0 0 auto;margin-top:2px}
+.assistant-panel{background:#fff;border:1px solid #e2eaea;border-radius:13px;display:flex;flex-direction:column;min-width:0;min-height:0;overflow:hidden}
+.assistant-toolbar{display:flex;align-items:center;gap:12px;border-bottom:1px solid #edf1f1;padding:11px 18px;min-height:68px}
+.assistant-toolbar-name{display:flex;align-items:center;min-width:0;flex:1;gap:9px;color:#244958}
+.assistant-toolbar-name strong{font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.assistant-toolbar-name svg{color:#118c71;flex:0 0 auto}
+.assistant-skill-select{display:flex;gap:8px;align-items:center;color:#86949c;font-size:11px;position:relative}
+.assistant-skill-select select{appearance:none;background:#f2f8f5;color:#196e5d;border:1px solid #d3e8dd;border-radius:8px;padding:9px 11px 9px 26px;min-width:170px;font:700 11px "Cairo",Tahoma,sans-serif}
+.assistant-skill-select>svg{pointer-events:none;position:absolute;left:9px;color:#318c74}
+.assistant-menu-button{display:none;border:0;background:#f1f8f4;color:#208365;border-radius:7px;padding:8px}
+.assistant-chat-scroll{overflow-y:auto;flex:1;min-height:0;padding:23px 23px 35px;scroll-behavior:smooth}
+.assistant-welcome{max-width:740px;margin:38px auto 0;text-align:center}
+.assistant-logo{width:64px;height:64px;display:grid;place-items:center;background:linear-gradient(135deg,#0e8469,#56c9b3);border-radius:20px;color:white;margin:0 auto 14px}
+.assistant-welcome h2{margin:0 0 7px;color:#163a47;font-size:20px}
+.assistant-welcome>p{color:#8da0a5;font-size:12px;line-height:1.9;margin:0 auto 24px;max-width:570px}
+.assistant-starters{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;text-align:right}
+.assistant-starters button{display:flex;flex-direction:column;align-items:flex-start;gap:6px;background:#fafdfc;border:1px solid #e4eeea;padding:13px;border-radius:11px;color:#37636a;text-align:right;min-width:0}
+.assistant-starters button:hover{border-color:#abd9c5;background:#f4fbf7}
+.assistant-starters svg{color:#19886b}
+.assistant-starters strong{font-size:12px;color:#235966}
+.assistant-starters span{font-size:10px;color:#8597a1;line-height:1.9}
+.assistant-bubble{display:flex;gap:11px;align-items:flex-start;max-width:880px;margin:0 auto 26px}
+.assistant-avatar{height:34px;width:34px;border-radius:10px;flex:0 0 auto;display:grid;place-items:center;background:#e7f7ef;color:#15856b;font-size:10px;font-weight:800}
+.assistant-bubble.user .assistant-avatar{background:#edf2f5;color:#597480}
+.assistant-message-body{min-width:0;flex:1}
+.assistant-message-heading{display:flex;align-items:center;gap:10px;margin:3px 0 8px}
+.assistant-message-heading strong{font-size:12px;color:#203e4a}
+.assistant-message-heading button{display:inline-flex;align-items:center;justify-content:center;border:0;background:transparent;color:#9eafb4;padding:3px}
+.assistant-message-text{white-space:pre-wrap;overflow-wrap:anywhere;font-size:13px;line-height:2;color:#2d454d}
+.assistant-bubble.user .assistant-message-text{background:#f5f8f7;border:1px solid #edf0f0;padding:11px 15px;border-radius:10px;display:inline-block;max-width:100%}
+.assistant-message-body>small{display:block;color:#a4b3b6;font-size:10px;margin-top:10px;overflow-wrap:anywhere}
+.assistant-thinking{display:flex;align-items:center;gap:9px;color:#3c927d;margin:6px auto 12px;max-width:850px;font-size:11px}
+.assistant-compose{padding:11px 20px 14px;border-top:1px solid #edf1f1}
+.assistant-composer-box{display:flex;align-items:flex-end;gap:9px;border:1px solid #d1e3df;border-radius:11px;background:#fff;padding:10px}
+.assistant-composer-box:focus-within{border-color:#4fb198;box-shadow:0 0 0 2px rgba(18,144,108,.07)}
+.assistant-composer-box textarea{flex:1;min-width:0;border:0;outline:0;background:transparent;resize:vertical;max-height:170px;min-height:64px;color:#214958;font:12px/1.9 "Cairo",Tahoma,sans-serif}
+.assistant-composer-box>button{width:40px;height:40px;border:0;background:#15876a;color:#fff;border-radius:10px;display:grid;place-items:center;flex:0 0 auto}
+.assistant-composer-box>button:disabled{opacity:.42}
+.assistant-compose-foot{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:9px;color:#98a8af;font-size:10px}
+.assistant-compose-foot label{display:inline-flex;align-items:center;gap:7px;cursor:pointer}
+.assistant-compose-foot input{accent-color:#188971}
+.assistant-limit-note{font-size:10px;color:#a0afb5;line-height:1.7;margin:8px 0 0}
+.assistant-run-note{display:flex;align-items:center;gap:7px;color:#238169;font-size:10px;margin:0 0 8px}
+.assistant-loader,.assistant-login{display:flex;align-items:center;flex-direction:column;gap:10px;justify-content:center;min-height:340px;color:#76949e}
+.assistant-login h2{margin:0;color:#224f5d}
+.assistant-login p{font-size:12px}
+.assistant-login a{color:#128269;font-weight:700}
+@media(max-width:850px){
+ .assistant-layout{grid-template-columns:minmax(0,1fr);position:relative;min-height:560px;height:75vh}
+ .assistant-sidebar{position:absolute;top:0;bottom:0;right:0;width:min(80vw,295px);z-index:2;box-shadow:-16px 0 40px rgba(21,52,48,.08);display:none}
+ .assistant-sidebar.expanded{display:flex}
+ .assistant-menu-button{display:grid;place-items:center}
+ .assistant-title{flex-direction:column;align-items:flex-start}
+ .assistant-tag{white-space:normal}
+}
+@media(max-width:560px){
+ .assistant-title h1{font-size:23px}
+ .assistant-chat-scroll{padding:15px 13px 22px}
+ .assistant-toolbar{padding:9px 12px}
+ .assistant-skill-select{gap:3px}
+ .assistant-skill-select>span{display:none}
+ .assistant-skill-select select{min-width:140px}
+ .assistant-compose{padding:10px 10px 12px}
+ .assistant-starters{grid-template-columns:1fr}
+ .assistant-welcome{margin-top:10px}
+ .assistant-welcome h2{font-size:17px}
+ .assistant-bubble{gap:7px}
+ .assistant-avatar{width:28px;height:28px}
+}
