@@ -11,7 +11,17 @@ export type AutoTier = "free-model" | "free-tier-conditional";
 export type AutoCandidate = { provider: "openrouter" | "gemini" | "groq"; model: string; tier: AutoTier; label: string };
 
 const PRIORITY: AutoCandidate["provider"][] = ["openrouter", "gemini", "groq"];
-const snapshot = new Map<string, { expires: number; candidates: AutoCandidate[] }>();
+export type ProviderDiscovery = {
+  provider: AutoCandidate["provider"];
+  configured: boolean;
+  status: "missing_key" | "not_selected" | "ready" | "no_candidates" | "request_failed";
+  availableModels?: number;
+  eligibleModels?: number;
+  failureCode?: string;
+  httpStatus?: number;
+};
+export type AutoDiscovery = { candidates: AutoCandidate[]; diagnostics: ProviderDiscovery[] };
+const snapshot = new Map<string, { expires: number; result: AutoDiscovery }>();
 const cooling = new Map<string, number>();
 const MAX_ATTEMPTS = 3;
 
@@ -19,59 +29,79 @@ function availableKeys() {
   return new Set<AIProvider>(configuredProviders());
 }
 
-export async function discoverAutoModels(includeFreeTier: boolean): Promise<AutoCandidate[]> {
+export async function discoverAutoModelsDetailed(includeFreeTier: boolean): Promise<AutoDiscovery> {
   const cacheKey = includeFreeTier ? "conditional" : "strict";
   const cached = snapshot.get(cacheKey);
-  if (cached && cached.expires > Date.now()) return cached.candidates;
+  if (cached && cached.expires > Date.now()) return cached.result;
   const available = availableKeys();
-  const found = await Promise.all(PRIORITY.map(async provider => {
-    if (!available.has(provider) || (provider !== "openrouter" && !includeFreeTier)) {
-      return [] as AutoCandidate[];
+  const results = await Promise.all(PRIORITY.map(async provider => {
+    const configured = available.has(provider);
+    if (!configured) {
+      return { candidates: [] as AutoCandidate[], diagnostic: { provider, configured, status:"missing_key" as const } };
+    }
+    if (provider !== "openrouter" && !includeFreeTier) {
+      return { candidates: [] as AutoCandidate[], diagnostic: { provider, configured, status:"not_selected" as const } };
     }
     try {
       const config = resolveAIConfig({ provider, keySource: "server" });
       const models = await listAvailableTextModels(config);
+      let eligible: Array<{id:string; label:string}> = [];
       if (provider === "openrouter") {
-        // Model IDs ending in :free are explicitly labeled as such by OpenRouter.
-        return models.filter(m => m.id.endsWith(":free")).slice(0, 25).map(m => ({
-          provider, model: m.id, tier: "free-model" as const, label: m.label
-        }));
-      }
-      if (provider === "gemini") {
-        // These may be available under Google's free tier, but cannot be
-        // classified as zero-cost without billing info from the account.
-        const eligible = models.filter(m => /^gemini-[\d.]+-flash(?:-lite)?(?:$|-)/.test(m.id))
+        // The :free suffix explicitly describes the provider's free variant.
+        eligible = models.filter(m => m.id.endsWith(":free")).slice(0, 25);
+      } else if (provider === "gemini") {
+        // The account's free-tier eligibility cannot be established from /models.
+        eligible = models.filter(m => /^gemini-[\\d.]+-flash(?:-lite)?(?:$|-)/.test(m.id))
           .filter(m => !/(image|preview|exp|tts|live|audio)/i.test(m.id));
         eligible.sort((a,b) => {
           const rank = (id:string) => /flash-lite/.test(id) ? 0 : 1;
           return rank(a.id) - rank(b.id) || b.id.localeCompare(a.id);
         });
-        return eligible.slice(0, 2).map(m => ({
-          provider, model:m.id, tier: "free-tier-conditional" as const, label:m.label
-        }));
+        eligible = eligible.slice(0, 2);
+      } else {
+        // Groq's lineup may contain GPT-OSS, Qwen or other chat-capable
+        // models in addition to Llama. Model listing is not a billing check.
+        eligible = models.filter(m => /(llama|gemma|qwen|gpt-oss|compound)/i.test(m.id))
+          .filter(m => !/(vision|audio|guard|tool-use|whisper|tts|moderation|embedding|distil-whisper)/i.test(m.id))
+          .slice(0, 4);
       }
-      const eligible = models.filter(m => /llama.*(instant|8b|70b)|gemma/i.test(m.id))
-        .filter(m => !/(vision|audio|guard|tool-use)/i.test(m.id));
-      return eligible.slice(0, 2).map(m => ({
-        provider, model:m.id, tier:"free-tier-conditional" as const, label:m.label
+      const tier:AutoTier = provider === "openrouter" ? "free-model" : "free-tier-conditional";
+      const candidates = eligible.map(m => ({
+        provider, model:m.id, tier, label:m.label
       }));
-    } catch {
-      // Discovery failure is not evidence that a key has a free quota.
-      return [] as AutoCandidate[];
+      return {
+        candidates,
+        diagnostic: {
+          provider, configured, status: candidates.length ? "ready" as const : "no_candidates" as const,
+          availableModels: models.length, eligibleModels: eligible.length
+        }
+      };
+    } catch (error) {
+      // Only disclose a safe structured status; never pass through upstream
+      // messages, credentials, request headers or payloads.
+      return {
+        candidates: [] as AutoCandidate[],
+        diagnostic: {
+          provider, configured, status:"request_failed" as const,
+          failureCode: error instanceof AIProviderError ? error.code : "DISCOVERY_FAILED",
+          httpStatus: error instanceof AIProviderError ? error.status : undefined
+        }
+      };
     }
   }));
-  // Round-robin provider candidates so an exhausted OpenRouter account
-  // does not consume all three attempts before Gemini/Groq gets a turn.
+  // Alternate providers so two Gemini models don't exhaust attempts first.
   const candidates: AutoCandidate[] = [];
-  const maxItems = Math.max(0, ...found.map(items => items.length));
-  for (let i = 0; i < maxItems; i++) {
-    for (const items of found) {
-      if (items[i]) candidates.push(items[i]);
-    }
+  const maxItems = Math.max(0, ...results.map(x => x.candidates.length));
+  for(let i = 0; i < maxItems; i++) {
+    for (const x of results) if (x.candidates[i]) candidates.push(x.candidates[i]);
   }
-  // Cache provider model metadata for three minutes, never cache secrets.
-  if (candidates.length) snapshot.set(cacheKey, { expires: Date.now() + 180_000, candidates });
-  return candidates;
+  const result: AutoDiscovery = { candidates, diagnostics: results.map(x => x.diagnostic) };
+  snapshot.set(cacheKey, { expires: Date.now() + 180_000, result });
+  return result;
+}
+
+export async function discoverAutoModels(includeFreeTier:boolean):Promise<AutoCandidate[]> {
+  return (await discoverAutoModelsDetailed(includeFreeTier)).candidates;
 }
 
 export function autoProviderInfo(): Array<{ provider:string; configured:boolean; costClass:string }> {
