@@ -344,3 +344,18 @@ td>b { font-weight: 700; color: #233944; }
 .live-crm-link{display:inline-flex;align-items:center;color:#137b65;text-decoration:none;border:1px solid #cde5dd;background:#f2faf6;padding:6px 10px;border-radius:8px;font-size:11px;font-weight:700;white-space:nowrap}
 .live-crm-link:hover{background:#e6f7ee}
 @media(max-width:550px){.live-crm-link{font-size:10px;padding:6px}.demo-pill{font-size:10px;padding:6px}}
+
+
+.crm-login-tabs{display:flex;gap:7px;background:#f2f6f6;padding:5px;border-radius:9px;margin:15px 0 2px}
+.crm-login-tabs button{flex:1;border:0;border-radius:7px;background:transparent;color:#68828c;padding:9px 8px;font:700 12px "Cairo",Tahoma,sans-serif}
+.crm-login-tabs button.selected{background:white;color:#13866e;box-shadow:0 2px 8px #102c3212}
+.crm-help-text{font-size:11px;color:#83959d;line-height:1.8;margin:6px 0;display:block}
+.crm-password-panel{padding:13px 18px}
+.crm-password-panel .crm-section-head{margin:0}
+.crm-password-panel .crm-section-head>button{background:#eef8f3;border:1px solid #cce8da;color:#167d67}
+.crm-password-form{display:grid;grid-template-columns:repeat(2,minmax(0,260px)) auto;gap:10px;align-items:end;background:#f7faf9;border-radius:9px;padding:13px;margin-top:12px}
+.crm-password-form label{font-size:11px;color:#46616a}
+.crm-password-form input{display:block;width:100%;margin-top:4px;border:1px solid #d8e2e5;border-radius:8px;padding:9px 10px;font:inherit;background:#fff;color:#19323c}
+.crm-password-form>button{border:1px solid #13866e;background:#13866e;color:white;border-radius:8px;padding:9px 13px;font:700 12px "Cairo",Tahoma,sans-serif}
+.crm-password-form>p{grid-column:1/-1}
+@media(max-width:700px){.crm-password-form{grid-template-columns:1fr}.crm-password-form>button{justify-self:start}.crm-password-panel .crm-section-head{align-items:flex-start;flex-direction:column}}
