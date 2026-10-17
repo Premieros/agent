@@ -17,6 +17,16 @@ Arabic-first web workspace for running multiple Facebook and Instagram brand wor
 - **CRM and internal inbox:** actual authenticated customer storage, notes, follow-up task creation, human-takeover mode. Internal notes are never sent to external channels.
 - **Original UI prototype:** `/` still contains demo conversations and does not represent real customer activity.
 
+## Multi-provider automatic fallback (text only)
+
+On the Studio, choose **تلقائي — نماذج مجانية** and click **بحث عن النماذج المجانية**. The server discovers supported text models using only **Vercel server-side keys**. In strict mode it uses only OpenRouter models whose provider identifier explicitly ends with `:free`; this is a provider label, **not a guarantee of unlimited quota**. Optionally enable the separate free-tier candidate checkbox to also include discoverable Gemini Flash / Groq Llama models. **Gemini/Groq quota status and pricing are account-specific; if billing is enabled these may not be zero-cost.** This checkbox is deliberately opt-in.
+
+Automatic routing works with the economy plan only, generating 7 review sections from one model call. On quota rejection, invalid model, rejected key, or provider outage, it tries the next configured provider/model with **at most 3 requests**, and waits 5 minutes before retrying a failed candidate in the same server instance. This is **not** a continuous background process. OpenAI, paid OpenRouter models and arbitrary paid endpoints are never auto-selected. The UI displays the selected provider/model and attempt count. For external posting or sending customer responses, human approval remains mandatory.
+
+To add more free-key services, create *server-only* Vercel Production environment variables such as `OPENROUTER_API_KEY` and `GROQ_API_KEY`, alongside `GEMINI_API_KEY`. Redeploy after adding env vars. **Do not put secrets in GitHub or browser-accessible `NEXT_PUBLIC_` variables.** The presence of a key does not prove free access. If only Gemini is configured, switching across separate providers is impossible; it may try an alternative Gemini model only when free-tier candidates are expressly enabled.
+
+Image generation does **not** use automatic fallback. Image quotas are separate from text; use the free local creative-card template if the image quota is exhausted.
+
 ## Economical agent execution (default)
 
 The Studio defaults to **Economy — 1 AI request**. It creates director, strategist, copywriter, designer, media-buyer, support, and initial-reviewer sections from a **single model call** and saves all seven sections separately for the UI. The reviewer section is an initial self-review within the same model response, **not an independent agent audit**. Keep human sign-off. For an independent model-based review, switch to **Full — 7 AI requests**; this uses more API calls and can consume more quota. Provider pricing is not guaranteed and depends on response size, actual model rates, and billing tier.
