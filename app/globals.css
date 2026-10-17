@@ -597,3 +597,14 @@ td>b { font-weight: 700; color: #233944; }
 
 .studio-ai-config .studio-test-provider{background:#13866e;color:white;border-color:#13866e}
 .studio-ai-config .studio-test-provider:disabled{opacity:.5}
+
+
+/* Live provider model discovery */
+.studio-ai-config{grid-template-columns:minmax(125px,1fr) minmax(200px,1.3fr) minmax(150px,1fr) auto auto auto}
+.studio-ai-config .studio-test-provider{background:#14866b;border-color:#14866b;color:#fff}
+.studio-model-hint{font-size:11px;color:#456e7b;line-height:1.9;margin:8px 0}
+.studio-model-picker{display:block;color:#476b72;font-size:11px;font-weight:700;max-width:620px;margin-top:10px}
+.studio-model-picker select{display:block;width:100%;margin-top:5px;padding:9px 10px;background:#fff;border:1px solid #d4e5df;border-radius:8px;color:#264e55;font:11px "Cairo",Tahoma,sans-serif}
+@media(max-width:1250px){.studio-ai-config{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media(max-width:750px){.studio-ai-config{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:560px){.studio-ai-config{grid-template-columns:1fr}}
