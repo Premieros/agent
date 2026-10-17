@@ -96,7 +96,7 @@ create table public.handoff_tasks (
   foreign key (organization_id, lead_id)
     references public.leads (organization_id, id) on delete cascade,
   foreign key (organization_id, conversation_id)
-    references public.conversations (organization_id, id) on delete set null
+    references public.conversations (organization_id, id) on delete set null (conversation_id)
 );
 
 create index handoff_queue_idx on public.handoff_tasks
