@@ -285,3 +285,58 @@ td>b { font-weight: 700; color: #233944; }
   .page-head h1 { font-size: 21px; }
   .inbox-grid { min-height: 0; }
 }
+
+
+/* Live CRM — compact Cairo administration */
+.crm-root{min-height:100vh;background:#f5f7f9;color:#17313a;font-family:"Cairo",Tahoma,sans-serif}
+.crm-wrap{max-width:1150px;margin:auto;padding:0 23px 50px}
+.crm-header{display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #e1e9eb;padding:17px 0;gap:12px}
+.crm-header strong{font:800 21px Arial,sans-serif;color:#13866e;letter-spacing:1px}
+.crm-header span{font-size:12px;color:#7e9096}
+.crm-actions{display:flex;align-items:center;gap:12px}
+.crm-actions a,.crm-actions button{border:0;background:transparent;text-decoration:none;color:#23826f;display:flex;align-items:center;gap:6px;font-size:12px}
+.crm-title{display:flex;align-items:center;justify-content:space-between;gap:18px;margin:28px 0 18px}
+.crm-title h1{margin:3px 0 5px;font-size:24px}
+.crm-title p{margin:0;color:#7b9099;font-size:12px}
+.crm-overline{color:#168d76;font-size:11px;font-weight:700}
+.crm-status{border-radius:8px;padding:7px 11px;color:#23735f;background:#e5f5ee;font-size:11px;display:flex;gap:6px;align-items:center}
+.crm-card{background:#fff;border:1px solid #e5e9ec;border-radius:12px;padding:19px;margin-bottom:14px;box-shadow:0 2px 15px #1f405009;max-width:100%}
+.crm-card h2{font-size:15px;margin:0 0 8px}
+.crm-card p{font-size:12px;line-height:2;color:#71868f}
+.crm-login{max-width:480px;margin:35px auto;padding:25px}
+.crm-login form{display:grid;gap:9px;margin-top:19px}
+.crm-login label,.crm-form label{font-size:12px;color:#36535f;font-weight:700}
+.crm-login input,.crm-form input,.crm-form select{background:#fff;display:block;width:100%;border:1px solid #d8e2e5;border-radius:8px;padding:9px 11px;color:#19323c;font-family:inherit}
+.crm-login form>button,.crm-form>button,.crm-section-head>button{display:flex;align-items:center;justify-content:center;gap:7px;border:1px solid #12836b;border-radius:8px;background:#13866e;color:#fff;padding:9px 13px;font-family:inherit;font-weight:700;font-size:12px}
+.crm-btn-secondary{border:1px solid #bee3d6;border-radius:8px;background:#ecfaf4;color:#137a64;padding:8px 12px;display:flex;gap:7px;align-items:center}
+.crm-error{background:#fff0ee;color:#ba3e29;padding:12px;border-radius:8px;font-size:12px}
+.crm-success{display:flex;align-items:center;gap:7px;color:#0c8469!important}
+.crm-spin{animation:crm-spin 1s linear infinite}
+@keyframes crm-spin{to{transform:rotate(360deg)}}
+.crm-metrics{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:11px;margin-bottom:16px}
+.crm-metrics>div{background:#fff;border:1px solid #e5e9ec;border-radius:10px;padding:12px 15px}
+.crm-metrics span{font-size:11px;color:#7e929a;display:block}
+.crm-metrics strong{font-size:25px;color:#1d3b45}
+.crm-metrics .crm-role{font-size:15px;color:#178b74}
+.crm-section-head{display:flex;justify-content:space-between;gap:10px;align-items:center;margin-bottom:12px}
+.crm-section-head h2{display:flex;gap:7px;align-items:center;margin:0 0 3px}
+.crm-section-head p{margin:0;font-size:11px}
+.crm-form{display:grid;grid-template-columns:repeat(4,minmax(0,1fr)) auto;gap:10px;align-items:end;margin:15px 0;padding:14px;background:#f6f9f8;border-radius:9px}
+.crm-form label{min-width:0}
+.crm-form input,.crm-form select{margin-top:4px}
+.crm-form>button{min-height:40px}
+.crm-empty{text-align:center;padding:33px 12px;color:#8a9da5;font-size:12px}
+.crm-table-wrap{overflow-x:auto}
+.crm-table{width:100%;border-collapse:collapse}
+.crm-table th,.crm-table td{padding:10px 12px;border-bottom:1px solid #edf1f2;text-align:right;font-size:11px}
+.crm-table th{color:#758d97;background:#f8fafb}
+.crm-table td strong{display:block;font-size:12px;color:#273d48}
+.crm-table td small{display:block;color:#8ea1a9;margin-top:3px}
+.crm-row-actions{display:flex;gap:5px}
+.crm-row-actions button{border:1px solid #cde5dc;background:#f0faf5;color:#13846d;border-radius:6px;padding:6px 9px;font-size:11px}
+.crm-task{display:flex;gap:15px;align-items:center;padding:10px 4px;border-top:1px solid #eef1f3;font-size:11px;flex-wrap:wrap}
+.crm-task>span:nth-child(3){flex:1;color:#667c87}
+.crm-task small{color:#b18a4b}
+.crm-task-kind{padding:5px 8px;background:#eaf6f1;color:#1f8b72;border-radius:6px;font-weight:700}
+@media(max-width:850px){.crm-form{grid-template-columns:repeat(2,minmax(0,1fr))}.crm-form>button{grid-column:1/-1}.crm-title h1{font-size:21px}}
+@media(max-width:550px){.crm-wrap{padding:0 12px 25px}.crm-title{align-items:start}.crm-status{white-space:nowrap}.crm-metrics{gap:6px}.crm-metrics>div{padding:10px}.crm-form{grid-template-columns:1fr}.crm-header span{display:none}.crm-actions{gap:5px}}
