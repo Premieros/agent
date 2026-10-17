@@ -17,7 +17,7 @@ export async function POST(req: NextRequest) {
   let claimedMissionId: string | null = null;
   let activeDb: Awaited<ReturnType<typeof requireAgentSession>>["db"] | null = null;
   try {
-    const body = await req.json() as { missionId?: unknown; ai?: AISelection };
+    const body = await req.json() as { missionId?: unknown; ai?: AISelection; mode?: "economy" | "full" };
     if (typeof body.missionId !== "string") return NextResponse.json({ error: "معرّف المهمة غير صحيح." }, { status: 400 });
     const session = await requireAgentSession(req);
     const { mission, page } = await getMissionContext(session, body.missionId);
@@ -43,32 +43,79 @@ export async function POST(req: NextRequest) {
       "الحالة: المحتوى للمراجعة فقط، الربط الخارجي غير مفعل."
     ].join("\n");
 
-    const director = await askSelectedAgent(ai, "مدير الوكلاء",
-      "حلل المهمة وفوض المهام للفريق: الاستراتيجية والكتابة والتصميم والإعلان والردود. حدد الهدف والرسالة والجمهور ومخاطر الالتباس وماذا يوافق عليه الإنسان قبل أي نشر. لا تنفذ أي إجراء.",
-      context, 700);
-    const base = `${context}\n\nخطة مدير الوكلاء:\n${director.text.slice(0,4200)}`;
+    const mode = body.mode === "full" ? "full" : "economy";
+    let records: Array<{
+      organization_id: string; mission_id: string; agent_role: string; content: string; model: string;
+    }>;
 
-    const specialists = await Promise.all(
-      Object.entries(instructions).map(async ([role, instruction]) => {
-        const result = await askSelectedAgent(ai, role, instruction, base, 900);
-        return { role, ...result };
-      })
-    );
-    const reviewer = await askSelectedAgent(ai, "مراجع الجودة",
-      "راجع ما يلي كمدقق مستقل: رصد أي ادعاءات غير موثوقة ومخاطر الخصوصية أو السعر أو وعود النتائج، راجع سلامة خطة الإعلان والردود، ثم أعط قائمة مراجعة واضحة للمدير البشري قبل الموافقة. لا تمنح اعتماد نشر آليًا.",
-      `${base}\n\n${specialists.map(s => `${s.role}:\n${s.text.slice(0,3700)}`).join("\n\n")}`, 850);
-
-    const records = [
-      { role: "director", ...director },
-      ...specialists,
-      { role: "reviewer", ...reviewer }
-    ].map(item => ({
-      organization_id: session.organizationId,
-      mission_id: mission.id,
-      agent_role: item.role,
-      content: item.text,
-      model: item.model
-    }));
+    if (mode === "economy") {
+      // One external API call creates seven separate reviewable sections.
+      // The reviewer section is generated within the same call, NOT an independent audit.
+      const keys = ["director", "strategist", "copywriter", "designer", "media_buyer", "support", "reviewer"] as const;
+      const economyInstructions = [
+        "أنت مدير فريق تسويق متكامل. المطلوب تخطيط المهمة في طلب واحد فقط لتقليل استهلاك API.",
+        "اكتب كائن JSON صالح فقط (بدون Markdown أو تعليقات) يحتوي سبعة مفاتيح نصية بالضبط:",
+        keys.join(", "),
+        "director: هدف المهمة، توزيع مسؤوليات الفريق، المخاطر وموافقات المستخدم.",
+        "strategist: خطة تسويق أسبوعية من 3 إلى 5 أفكار واضحة والجمهور.",
+        "copywriter: منشوران جاهزان للمراجعة لكل منهما دعوة للتفاعل.",
+        "designer: فكرتان بصريتان مع وصف عناصر الصورة وprompt إنجليزي لتوليد صورة.",
+        "media_buyer: مقترح استهداف وأهداف الحملة ومؤشرات الأداء، والميزانية المقترحة إن وجدت دون تفعيلها.",
+        "support: أربعة ردود قصيرة وأسئلة تأهيل وتسليم الموظف عند التسعير أو إتمام البيع.",
+        "reviewer: تدقيق أولي للمخاطر، الادعاءات والأسعار وضرورة موافقة بشرية.",
+        "كل قيمة سلسلة نصية عربية موجزة حوالي 80-150 كلمة بحد أقصى.",
+        "لا تنفذ نشرًا أو إرسالًا أو مصروفات. المخرجات مسودات للموافقة فقط.",
+        "هذه مراجعة أولية من نفس الطلب وليست تدقيقًا مستقلًا."
+      ].join("\n");
+      const drafted = await askSelectedAgent(
+        ai, "مدير الوكلاء الاقتصادي", economyInstructions, context, 3650
+      );
+      let parsed: Record<string, unknown>;
+      try {
+        const raw = drafted.text.trim().replace(/^\x60\x60\x60(?:json)?\s*/i, "").replace(/\s*\x60\x60\x60$/, "");
+        const first = raw.indexOf("{"), last = raw.lastIndexOf("}");
+        if (first < 0 || last <= first) throw new Error("missing JSON object");
+        parsed = JSON.parse(raw.slice(first, last + 1)) as Record<string, unknown>;
+        if (!keys.every(k => typeof parsed[k] === "string" && (parsed[k] as string).trim())) {
+          throw new Error("missing agent sections");
+        }
+      } catch {
+        throw new Error("AI_ECONOMY_FORMAT");
+      }
+      records = keys.map(role => ({
+        organization_id: session.organizationId,
+        mission_id: mission.id,
+        agent_role: role,
+        content: String(parsed[role]).trim().slice(0, 29000),
+        model: drafted.model
+      }));
+    } else {
+      // Full mode retains the separate director, specialists, and independent reviewer.
+      const director = await askSelectedAgent(ai, "مدير الوكلاء",
+        "حلل المهمة وفوض المهام للفريق: الاستراتيجية والكتابة والتصميم والإعلان والردود. حدد الهدف والرسالة والجمهور ومخاطر الالتباس وماذا يوافق عليه الإنسان قبل أي نشر. لا تنفذ أي إجراء.",
+        context, 700);
+      const base = `${context}\n\nخطة مدير الوكلاء:\n${director.text.slice(0, 4200)}`;
+      const specialists = await Promise.all(
+        Object.entries(instructions).map(async ([role, instruction]) => {
+          const result = await askSelectedAgent(ai, role, instruction, base, 900);
+          return { role, ...result };
+        })
+      );
+      const reviewer = await askSelectedAgent(ai, "مراجع الجودة",
+        "راجع ما يلي كمدقق مستقل: رصد أي ادعاءات غير موثوقة ومخاطر الخصوصية أو السعر أو وعود النتائج، راجع سلامة خطة الإعلان والردود، ثم أعط قائمة مراجعة واضحة للمدير البشري قبل الموافقة. لا تمنح اعتماد نشر آليًا.",
+        `${base}\n\n${specialists.map(s => `${s.role}:\n${s.text.slice(0, 3700)}`).join("\n\n")}`, 850);
+      records = [
+        { role: "director", ...director },
+        ...specialists,
+        { role: "reviewer", ...reviewer }
+      ].map(item => ({
+        organization_id: session.organizationId,
+        mission_id: mission.id,
+        agent_role: item.role,
+        content: item.text,
+        model: item.model
+      }));
+    }
 
     const { error: savedError } = await session.db.from("agent_outputs")
       .insert(records);
@@ -77,7 +124,7 @@ export async function POST(req: NextRequest) {
       .update({ status: "review" })
       .eq("id", mission.id).eq("organization_id", session.organizationId);
     if (statusError) throw statusError;
-    return NextResponse.json({ ok: true, missionId: mission.id, agents: records.length, status: "review" });
+    return NextResponse.json({ ok: true, missionId: mission.id, agents: records.length, mode, apiCalls: mode === "economy" ? 1 : 7, status: "review" });
   } catch (error) {
     if (claimedMissionId && activeDb) {
       await activeDb.from("agent_missions").update({ status: "failed" }).eq("id", claimedMissionId).eq("status", "running");
