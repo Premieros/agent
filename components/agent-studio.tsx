@@ -21,7 +21,7 @@ type Asset = { id: string; storage_path: string; prompt: string; signedUrl?: str
 type ProviderId = "openai" | "gemini" | "openrouter" | "groq" | "deepseek" | "mistral" | "together" | "anthropic";
 type ReadyStatus = { aiReady: boolean; imageReady: boolean; metaConnected: boolean; canPublish: boolean; configuredProviders?: ProviderId[] };
 const providers: { id: ProviderId; title: string; model: string; image: boolean }[] = [
-  { id: "gemini", title: "Google Gemini", model: "gemini-2.5-flash-lite", image: true },
+  { id: "gemini", title: "Google Gemini", model: "gemini-3.5-flash-lite", image: true },
   { id: "openai", title: "OpenAI", model: "gpt-4.1-mini", image: true },
   { id: "openrouter", title: "OpenRouter", model: "openai/gpt-4o-mini", image: false },
   { id: "groq", title: "Groq", model: "llama-3.3-70b-versatile", image: false },
@@ -67,8 +67,9 @@ export default function AgentStudio() {
   const [ready, setReady] = useState<ReadyStatus | null>(null);
   const [aiProvider, setAiProvider] = useState<ProviderId>("gemini");
   const [aiKey, setAiKey] = useState("");
-  const [aiModel, setAiModel] = useState("gemini-2.5-flash-lite");
+  const [aiModel, setAiModel] = useState("gemini-3.5-flash-lite");
   const [showAiSettings, setShowAiSettings] = useState(true);
+  const [runMode, setRunMode] = useState<"economy" | "full">("economy");
   const [aiTestResult, setAiTestResult] = useState("");
   const [availableModels, setAvailableModels] = useState<Array<{ id: string; label: string }>>([]);
   const [modelLookupMessage, setModelLookupMessage] = useState("");
@@ -264,16 +265,16 @@ export default function AgentStudio() {
   async function callAgentAPI(endpoint: string, id: string, busyKey: string) {
     if (!db || !member) return;
     if (!aiReady) { setShowAiSettings(true); setError("اختار مزوّد الذكاء الاصطناعي وحط مفتاحه الأول."); return; }
-    if (!window.confirm(busyKey==="design" ? "توليد الصورة قد يستهلك من حصة المزوّد المختار. هل تريد المتابعة؟" : "تشغيل 7 وكلاء يستخدم حصة أو رصيد المزوّد المختار وينتج مسودات فقط. هل توافق؟")) return;
+    if (!window.confirm(busyKey==="design" ? "توليد الصورة قد يستهلك من حصة المزوّد المختار. هل تريد المتابعة؟" : runMode==="economy" ? "الوضع الاقتصادي: طلب AI واحد لإنشاء 7 أقسام للمراجعة، بتكلفة تعتمد على طول الاستجابة. هل توافق؟" : "الوضع الكامل: 7 طلبات AI منفصلة ويستهلك حصة المزوّد. هل توافق؟")) return;
     setBusy(busyKey); setError(""); setNotice("");
     try {
       const response = await fetch(endpoint, {
         method: "POST", headers: await authHeaders(),
-        body: JSON.stringify({ missionId: id, ai: { provider: aiProvider, model: aiModel.trim(), apiKey: aiKey.trim() } })
+        body: JSON.stringify({ missionId: id, mode: runMode, ai: { provider: aiProvider, model: aiModel.trim(), apiKey: aiKey.trim() } })
       });
-      const result = await response.json() as { error?: string; agents?: number };
+      const result = await response.json() as { error?: string; agents?: number; mode?: "economy" | "full"; apiCalls?: number };
       if (!response.ok) { setError(result.error || "تعذر تشغيل الوكيل."); return; }
-      setNotice(busyKey==="design" ? "تم إنشاء تصميم حقيقي وحفظه في مكتبة خاصة." : `اكتمل عمل ${result.agents || 7} وكلاء. كل المخرجات تنتظر مراجعتك.`);
+      setNotice(busyKey==="design" ? "تم إنشاء تصميم حقيقي وحفظه في مكتبة خاصة." : `اتحفظت ${result.agents || 7} أقسام في نتائج الوكلاء باستخدام ${result.apiCalls || 1} طلب AI. المسودات تنتظر مراجعتك.`);
       setActiveTab(busyKey==="design"?"creatives":"output");
       await loadWorkspace(user);
       await loadDetails(id, member.organization_id);
@@ -374,6 +375,13 @@ export default function AgentStudio() {
           {aiTestResult && <p className="studio-success-note">{aiTestResult}</p>}
           <p className="studio-privacy-note"><ShieldCheck size={13}/> المفتاح موجود في الصفحة دي مؤقتًا فقط، مش بيتحفظ في قاعدة البيانات أو المتصفح. عند تحديث الصفحة هتحتاج تدخله تاني. لو فيه مفتاح مُعدّ على Vercel للمزوّد المختار تقدر تسيب الخانة فاضية.</p>
         </section>
+        <div className="studio-run-mode">
+          <div><strong>طريقة تشغيل الفريق</strong><p>الوضع الاقتصادي بيجهّز مخرجات الفريق في طلب واحد؛ المراجعة فيه أولية، مش تدقيق مستقل.</p></div>
+          <select value={runMode} onChange={e=>setRunMode(e.target.value as "economy" | "full")} aria-label="نمط تشغيل الوكلاء">
+            <option value="economy">اقتصادي — طلب AI واحد</option>
+            <option value="full">كامل — 7 طلبات AI منفصلة</option>
+          </select>
+        </div>
         <div className="studio-readiness">
           <CircleAlert size={16}/>
           <span>{aiReady ? `مزوّد ${selectedProvider.title} جاهز من ناحية إدخال المفتاح (لسه محتاج اختبار صلاحية المفتاح)` : `اختار مفتاح ${selectedProvider.title} لتشغيل الوكلاء`} · {selectedProvider.image ? "يدعم توليد الصور بنموذج صور منفصل حسب الحصة" : "هذا المزوّد مخصص للمهام النصية هنا"} · {ready?.metaConnected ? "Meta متصل" : "Meta غير متصل، لا نشر ولا إعلان ممول ولا رد خارجي"}</span>
