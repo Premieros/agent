@@ -70,6 +70,8 @@ export default function AgentStudio() {
   const [aiModel, setAiModel] = useState("gemini-2.5-flash-lite");
   const [showAiSettings, setShowAiSettings] = useState(true);
   const [aiTestResult, setAiTestResult] = useState("");
+  const [availableModels, setAvailableModels] = useState<Array<{ id: string; label: string }>>([]);
+  const [modelLookupMessage, setModelLookupMessage] = useState("");
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [busy, setBusy] = useState("");
@@ -212,6 +214,29 @@ export default function AgentStudio() {
     setBusy("");
   }
 
+  async function discoverModels() {
+    if (!aiReady || busy) return;
+    setBusy("models"); setError(""); setModelLookupMessage(""); setAvailableModels([]); setAiTestResult("");
+    try {
+      const response = await fetch("/api/agents/models", {
+        method: "POST",
+        headers: await authHeaders(),
+        body: JSON.stringify({ ai: { provider: aiProvider, apiKey: aiKey.trim(), model: aiModel.trim() } })
+      });
+      const data = await response.json() as { error?: string; models?: Array<{ id: string; label: string }>; count?: number };
+      if (!response.ok) { setError(data.error || "تعذر الاستعلام عن نماذج المزوّد."); return; }
+      const choices = data.models || [];
+      setAvailableModels(choices);
+      if (!choices.length) {
+        setModelLookupMessage("المزوّد لم يرجّع نماذج نصية قابلة للاختيار لهذا المفتاح. جرّب اسم نموذج مدعوم من لوحة حسابك أو مزوّدًا آخر.");
+      } else {
+        if (!choices.some(m => m.id === aiModel)) setAiModel(choices[0].id);
+        setModelLookupMessage(`ظهرت ${choices.length} نماذج من مزوّد ${selectedProvider.title}. اختر واحدًا واضغط اختبار المفتاح.`);
+      }
+    } catch (e) { setError(e instanceof Error ? e.message : "فشل تحميل قائمة النماذج."); }
+    finally { setBusy(""); }
+  }
+
   async function testProvider() {
     if (!aiReady || busy) return;
     if (!window.confirm("اختبار الاتصال يرسل طلب AI واحدًا، وقد يُخصم من حصة المزوّد. هل توافق؟")) return;
@@ -317,20 +342,28 @@ export default function AgentStudio() {
               <select value={aiProvider} onChange={e=>{
                 const picked = providers.find(p=>p.id===e.target.value);
                 if (!picked) return;
-                setAiProvider(picked.id); setAiModel(picked.model); setAiKey(""); setAiTestResult("");
+                setAiProvider(picked.id); setAiModel(picked.model); setAiKey(""); setAiTestResult(""); setAvailableModels([]); setModelLookupMessage("");
               }}>
                 {providers.map(p=><option key={p.id} value={p.id}>{p.title}</option>)}
               </select>
             </label>
             <label>مفتاح API الخاص بالمزوّد
-              <input type="password" autoComplete="off" spellCheck={false} placeholder="الصق المفتاح هنا" value={aiKey} onChange={e=>{setAiKey(e.target.value);setAiTestResult("");}} />
+              <input type="password" autoComplete="off" spellCheck={false} placeholder="الصق المفتاح هنا" value={aiKey} onChange={e=>{setAiKey(e.target.value);setAiTestResult("");setAvailableModels([]);setModelLookupMessage("");}} />
             </label>
             <label>نموذج الكتابة
               <input dir="ltr" spellCheck={false} autoComplete="off" value={aiModel} onChange={e=>{setAiModel(e.target.value);setAiTestResult("");}} placeholder="Model ID"/>
             </label>
+            <button type="button" className="studio-test-provider" disabled={!aiReady||Boolean(busy)} onClick={()=>void discoverModels()}>{busy==="models"?"جارٍ التحميل...":"عرض النماذج المتاحة"}</button>
             <button type="button" disabled={!aiKey} onClick={()=>{setAiKey("");setAiTestResult("");}}>مسح المفتاح</button>
             <button type="button" className="studio-test-provider" disabled={!aiReady||Boolean(busy)} onClick={()=>void testProvider()}>{busy==="test"?"جارٍ الاختبار...":"اختبار المفتاح"}</button>
           </div>}
+          {modelLookupMessage && <p className="studio-model-hint">{modelLookupMessage}</p>}
+          {availableModels.length > 0 && showAiSettings && <label className="studio-model-picker">اختر نموذجًا من حسابك
+            <select value={availableModels.some(m=>m.id===aiModel)?aiModel:""} onChange={e=>{setAiModel(e.target.value);setAiTestResult("");}}>
+              {!availableModels.some(m=>m.id===aiModel) && <option value="">— اختر النموذج —</option>}
+              {availableModels.map(m=><option key={m.id} value={m.id}>{m.label} — {m.id}</option>)}
+            </select>
+          </label>}
           {aiTestResult && <p className="studio-success-note">{aiTestResult}</p>}
           <p className="studio-privacy-note"><ShieldCheck size={13}/> المفتاح موجود في الصفحة دي مؤقتًا فقط، مش بيتحفظ في قاعدة البيانات أو المتصفح. عند تحديث الصفحة هتحتاج تدخله تاني. لو فيه مفتاح مُعدّ على Vercel للمزوّد المختار تقدر تسيب الخانة فاضية.</p>
         </section>
