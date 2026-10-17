@@ -492,7 +492,7 @@ export default function AgentStudio() {
             <p className="studio-privacy-note"><ShieldCheck size={13}/> يستخدم مفاتيح Vercel فقط، ولا يختار نموذجًا مدفوعًا بدون موافقتك.</p>
           </>}
         </section>
-        <section className="studio-ai-settings">
+        {routing==="manual" &&         <section className="studio-ai-settings">
           <div className="studio-ai-settings-head">
             <div><strong><Sparkles size={17}/> إعدادات الذكاء الاصطناعي</strong>
               <p>اختار المزوّد واستخدم مفتاحه مباشرة لتشغيل وكلائك. مش لازم مفتاح OpenAI.</p></div>
@@ -538,7 +538,7 @@ export default function AgentStudio() {
           </label>}
           {aiTestResult && <p className="studio-success-note">{aiTestResult}</p>}
           <p className="studio-privacy-note"><ShieldCheck size={13}/> مفتاح Vercel بيتستخدم على الخادم بدون إرساله للمتصفح. أما المفتاح اليدوي فبيفضل مؤقتًا في الصفحة ومش بيتحفظ في قاعدة البيانات. اختبر المصدر المختار قبل تشغيل المهمة.</p>
-        </section>
+        </section>}
         {routing==="manual" && <div className="studio-run-mode">
           <div><strong>طريقة تشغيل الفريق</strong><p>الوضع الاقتصادي بيجهّز مخرجات الفريق في طلب واحد؛ المراجعة فيه أولية، مش تدقيق مستقل.</p></div>
           <select value={runMode} onChange={e=>setRunMode(e.target.value as "economy" | "full")} aria-label="نمط تشغيل الوكلاء">
@@ -548,7 +548,7 @@ export default function AgentStudio() {
         </div>}
         <div className="studio-readiness">
           <CircleAlert size={16}/>
-          <span>{aiReady ? `${selectedProvider.title}: ${keySource==="server"?"مفتاح Vercel محدد":"مفتاح يدوي محدد"} — اختبار الصلاحية مطلوب` : `اختار مفتاح ${selectedProvider.title} لتشغيل الوكلاء`} · {selectedProvider.image ? "يدعم توليد الصور بنموذج صور منفصل حسب الحصة" : "هذا المزوّد مخصص للمهام النصية هنا"} · {ready?.metaConnected ? "Meta متصل" : "Meta غير متصل، لا نشر ولا إعلان ممول ولا رد خارجي"}</span>
+          <span>{routing==="auto" ? (aiReady ? `تشغيل تلقائي: ${autoCandidates.length} نموذج مرصود، وحد أقصى 3 محاولات` : "التشغيل التلقائي ينتظر اكتشاف النماذج") : (aiReady ? `${selectedProvider.title}: ${keySource==="server"?"مفتاح Vercel محدد":"مفتاح يدوي محدد"} — اختبار الصلاحية مطلوب` : `اختار مفتاح ${selectedProvider.title} لتشغيل الوكلاء`)} · {routing==="auto" ? "التوجيه متاح للكتابة فقط" : selectedProvider.image ? "يدعم توليد الصور بنموذج صور منفصل حسب الحصة" : "هذا المزوّد مخصص للمهام النصية هنا"} · {ready?.metaConnected ? "Meta متصل" : "Meta غير متصل، لا نشر ولا إعلان ممول ولا رد خارجي"}</span>
           <button type="button" onClick={()=>void statusCheck()} title="فحص الإعدادات"><RefreshCcw size={15}/></button>
         </div>
         <div className="studio-layout">
