@@ -23,6 +23,13 @@ export default function LiveCrm() {
   const [checking, setChecking] = useState(true);
   const [email, setEmail] = useState("");
   const [sent, setSent] = useState(false);
+  const [loginMode, setLoginMode] = useState<"link" | "password">("link");
+  const [password, setPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [showPasswordSetup, setShowPasswordSetup] = useState(false);
+  const [passwordSaved, setPasswordSaved] = useState(false);
+  const [emailBlocked, setEmailBlocked] = useState(false);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [leads, setLeads] = useState<Lead[]>([]);
@@ -66,10 +73,31 @@ export default function LiveCrm() {
     setError(""); setBusy(true);
     const { error: e } = await db.auth.signInWithOtp({
       email: email.trim(),
-      options: { emailRedirectTo: window.location.origin + "/crm", shouldCreateUser: true }
+      options: { emailRedirectTo: window.location.origin + "/crm", shouldCreateUser: false }
     });
     setBusy(false);
-    if (e) setError(e.message); else setSent(true);
+    if (e) {
+      if (/rate limit|too many requests|429/i.test(e.message)) {
+        setEmailBlocked(true);
+        setError("تم الوصول لحد إرسال رسائل Supabase. متطلبش رابط جديد دلوقتي. انتظر تجدد الحد أو استخدم كلمة مرور لو سبق تعيينها.");
+      } else setError(e.message);
+    } else setSent(true);
+  }
+  async function loginWithPassword() {
+    if (!db || !email.trim() || !password) return;
+    setBusy(true); setError("");
+    const { error: e } = await db.auth.signInWithPassword({ email: email.trim(), password });
+    setBusy(false);
+    if (e) setError("فشل تسجيل الدخول. راجع البريد وكلمة المرور. لو حسابك كان برابط البريد فقط، لازم تعيّن كلمة مرور بعد تسجيل دخول ناجح أولًا.");
+    else setPassword("");
+  }
+  async function savePassword() {
+    if (!db || !user || newPassword.length < 12 || newPassword !== confirmPassword) return;
+    setBusy(true); setError("");
+    const { error: e } = await db.auth.updateUser({ password: newPassword });
+    setBusy(false); setNewPassword(""); setConfirmPassword("");
+    if (e) setError("تعذر حفظ كلمة المرور: " + e.message);
+    else { setPasswordSaved(true); setShowPasswordSetup(false); }
   }
   async function createLead() {
     if (!db || !membership || !form.full_name.trim()) return;
@@ -104,11 +132,40 @@ export default function LiveCrm() {
       {error && <p className="crm-error" role="alert">{error}</p>}
       {!db && <div className="crm-card"><h2>ربط قاعدة البيانات غير مكتمل</h2><p>الموقع يحتاج متغيرات الاتصال العامة في إعدادات الاستضافة.</p></div>}
       {db && checking && <div className="crm-card"><LoaderCircle size={21} className="crm-spin"/> جارٍ التحقق من الجلسة والصلاحيات...</div>}
-      {db && !checking && !user && <div className="crm-card crm-login"><h2>تسجيل دخول آمن</h2><p>اكتب بريدك الإلكتروني وسيصلك رابط تسجيل الدخول. إنشاء الحساب وحده لا يمنح صلاحية الوصول لبيانات الشركة.</p>
-        {sent ? <p className="crm-success"><CheckCircle2 size={16}/> تم طلب إرسال الرابط. افحص بريدك الإلكتروني.</p> : <form onSubmit={e=>{e.preventDefault();void signIn();}}><label htmlFor="crm-email">البريد الإلكتروني</label><input id="crm-email" type="email" autoComplete="email" required placeholder="name@example.com" value={email} onChange={e=>setEmail(e.target.value)} /><button disabled={busy}>إرسال رابط الدخول</button></form>}
+      {db && !checking && !user && <div className="crm-card crm-login">
+        <h2>تسجيل دخول آمن</h2>
+        <p>استخدم كلمة المرور لو سبق تعيينها، أو اطلب رابط بريد. إنشاء الحساب وحده لا يعطي صلاحية الاطلاع على العملاء.</p>
+        <div className="crm-login-tabs" role="group" aria-label="طريقة الدخول">
+          <button type="button" className={loginMode === "link" ? "selected" : ""} onClick={() => { setLoginMode("link"); setError(""); }}>رابط البريد</button>
+          <button type="button" className={loginMode === "password" ? "selected" : ""} onClick={() => { setLoginMode("password"); setError(""); }}>كلمة المرور</button>
+        </div>
+        <form onSubmit={e => { e.preventDefault(); void (loginMode === "password" ? loginWithPassword() : signIn()); }}>
+          <label htmlFor="crm-email">البريد الإلكتروني</label>
+          <input id="crm-email" type="email" autoComplete="email" required placeholder="name@example.com" value={email} onChange={e => setEmail(e.target.value)} />
+          {loginMode === "password" ? <>
+            <label htmlFor="crm-password">كلمة المرور</label>
+            <input id="crm-password" type="password" autoComplete="current-password" required value={password} onChange={e => setPassword(e.target.value)} />
+            <button disabled={busy || !password}>دخول بكلمة المرور</button>
+            <small className="crm-help-text">لازم تكون عيّنت كلمة مرور من داخل حسابك بعد تسجيل دخول ناجح سابقًا.</small>
+          </> : sent ? <p className="crm-success"><CheckCircle2 size={16}/> تم طلب إرسال الرابط. راجع بريدك الإلكتروني.</p> : <>
+            <button disabled={busy || emailBlocked}>إرسال رابط الدخول</button>
+            {emailBlocked && <p className="crm-help-text">تم إيقاف طلب روابط إضافية في هذه الصفحة بسبب حد الإرسال. جرّب لاحقًا بعد تجدد الحد.</p>}
+          </>}
+        </form>
       </div>}
       {db && !checking && user && !membership && <div className="crm-card"><h2>حسابك جاهز، وينتظر إضافتك للفريق</h2><p>البريد: <b dir="ltr">{user.email}</b></p><p>مسؤول النظام لازم يضيف حسابك لعضوية الشركة. ده إجراء مقصود لحماية العملاء والمحادثات، ومش هنسمح لحساب غير معتمد يشوف أي بيانات.</p><button className="crm-btn-secondary" onClick={()=>void load(user)}>إعادة فحص العضوية <RefreshCw size={15}/></button></div>}
-      {db && !checking && membership && <>
+      {db && !checking && membership && user && <>
+        <section className="crm-card crm-password-panel">
+          <div className="crm-section-head"><div><h2>تسجيل الدخول بكلمة مرور</h2><p>عيّن كلمة مرور مرة واحدة، علشان متحتاجش رسالة بريد في كل دخول.</p></div>
+          <button type="button" onClick={() => setShowPasswordSetup(v => !v)}>{showPasswordSetup ? "إلغاء" : "تعيين / تغيير كلمة المرور"}</button></div>
+          {passwordSaved && <p className="crm-success"><CheckCircle2 size={16}/> تم حفظ كلمة المرور. يمكنك استخدامها عند تسجيل الدخول لاحقًا.</p>}
+          {showPasswordSetup && <form className="crm-password-form" onSubmit={e => { e.preventDefault(); void savePassword(); }}>
+            <label>كلمة مرور جديدة<input type="password" minLength={12} required autoComplete="new-password" value={newPassword} onChange={e => setNewPassword(e.target.value)} /></label>
+            <label>تأكيد كلمة المرور<input type="password" minLength={12} required autoComplete="new-password" value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)} /></label>
+            <button disabled={busy || newPassword.length < 12 || newPassword !== confirmPassword}>حفظ كلمة المرور</button>
+            <p className="crm-help-text">اختر كلمة مرور قوية من 12 حرفًا على الأقل. لا تشاركها مع أي شخص.</p>
+          </form>}
+        </section>
         <div className="crm-metrics"><div><span>العملاء المسجلون</span><strong>{leads.length}</strong></div><div><span>مهام المتابعة</span><strong>{tasks.filter(t=>t.status==="pending").length}</strong></div><div><span>صلاحيتك</span><strong className="crm-role">{membership.role}</strong></div></div>
         <section className="crm-card"><div className="crm-section-head"><div><h2><UsersRound size={19}/> العملاء المحتملون</h2><p>معلومات حقيقية محفوظة في قاعدة البيانات</p></div><button onClick={()=>setShowForm(v=>!v)}><Plus size={17}/> إضافة عميل</button></div>
         {showForm && <form className="crm-form" onSubmit={e=>{e.preventDefault();void createLead();}}><label>اسم العميل<input required maxLength={180} value={form.full_name} onChange={e=>setForm(v=>({...v,full_name:e.target.value}))}/></label><label>اسم النشاط<input maxLength={180} value={form.business_name} onChange={e=>setForm(v=>({...v,business_name:e.target.value}))}/></label><label>رقم التواصل<input maxLength={40} value={form.phone} onChange={e=>setForm(v=>({...v,phone:e.target.value}))}/></label><label>نوع النشاط<select value={form.business_type} onChange={e=>setForm(v=>({...v,business_type:e.target.value}))}>{types.map(t=><option key={t.value} value={t.value}>{t.label}</option>)}</select></label><button disabled={busy || !form.full_name.trim()}>حفظ العميل</button></form>}
