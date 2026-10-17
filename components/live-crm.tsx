@@ -127,7 +127,7 @@ export default function LiveCrm() {
 
   return <div className="crm-root">
     <div className="crm-wrap">
-      <header className="crm-header"><div><strong>AGENT</strong><span> · إدارة المبيعات الفعلية</span></div><div className="crm-actions"><Link href="/"><ArrowRight size={17}/> الواجهة التجريبية</Link>{user && <button onClick={async () => {await db?.auth.signOut();setUser(null);setMembership(null);}}>خروج <LogOut size={15}/></button>}</div></header>
+      <header className="crm-header"><div><strong>AGENT</strong><span> · إدارة المبيعات الفعلية</span></div><div className="crm-actions"><Link href="/crm/inbox">مركز المحادثات الفعلي</Link><Link href="/"><ArrowRight size={17}/> الواجهة التجريبية</Link>{user && <button onClick={async () => {await db?.auth.signOut();setUser(null);setMembership(null);}}>خروج <LogOut size={15}/></button>}</div></header>
       <div className="crm-title"><div><span className="crm-overline">Sales CRM</span><h1>إدارة العملاء والمتابعة</h1><p>حسابات منفصلة وصلاحيات محمية وتخزين فعلي على Supabase.</p></div><span className="crm-status"><ShieldCheck size={15}/> بيانات فعلية</span></div>
       {error && <p className="crm-error" role="alert">{error}</p>}
       {!db && <div className="crm-card"><h2>ربط قاعدة البيانات غير مكتمل</h2><p>الموقع يحتاج متغيرات الاتصال العامة في إعدادات الاستضافة.</p></div>}
