@@ -21,6 +21,8 @@ type Output = { id: string; agent_role: string; content: string; model: string }
 type Asset = { id: string; storage_path: string; prompt: string; signedUrl?: string };
 type ProviderId = "openai" | "gemini" | "openrouter" | "groq" | "deepseek" | "mistral" | "together" | "anthropic";
 type ReadyStatus = { aiReady: boolean; imageReady: boolean; metaConnected: boolean; canPublish: boolean; configuredProviders?: ProviderId[] };
+type AutoCandidate = { provider: "openrouter" | "gemini" | "groq"; model: string; label: string; tier: "free-model" | "free-tier-conditional" };
+type AutoProvider = { provider: string; configured: boolean; costClass: string };
 const providers: { id: ProviderId; title: string; model: string; image: boolean }[] = [
   { id: "gemini", title: "Google Gemini", model: "gemini-3.5-flash-lite", image: true },
   { id: "openai", title: "OpenAI", model: "gpt-4.1-mini", image: true },
@@ -75,6 +77,11 @@ export default function AgentStudio() {
   const [designSubline, setDesignSubline] = useState("حلول عملية لتنظيم المبيعات ومتابعة شغلك");
   const [showAiSettings, setShowAiSettings] = useState(true);
   const [runMode, setRunMode] = useState<"economy" | "full">("economy");
+  const [routing, setRouting] = useState<"manual" | "auto">("manual");
+  const [allowConditionalFreeTier, setAllowConditionalFreeTier] = useState(false);
+  const [autoCandidates, setAutoCandidates] = useState<AutoCandidate[]>([]);
+  const [autoProviders, setAutoProviders] = useState<AutoProvider[]>([]);
+  const [autoScanComplete, setAutoScanComplete] = useState(false);
   const [aiTestResult, setAiTestResult] = useState("");
   const [availableModels, setAvailableModels] = useState<Array<{ id: string; label: string }>>([]);
   const [modelLookupMessage, setModelLookupMessage] = useState("");
@@ -95,7 +102,8 @@ export default function AgentStudio() {
   const approvedCount = missions.filter(m => m.status === "approved").length;
   const selectedProvider = providers.find(p => p.id === aiProvider) || providers[0];
   const serverKeyConfigured = Boolean(ready?.configuredProviders?.includes(aiProvider));
-  const aiReady = keySource === "server" ? serverKeyConfigured : Boolean(aiKey.trim());
+  const manualReady = keySource === "server" ? serverKeyConfigured : Boolean(aiKey.trim());
+  const aiReady = routing === "auto" ? autoScanComplete && autoCandidates.length > 0 : manualReady;
   const selectedAI = () => ({
     provider: aiProvider,
     model: aiModel.trim(),
@@ -103,7 +111,7 @@ export default function AgentStudio() {
     keySource,
     ...(keySource === "manual" ? { apiKey: aiKey.trim() } : {})
   });
-  const canGenerateImage = aiReady && selectedProvider.image;
+  const canGenerateImage = manualReady && selectedProvider.image;
 
   const loadWorkspace = useCallback(async (activeUser: User | null) => {
     if (!db || !activeUser) {
@@ -228,6 +236,24 @@ export default function AgentStudio() {
     setBusy("");
   }
 
+  async function scanAutoModels() {
+    if (!db || busy) return;
+    setBusy("auto-scan"); setError(""); setNotice(""); setAutoScanComplete(false); setAutoCandidates([]);
+    try {
+      const { data: { session } } = await db.auth.getSession();
+      if (!session?.access_token) throw new Error("برجاء تسجيل الدخول.");
+      const resp = await fetch("/api/agents/free-models?includeFreeTier=" + String(allowConditionalFreeTier), {
+        method: "GET", headers: { Authorization: `Bearer ${session.access_token}` }
+      });
+      const result = await resp.json() as { error?: string; candidates?: AutoCandidate[]; providers?: AutoProvider[] };
+      if (!resp.ok) throw new Error(result.error || "تعذر الاستعلام عن نماذج المزوّدين.");
+      setAutoCandidates(result.candidates || []);
+      setAutoProviders(result.providers || []);
+      setAutoScanComplete(true);
+    } catch (err) { setError(err instanceof Error ? err.message : "فشل اكتشاف النماذج."); }
+    finally { setBusy(""); }
+  }
+
   async function discoverModels() {
     if (!aiReady || busy) return;
     setBusy("models"); setError(""); setModelLookupMessage(""); setAvailableModels([]); setAiTestResult("");
@@ -277,21 +303,36 @@ export default function AgentStudio() {
 
   async function callAgentAPI(endpoint: string, id: string, busyKey: string) {
     if (!db || !member) return;
-    if (!aiReady) { setShowAiSettings(true); setError("اختار مزوّد الذكاء الاصطناعي وحط مفتاحه الأول."); return; }
-    if (!window.confirm(busyKey==="design" ? "توليد الصورة قد يستهلك من حصة المزوّد المختار. هل تريد المتابعة؟" : runMode==="economy" ? "الوضع الاقتصادي: طلب AI واحد لإنشاء 7 أقسام للمراجعة، بتكلفة تعتمد على طول الاستجابة. هل توافق؟" : "الوضع الكامل: 7 طلبات AI منفصلة ويستهلك حصة المزوّد. هل توافق؟")) return;
+    if (busyKey==="design" && !manualReady) {
+      setError("الصور تتطلب مزوّد صور بمفتاح صالح، ومش داخلة ضمن التبديل التلقائي للنماذج النصية.");
+      return;
+    }
+    if (busyKey!=="design" && !aiReady) {
+      setError(routing==="auto"?"اضغط «بحث عن النماذج المجانية» الأول.":"اختار مزوّد الذكاء الاصطناعي ومفتاحه الأول.");
+      return;
+    }
+    if (!window.confirm(busyKey==="design"
+      ? "توليد الصورة قد يستهلك من حصة مزوّد الصور. هل تريد المتابعة؟"
+      : routing==="auto"
+        ? "التشغيل التلقائي قد يحاول 3 نماذج بحد أقصى. " + (allowConditionalFreeTier
+          ? "مرشحو حصة Gemini وGroq قد يحتسب عليهم رسوم حسب حسابك. موافق؟"
+          : "هيستخدم فقط نماذج OpenRouter الموسومة :free. موافق؟")
+        : runMode==="economy"
+          ? "الوضع الاقتصادي: طلب AI واحد لإنشاء سبعة أقسام للمراجعة. موافق؟"
+          : "الوضع الكامل: 7 طلبات AI منفصلة. موافق؟")) return;
     setBusy(busyKey); setError(""); setNotice("");
     try {
       const response = await fetch(endpoint, {
         method: "POST", headers: await authHeaders(),
-        body: JSON.stringify({ missionId: id, mode: runMode, ai: selectedAI() })
+        body: JSON.stringify({ missionId: id, mode: routing==="auto" && busyKey!=="design" ? "economy" : runMode, routing: busyKey==="design" ? "manual" : routing, allowConditionalFreeTier, ai: selectedAI() })
       });
-      const result = await response.json() as { error?: string; code?: string; agents?: number; mode?: "economy" | "full"; apiCalls?: number };
+      const result = await response.json() as { error?: string; code?: string; agents?: number; mode?: "economy" | "full"; apiCalls?: number; usedModel?: string };
       if (!response.ok) {
         setError(result.error || "تعذر تشغيل الوكيل.");
         if (busyKey==="design" && result.code==="IMAGE_QUOTA_EXCEEDED") setNotice("تقدر تعمل تصميم مجاني بالقالب الموجود تحت، أو ترفع صورة جاهزة. مش هنكرر طلب Gemini بشكل تلقائي.");
         return;
       }
-      setNotice(busyKey==="design" ? "تم إنشاء تصميم حقيقي وحفظه في مكتبة خاصة." : `اتحفظت ${result.agents || 7} أقسام في نتائج الوكلاء باستخدام ${result.apiCalls || 1} طلب AI. المسودات تنتظر مراجعتك.`);
+      setNotice(busyKey==="design" ? "تم إنشاء تصميم حقيقي وحفظه في مكتبة خاصة." : `اتحفظت ${result.agents || 7} أقسام باستخدام ${result.apiCalls || 1} طلب AI. ${result.usedModel ? "النموذج: "+result.usedModel+". " : ""}المسودات تنتظر مراجعتك.`);
       setActiveTab(busyKey==="design"?"creatives":"output");
       await loadWorkspace(user);
       await loadDetails(id, member.organization_id);
@@ -414,6 +455,43 @@ export default function AgentStudio() {
           <div><span>بانتظار مراجعتك</span><strong>{missions.filter(m=>m.status==="review").length}</strong></div>
           <div><span>اعتماد داخلي</span><strong>{approvedCount}</strong></div>
         </div>
+        <section className="studio-auto-routing">
+          <div className="studio-auto-head">
+            <div><strong><RefreshCcw size={16}/> اختيار النموذج تلقائيًا</strong>
+              <p>ينتقل تلقائيًا لمزوّد آخر لو النموذج رفض الطلب أو الحصة خلصت. 3 محاولات بحد أقصى، للمهام النصية فقط.</p>
+            </div>
+            <select value={routing} onChange={e=>{setRouting(e.target.value as "manual"|"auto");setError("");}} aria-label="طريقة اختيار النموذج">
+              <option value="manual">اختيار يدوي</option>
+              <option value="auto">تلقائي — نماذج مجانية</option>
+            </select>
+          </div>
+          {routing==="auto" && <>
+            <label className="studio-auto-opt"><input type="checkbox" checked={allowConditionalFreeTier}
+              onChange={e=>{setAllowConditionalFreeTier(e.target.checked);setAutoCandidates([]);setAutoScanComplete(false);}}/>
+              السماح بحصص Gemini وGroq المجانية المشروطة (ممكن تتحاسب حسب نوع حسابك)
+            </label>
+            <div className="studio-auto-controls">
+              <button type="button" disabled={Boolean(busy)} onClick={()=>void scanAutoModels()}>
+                <RefreshCcw size={15}/>{busy==="auto-scan"?"جارٍ البحث...":"بحث عن النماذج المجانية"}
+              </button>
+              {autoScanComplete && <span>{autoCandidates.length} نموذج تم رصده من الخدمات</span>}
+            </div>
+            {autoProviders.length>0 && <div className="studio-auto-providers">
+              {autoProviders.map(p=><span key={p.provider}>{p.provider}: {p.configured?"مفتاح موجود":"لم يُضف مفتاح"}</span>)}
+            </div>}
+            {autoScanComplete && autoCandidates.length===0 && <p className="studio-auto-warning">
+              لا يوجد نموذج مجاني مؤهل بالمفاتيح الحالية. أضف OPENROUTER_API_KEY إلى Vercel، أو اسمح بحصة Gemini المشروطة.
+            </p>}
+            {autoCandidates.length>0 && <div className="studio-auto-candidates">
+              {autoCandidates.slice(0,6).map((m,i)=><div key={m.provider+"/"+m.model}>
+                <span>{i+1}. {m.provider} / {m.model}</span>
+                <small>{m.tier==="free-model"?"مجاني معلن :free":"حصة مجانية مشروطة بالحساب"}</small>
+              </div>)}
+              {autoCandidates.length>6 && <small>و{autoCandidates.length-6} نموذج إضافي</small>}
+            </div>}
+            <p className="studio-privacy-note"><ShieldCheck size={13}/> يستخدم مفاتيح Vercel فقط، ولا يختار نموذجًا مدفوعًا بدون موافقتك.</p>
+          </>}
+        </section>
         <section className="studio-ai-settings">
           <div className="studio-ai-settings-head">
             <div><strong><Sparkles size={17}/> إعدادات الذكاء الاصطناعي</strong>
@@ -461,13 +539,13 @@ export default function AgentStudio() {
           {aiTestResult && <p className="studio-success-note">{aiTestResult}</p>}
           <p className="studio-privacy-note"><ShieldCheck size={13}/> مفتاح Vercel بيتستخدم على الخادم بدون إرساله للمتصفح. أما المفتاح اليدوي فبيفضل مؤقتًا في الصفحة ومش بيتحفظ في قاعدة البيانات. اختبر المصدر المختار قبل تشغيل المهمة.</p>
         </section>
-        <div className="studio-run-mode">
+        {routing==="manual" && <div className="studio-run-mode">
           <div><strong>طريقة تشغيل الفريق</strong><p>الوضع الاقتصادي بيجهّز مخرجات الفريق في طلب واحد؛ المراجعة فيه أولية، مش تدقيق مستقل.</p></div>
           <select value={runMode} onChange={e=>setRunMode(e.target.value as "economy" | "full")} aria-label="نمط تشغيل الوكلاء">
             <option value="economy">اقتصادي — طلب AI واحد</option>
             <option value="full">كامل — 7 طلبات AI منفصلة</option>
           </select>
-        </div>
+        </div>}
         <div className="studio-readiness">
           <CircleAlert size={16}/>
           <span>{aiReady ? `${selectedProvider.title}: ${keySource==="server"?"مفتاح Vercel محدد":"مفتاح يدوي محدد"} — اختبار الصلاحية مطلوب` : `اختار مفتاح ${selectedProvider.title} لتشغيل الوكلاء`} · {selectedProvider.image ? "يدعم توليد الصور بنموذج صور منفصل حسب الحصة" : "هذا المزوّد مخصص للمهام النصية هنا"} · {ready?.metaConnected ? "Meta متصل" : "Meta غير متصل، لا نشر ولا إعلان ممول ولا رد خارجي"}</span>
