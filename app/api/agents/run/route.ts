@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { askAgent, errorResponse, getMissionContext, requireAgentSession } from "@/lib/agent-server";
+import { errorResponse, getMissionContext, requireAgentSession } from "@/lib/agent-server";
+import { askSelectedAgent, resolveAIConfig, type AISelection } from "@/lib/ai-providers";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -16,11 +17,11 @@ export async function POST(req: NextRequest) {
   let claimedMissionId: string | null = null;
   let activeDb: Awaited<ReturnType<typeof requireAgentSession>>["db"] | null = null;
   try {
-    const body = await req.json() as { missionId?: unknown };
+    const body = await req.json() as { missionId?: unknown; ai?: AISelection };
     if (typeof body.missionId !== "string") return NextResponse.json({ error: "معرّف المهمة غير صحيح." }, { status: 400 });
     const session = await requireAgentSession(req);
     const { mission, page } = await getMissionContext(session, body.missionId);
-    if (!process.env.OPENAI_API_KEY) throw new Error("AI_NOT_CONFIGURED");
+    const ai = resolveAIConfig(body.ai);
     if (!["queued", "failed"].includes(mission.status)) throw new Error("MISSION_BUSY");
 
     const { data: locked, error: lockError } = await session.db.from("agent_missions")
@@ -42,18 +43,18 @@ export async function POST(req: NextRequest) {
       "الحالة: المحتوى للمراجعة فقط، الربط الخارجي غير مفعل."
     ].join("\n");
 
-    const director = await askAgent("مدير الوكلاء",
+    const director = await askSelectedAgent(ai, "مدير الوكلاء",
       "حلل المهمة وفوض المهام للفريق: الاستراتيجية والكتابة والتصميم والإعلان والردود. حدد الهدف والرسالة والجمهور ومخاطر الالتباس وماذا يوافق عليه الإنسان قبل أي نشر. لا تنفذ أي إجراء.",
       context, 700);
     const base = `${context}\n\nخطة مدير الوكلاء:\n${director.text.slice(0,4200)}`;
 
     const specialists = await Promise.all(
       Object.entries(instructions).map(async ([role, instruction]) => {
-        const result = await askAgent(role, instruction, base, 900);
+        const result = await askSelectedAgent(ai, role, instruction, base, 900);
         return { role, ...result };
       })
     );
-    const reviewer = await askAgent("مراجع الجودة",
+    const reviewer = await askSelectedAgent(ai, "مراجع الجودة",
       "راجع ما يلي كمدقق مستقل: رصد أي ادعاءات غير موثوقة ومخاطر الخصوصية أو السعر أو وعود النتائج، راجع سلامة خطة الإعلان والردود، ثم أعط قائمة مراجعة واضحة للمدير البشري قبل الموافقة. لا تمنح اعتماد نشر آليًا.",
       `${base}\n\n${specialists.map(s => `${s.role}:\n${s.text.slice(0,3700)}`).join("\n\n")}`, 850);
 
