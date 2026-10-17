@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { errorResponse, getMissionContext, requireAgentSession } from "@/lib/agent-server";
 import { askSelectedAgent, resolveAIConfig, type AISelection } from "@/lib/ai-providers";
+import { askAutoAgent, discoverAutoModels } from "@/lib/auto-ai";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -17,11 +18,18 @@ export async function POST(req: NextRequest) {
   let claimedMissionId: string | null = null;
   let activeDb: Awaited<ReturnType<typeof requireAgentSession>>["db"] | null = null;
   try {
-    const body = await req.json() as { missionId?: unknown; ai?: AISelection; mode?: "economy" | "full" };
+    const body = await req.json() as { missionId?: unknown; ai?: AISelection; mode?: "economy" | "full"; routing?: "manual" | "auto"; allowConditionalFreeTier?: boolean };
     if (typeof body.missionId !== "string") return NextResponse.json({ error: "معرّف المهمة غير صحيح." }, { status: 400 });
     const session = await requireAgentSession(req);
     const { mission, page } = await getMissionContext(session, body.missionId);
-    const ai = resolveAIConfig(body.ai);
+    const routing = body.routing === "auto" ? "auto" : "manual";
+    const mode = body.mode === "full" ? "full" : "economy";
+    if (routing === "auto" && mode === "full") throw new Error("AUTO_ECONOMY_ONLY");
+    const ai = routing === "manual" ? resolveAIConfig(body.ai) : null;
+    const candidates = routing === "auto"
+      ? await discoverAutoModels(body.allowConditionalFreeTier === true)
+      : [];
+    if (routing === "auto" && !candidates.length) throw new Error("AUTO_NO_FREE_MODELS");
     if (!["queued", "failed"].includes(mission.status)) throw new Error("MISSION_BUSY");
 
     const { data: locked, error: lockError } = await session.db.from("agent_missions")
@@ -43,7 +51,8 @@ export async function POST(req: NextRequest) {
       "الحالة: المحتوى للمراجعة فقط، الربط الخارجي غير مفعل."
     ].join("\n");
 
-    const mode = body.mode === "full" ? "full" : "economy";
+    let usedModel = "";
+    let apiCalls = 0;
     let records: Array<{
       organization_id: string; mission_id: string; agent_role: string; content: string; model: string;
     }>;
@@ -67,9 +76,11 @@ export async function POST(req: NextRequest) {
         "لا تنفذ نشرًا أو إرسالًا أو مصروفات. المخرجات مسودات للموافقة فقط.",
         "هذه مراجعة أولية من نفس الطلب وليست تدقيقًا مستقلًا."
       ].join("\n");
-      const drafted = await askSelectedAgent(
-        ai, "مدير الوكلاء الاقتصادي", economyInstructions, context, 3650
-      );
+      const drafted = routing === "auto"
+        ? await askAutoAgent(candidates, "مدير الوكلاء الاقتصادي", economyInstructions, context, 3650)
+        : await askSelectedAgent(ai!, "مدير الوكلاء الاقتصادي", economyInstructions, context, 3650);
+      usedModel = drafted.model;
+      apiCalls = routing === "auto" ? ("tried" in drafted ? drafted.tried : 1) : 1;
       let parsed: Record<string, unknown>;
       try {
         const raw = drafted.text.trim().replace(/^\x60\x60\x60(?:json)?\s*/i, "").replace(/\s*\x60\x60\x60$/, "");
@@ -91,19 +102,21 @@ export async function POST(req: NextRequest) {
       }));
     } else {
       // Full mode retains the separate director, specialists, and independent reviewer.
-      const director = await askSelectedAgent(ai, "مدير الوكلاء",
+      const director = await askSelectedAgent(ai!, "مدير الوكلاء",
         "حلل المهمة وفوض المهام للفريق: الاستراتيجية والكتابة والتصميم والإعلان والردود. حدد الهدف والرسالة والجمهور ومخاطر الالتباس وماذا يوافق عليه الإنسان قبل أي نشر. لا تنفذ أي إجراء.",
         context, 700);
       const base = `${context}\n\nخطة مدير الوكلاء:\n${director.text.slice(0, 4200)}`;
       const specialists = await Promise.all(
         Object.entries(instructions).map(async ([role, instruction]) => {
-          const result = await askSelectedAgent(ai, role, instruction, base, 900);
+          const result = await askSelectedAgent(ai!, role, instruction, base, 900);
           return { role, ...result };
         })
       );
-      const reviewer = await askSelectedAgent(ai, "مراجع الجودة",
+      const reviewer = await askSelectedAgent(ai!, "مراجع الجودة",
         "راجع ما يلي كمدقق مستقل: رصد أي ادعاءات غير موثوقة ومخاطر الخصوصية أو السعر أو وعود النتائج، راجع سلامة خطة الإعلان والردود، ثم أعط قائمة مراجعة واضحة للمدير البشري قبل الموافقة. لا تمنح اعتماد نشر آليًا.",
         `${base}\n\n${specialists.map(s => `${s.role}:\n${s.text.slice(0, 3700)}`).join("\n\n")}`, 850);
+      usedModel = director.model;
+      apiCalls = 7;
       records = [
         { role: "director", ...director },
         ...specialists,
@@ -124,7 +137,7 @@ export async function POST(req: NextRequest) {
       .update({ status: "review" })
       .eq("id", mission.id).eq("organization_id", session.organizationId);
     if (statusError) throw statusError;
-    return NextResponse.json({ ok: true, missionId: mission.id, agents: records.length, mode, apiCalls: mode === "economy" ? 1 : 7, status: "review" });
+    return NextResponse.json({ ok: true, missionId: mission.id, agents: records.length, mode, routing, usedModel, apiCalls, status: "review" });
   } catch (error) {
     if (claimedMissionId && activeDb) {
       await activeDb.from("agent_missions").update({ status: "failed" }).eq("id", claimedMissionId).eq("status", "running");
