@@ -103,9 +103,12 @@ export async function POST(req:NextRequest) {
       ? prompt.replace(/\s+/g," ").slice(0,65)
       : thread.title;
     const content=result.text.trim().slice(0,11900);
+    // The two rows are inserted together; distinct timestamps preserve the
+    // user -> assistant order when reading history by created_at.
+    const writtenAt=Date.now();
     const {data:saved,error:saveError}=await db.from("assistant_messages").insert([
-      {organization_id:organizationId,thread_id:thread.id,role:"user",content:prompt,skill:resolvedSkill},
-      {organization_id:organizationId,thread_id:thread.id,role:"assistant",content,model:result.model,skill:resolvedSkill}
+      {organization_id:organizationId,thread_id:thread.id,role:"user",content:prompt,skill:resolvedSkill,created_at:new Date(writtenAt).toISOString()},
+      {organization_id:organizationId,thread_id:thread.id,role:"assistant",content,model:result.model,skill:resolvedSkill,created_at:new Date(writtenAt+2).toISOString()}
     ]).select("id,role,content,model,skill,created_at");
     if(saveError||!saved) throw saveError||new Error("SAVE_FAILED");
     const {error:updateError}=await db.from("assistant_threads").update({
