@@ -39,6 +39,7 @@ export function errorResponse(error: unknown): { message: string; status: number
   if (message === "AI_KEY_INVALID" || message === "AI_MODEL_INVALID") return { message: "المفتاح أو اسم النموذج غير صالح.", status: 400 };
   if (message === "AI_CREDENTIALS_REJECTED") return { message: "المزوّد رفض المفتاح أو الصلاحيات. راجع المفتاح وحالة حسابك.", status: 401 };
   if (message === "AI_QUOTA_EXCEEDED") return { message: "انتهت الحصة أو وصل المزوّد لحد الطلبات. جرّب لاحقًا أو نموذجًا آخر.", status: 429 };
+  if (message === "AI_ECONOMY_FORMAT") return { message: "النموذج لم يرجّع الأقسام بصيغة صحيحة في الوضع الاقتصادي. جرّب مرة أخرى أو استخدم الوضع الكامل. لم تُحفظ مسودات ناقصة.", status: 502 };
   if (message === "AI_MODEL_UNAVAILABLE") return { message: "النموذج غير متاح لدى المزوّد أو الاسم غير صحيح.", status: 400 };
   if (message === "AI_ACCESS_RESTRICTED") return { message: "المزوّد قيّد الوصول لهذا النموذج أو الخدمة بسبب البلد أو متطلبات الفوترة. تحقق من صلاحيات وحصة حسابك.", status: 403 };
   if (message === "AI_REQUEST_INVALID") return { message: "المزوّد رفض إعدادات الطلب. اختار نموذج دردشة من «عرض النماذج المتاحة» ثم جرّب الاختبار.", status: 400 };
