@@ -584,7 +584,7 @@ td>b { font-weight: 700; color: #233944; }
 .studio-ai-settings-head strong{display:flex;align-items:center;gap:7px;font-size:12px;color:#2b6659}
 .studio-ai-settings-head p{margin:4px 0 0;font-size:11px;color:#8b9ba2}
 .studio-ai-settings-head>button{border:1px solid #d8e8e0;border-radius:7px;background:#f5faf7;color:#24806a;font:700 11px "Cairo",Tahoma,sans-serif;padding:6px 10px;white-space:nowrap}
-.studio-ai-config{display:grid;grid-template-columns:1fr 1.4fr 1fr auto;align-items:end;gap:9px;margin:12px 0 6px}
+.studio-ai-config{display:grid;grid-template-columns:1fr 1.3fr 1fr auto auto;align-items:end;gap:9px;margin:12px 0 6px}
 .studio-ai-config label{display:block;color:#56747b;font-size:11px;font-weight:700;min-width:0}
 .studio-ai-config input,.studio-ai-config select{display:block;width:100%;min-width:0;border:1px solid #d9e5e5;border-radius:7px;background:#fafdfc;color:#334d56;font:11px "Cairo",Tahoma,sans-serif;padding:8px 9px;margin-top:5px;height:36px}
 .studio-ai-config input[type="password"]{direction:ltr;text-align:left}
@@ -594,3 +594,6 @@ td>b { font-weight: 700; color: #233944; }
 .studio-privacy-note svg{flex-shrink:0;margin-top:2px;color:#3a937c}
 @media(max-width:1150px){.studio-ai-config{grid-template-columns:repeat(2,minmax(0,1fr))}.studio-ai-config>button{justify-self:start}}
 @media(max-width:560px){.studio-ai-config{grid-template-columns:1fr}.studio-ai-settings-head{align-items:flex-start;flex-wrap:wrap}}
+
+.studio-ai-config .studio-test-provider{background:#13866e;color:white;border-color:#13866e}
+.studio-ai-config .studio-test-provider:disabled{opacity:.5}
