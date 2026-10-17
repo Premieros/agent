@@ -11,7 +11,7 @@ export async function POST(req: NextRequest) {
   try {
     await requireAgentSession(req);
     const body = await req.json() as { ai?: AISelection };
-    const config = resolveAIConfig(body.ai);
+    const config = resolveAIConfig({ provider: body.ai?.provider, apiKey: body.ai?.apiKey });
     const models = await listAvailableTextModels(config);
     return NextResponse.json(
       { provider: config.provider, models, count: models.length },
