@@ -247,9 +247,16 @@ export default function AgentStudio() {
         headers: await authHeaders(),
         body: JSON.stringify({ ai: { provider: aiProvider, apiKey: aiKey.trim(), model: aiModel.trim() } })
       });
-      const data = await response.json() as { ok?: boolean; error?: string; model?: string };
-      if (!response.ok) setError(data.error || "فشل اختبار المفتاح.");
-      else setAiTestResult(`نجح اتصال ${selectedProvider.title} بالنموذج ${data.model || aiModel}.`);
+      const data = await response.json() as {
+        ok?: boolean; error?: string; model?: string;
+        upstream?: { httpStatus: number; providerStatus: string | null; category: string } | null;
+      };
+      if (!response.ok) {
+        const diagnosis = data.upstream
+          ? ` (كود المزوّد: HTTP ${data.upstream.httpStatus}${data.upstream.providerStatus ? " / " + data.upstream.providerStatus : ""})`
+          : "";
+        setError((data.error || "فشل اختبار المفتاح.") + diagnosis);
+      } else setAiTestResult(`نجح اتصال ${selectedProvider.title} بالنموذج ${data.model || aiModel}.`);
     } catch (e) { setError(e instanceof Error ? e.message : "فشل الاختبار."); }
     finally { setBusy(""); }
   }
