@@ -40,6 +40,8 @@ export function errorResponse(error: unknown): { message: string; status: number
   if (message === "AI_CREDENTIALS_REJECTED") return { message: "المزوّد رفض المفتاح أو الصلاحيات. راجع المفتاح وحالة حسابك.", status: 401 };
   if (message === "AI_QUOTA_EXCEEDED") return { message: "انتهت الحصة أو وصل المزوّد لحد الطلبات. جرّب لاحقًا أو نموذجًا آخر.", status: 429 };
   if (message === "AI_MODEL_UNAVAILABLE") return { message: "النموذج غير متاح لدى المزوّد أو الاسم غير صحيح.", status: 400 };
+  if (message === "AI_ACCESS_RESTRICTED") return { message: "المزوّد قيّد الوصول لهذا النموذج أو الخدمة بسبب البلد أو متطلبات الفوترة. تحقق من صلاحيات وحصة حسابك.", status: 403 };
+  if (message === "AI_REQUEST_INVALID") return { message: "المزوّد رفض إعدادات الطلب. اختار نموذج دردشة من «عرض النماذج المتاحة» ثم جرّب الاختبار.", status: 400 };
   if (message === "AI_PROVIDER_FAILURE" || message === "AI_EMPTY_OUTPUT" || message === "AI_IMAGE_SIZE") return { message: "حدث خطأ في مزوّد الذكاء الاصطناعي. تأكد من الحساب ونوع النموذج.", status: 502 };
   if (message === "MISSION_NOT_FOUND") return { message: "المهمة غير موجودة أو ليست لديك صلاحية الوصول إليها.", status: 404 };
   if (message === "MISSION_BUSY") return { message: "المهمة مش جاهزة للتشغيل؛ راجع حالتها أولًا.", status: 409 };
