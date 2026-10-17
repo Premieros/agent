@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { errorResponse, requireAgentSession } from "@/lib/agent-server";
-import { autoProviderInfo, discoverAutoModels } from "@/lib/auto-ai";
+import { autoProviderInfo, discoverAutoModelsDetailed } from "@/lib/auto-ai";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -9,10 +9,11 @@ export async function GET(req: NextRequest) {
   try {
     await requireAgentSession(req);
     const allowConditional = new URL(req.url).searchParams.get("includeFreeTier") === "true";
-    const candidates = await discoverAutoModels(allowConditional);
+    const { candidates, diagnostics } = await discoverAutoModelsDetailed(allowConditional);
     return NextResponse.json({
       candidates,
       providers: autoProviderInfo(),
+      diagnostics,
       allowConditional,
       limits: {
         maxAttempts: 3,
