@@ -1,58 +1,58 @@
-# Agent — AI Sales & Marketing Workspace
+# AGENT — Multi-page AI Sales & Marketing
 
-Independent web application for selling POS and retail/factory software. Arabic-first, responsive, and designed for **AI-to-human handoff**.
+Arabic-first web workspace for running multiple Facebook and Instagram brand workspaces, producing AI-assisted marketing drafts, managing customer leads and internal team handoff.
 
-## MVP scope
+**Production site:** https://premieros-ai-sales-agent.vercel.app  
+**Multi-page AI Studio:** https://premieros-ai-sales-agent.vercel.app/studio  
+**Authenticated CRM:** https://premieros-ai-sales-agent.vercel.app/crm  
+**Team Inbox:** https://premieros-ai-sales-agent.vercel.app/crm/inbox
 
-- Unified customer workspace and inbox (WhatsApp, Messenger, Facebook comments — **demo data only** until Meta credentials and approvals are configured).
-- Qualification for restaurants, cafes, clothing retail, and clothing factories.
-- Choose human handoff as **continue chat** or **schedule a phone call**.
-- Lead pipeline and dashboard.
-- Initial PostgreSQL schema with organization isolation and RLS, saved under `supabase/migrations/`.
+## Current capabilities (October 2026)
 
-> **Important:** The current interface is an interactive prototype. It does not send or receive real messages, spend ad budget, or persist demo changes. No Meta, OpenAI, or Supabase integrations are enabled yet. Supabase access to the target project must be granted before applying the migration.
+- **Supabase persistent data:** organization membership, leads, handoff tasks, conversations, messages, marketing pages, agent missions, agent outputs, private creative assets.
+- **Real multi-page workspace:** add internal Facebook/Instagram page profiles; configure offering, audience, brand voice per page. A profile is *not* a Meta-connected page until official OAuth succeeds (not implemented yet).
+- **AI manager/orchestration backend:** when `OPENAI_API_KEY` is configured, a human can trigger a run that calls a director, strategist, copywriter, visual designer, media buyer, customer support, and reviewer. Responses are saved to Supabase and marked for human review.
+- **Visual designer:** a separate explicitly confirmed action generates a real image with OpenAI Images API and stores it in a **private** Supabase Storage bucket, limited to 3 images per mission. API usage may incur cost.
+- **Editorial approval:** humans review and approve drafts **internally only**. No publishing, automatic replies, Meta spending, or automated messaging actions are wired yet.
+- **CRM and internal inbox:** actual authenticated customer storage, notes, follow-up task creation, human-takeover mode. Internal notes are never sent to external channels.
+- **Original UI prototype:** `/` still contains demo conversations and does not represent real customer activity.
 
-## Local development
+## Production environment on Vercel
 
-Requirements: Node.js 20.9+ (Node.js 22 recommended).
+Set environment variables in Vercel Project → Settings → Environment Variables. **Never post keys in a chat or commit them to GitHub.**
+
+| Name | Exposed? | Required |
+|---|---|---|
+| `NEXT_PUBLIC_SUPABASE_URL` | public URL | yes (already configured) |
+| `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | public client key | yes (already configured) |
+| `OPENAI_API_KEY` | **server-only secret** | required for real agents and image generation |
+| `OPENAI_AGENT_MODEL` | server-only optional | defaults to `gpt-4.1-mini` |
+| `OPENAI_IMAGE_MODEL` | server-only optional | defaults to `gpt-image-1` |
+
+After setting `OPENAI_API_KEY`, redeploy on Vercel for the runtime to see it. The agent status endpoint reports readiness without returning secrets. **Each agent run makes several paid OpenAI API requests.** Every run requires a user click and confirmation. This is not the same as a ChatGPT account subscription.
+
+## Work needed before live Meta automation
+
+You must connect the right Meta Business Manager and grant official permissions for each Facebook Page/Instagram account, ad account and WhatsApp Business entity where relevant. Integrate OAuth, secure per-page token storage, webhook signature verification, approved messaging permissions, media publishing, delivery receipts, and ad account permission checks. Support human approvals and enforce spend ceilings **server-side** before a production launch. These integrations are NOT implemented or activated by the current page profile workflow.
+
+## Run locally
+
+Node.js 22 recommended:
 
 ```bash
 npm install
 npm run dev
+npm run build
 ```
 
-Open http://localhost:3000.
+## Database & security
 
-For type-checking:
+Target Supabase project: `gldlgdycgneadbqftcrj`. Applied migrations are stored in `supabase/migrations/`. Each application table uses organization-scoped RLS. Private image objects use membership-controlled Storage RLS. Agent actions use authenticated server routes and perform role checks.
 
-```bash
-npm run typecheck
-```
+Known Supabase Security Advisor notices: the three internal inbox RPCs use carefully scoped SECURITY DEFINER and are intentionally callable by team members; leaked-password protection requires enabling in Supabase Auth settings. Test all RLS policies with multiple real tenant accounts before broad public rollout.
 
-## Environment
+No `service_role` secret is exposed in client code. Do not add secrets to `NEXT_PUBLIC_` variables.
 
-Copy `.env.example` to `.env.local`, and fill in values **only when integrations are built**. Never commit `.env.local`, service-role keys, Meta access tokens, or OpenAI API keys.
+## Release boundary
 
-## Architecture (planned)
-
-- **Next.js + TypeScript:** Arabic right-to-left web app; server-side API endpoints in future phases.
-- **Supabase PostgreSQL:** users, organizations, leads, conversations, messages, handoffs.
-- **Meta official APIs:** Webhooks + WhatsApp Business Platform + Messenger/Page APIs.
-- **OpenAI API:** AI qualification, sales conversation, summary and route recommendation, subject to business safeguards.
-- **Human takeover:** message routing prevents the AI from replying to threads while assigned to a human.
-
-## Delivery phases
-
-1. Working UI and data-model foundation (**this commit**).
-2. Supabase project authorization, authentication, persisted leads, conversations, and assignments.
-3. Meta developer application, permissions and live messaging/webhooks.
-4. Agent orchestration and approved knowledge base for products/prices/hardware.
-5. Campaign reporting and safe ad recommendations (human-approved budget changes).
-
-## Security
-
-The migration enables RLS on every public table, does not grant anonymous customer-data access, and requires organization membership for authenticated reads. Provision organizations and memberships through trusted server/admin workflows; secrets must be server-side. Review and test policies before production use.
-
-## Database setup
-
-Target Supabase project reference: `gldlgdycgneadbqftcrj`. Schema is **not automatically applied**. Review the file in `supabase/migrations/` and apply it only to that project after account access is confirmed.
+The studio is functional for managing **internal page profiles, projects, approval states and persisted records**. AI runs and image generation require a real server API key; live page posting, paid ads, and external customer replies require additional Meta authorization, official API integration and end-to-end testing. Do not market those pending integrations as currently operational.
