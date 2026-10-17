@@ -608,3 +608,11 @@ td>b { font-weight: 700; color: #233944; }
 @media(max-width:1250px){.studio-ai-config{grid-template-columns:repeat(3,minmax(0,1fr))}}
 @media(max-width:750px){.studio-ai-config{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:560px){.studio-ai-config{grid-template-columns:1fr}}
+
+
+/* Default cost-conscious orchestration. */
+.studio-run-mode{display:flex;justify-content:space-between;align-items:center;gap:16px;background:#fff;border:1px solid #d7e8df;border-radius:9px;padding:10px 13px;margin:0 0 10px}
+.studio-run-mode strong{color:#1f715c;font-size:12px}
+.studio-run-mode p{color:#8296a0;font-size:10px;line-height:1.8;margin:3px 0 0}
+.studio-run-mode select{border:1px solid #cee2d9;border-radius:7px;background:#eff8f4;padding:8px 10px;color:#205c4b;font:700 11px "Cairo",Tahoma,sans-serif;min-width:205px}
+@media(max-width:640px){.studio-run-mode{flex-direction:column;align-items:stretch}.studio-run-mode select{width:100%;min-width:0}}
