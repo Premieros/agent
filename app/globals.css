@@ -663,3 +663,10 @@ td>b { font-weight: 700; color: #233944; }
 .studio-auto-candidates small{color:#79928e;font-size:10px}
 .studio-auto-warning{color:#956f32;font-size:11px;padding:10px;background:#fff9ec;border:1px solid #f5e7c7;border-radius:8px;line-height:1.9;margin-top:10px}
 @media(max-width:660px){.studio-auto-head{align-items:stretch;flex-direction:column}.studio-auto-head select{width:100%}.studio-auto-candidates{grid-template-columns:1fr}}
+
+/* Detailed free-model discovery status per provider. */
+.studio-auto-diagnostics{display:flex;flex-wrap:wrap;gap:7px;margin-top:10px}
+.studio-auto-diagnostics>div{display:flex;flex-direction:column;gap:3px;min-width:190px;max-width:100%;background:#f8fafb;border:1px solid #e2e9e9;border-radius:8px;padding:8px 10px}
+.studio-auto-diagnostics>div.ready{background:#f0faf5;border-color:#cae7d7}
+.studio-auto-diagnostics strong{font-size:11px;color:#315b63}
+.studio-auto-diagnostics span{font-size:10px;color:#697e85;line-height:1.7;overflow-wrap:anywhere}
