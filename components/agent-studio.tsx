@@ -18,7 +18,18 @@ type Mission = {
 };
 type Output = { id: string; agent_role: string; content: string; model: string };
 type Asset = { id: string; storage_path: string; prompt: string; signedUrl?: string };
-type ReadyStatus = { aiReady: boolean; imageReady: boolean; metaConnected: boolean; canPublish: boolean };
+type ProviderId = "openai" | "gemini" | "openrouter" | "groq" | "deepseek" | "mistral" | "together" | "anthropic";
+type ReadyStatus = { aiReady: boolean; imageReady: boolean; metaConnected: boolean; canPublish: boolean; configuredProviders?: ProviderId[] };
+const providers: { id: ProviderId; title: string; model: string; image: boolean }[] = [
+  { id: "gemini", title: "Google Gemini", model: "gemini-2.5-flash-lite", image: true },
+  { id: "openai", title: "OpenAI", model: "gpt-4.1-mini", image: true },
+  { id: "openrouter", title: "OpenRouter", model: "openai/gpt-4o-mini", image: false },
+  { id: "groq", title: "Groq", model: "llama-3.3-70b-versatile", image: false },
+  { id: "deepseek", title: "DeepSeek", model: "deepseek-chat", image: false },
+  { id: "mistral", title: "Mistral", model: "mistral-small-latest", image: false },
+  { id: "together", title: "Together AI", model: "meta-llama/Llama-3.3-70B-Instruct-Turbo", image: false },
+  { id: "anthropic", title: "Anthropic", model: "claude-haiku-4-5", image: false }
+];
 type Objective = "content" | "campaign" | "replies" | "launch";
 
 const agents = [
@@ -54,6 +65,10 @@ export default function AgentStudio() {
   const [outputs, setOutputs] = useState<Output[]>([]);
   const [assets, setAssets] = useState<Asset[]>([]);
   const [ready, setReady] = useState<ReadyStatus | null>(null);
+  const [aiProvider, setAiProvider] = useState<ProviderId>("gemini");
+  const [aiKey, setAiKey] = useState("");
+  const [aiModel, setAiModel] = useState("gemini-2.5-flash-lite");
+  const [showAiSettings, setShowAiSettings] = useState(true);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [busy, setBusy] = useState("");
@@ -69,6 +84,9 @@ export default function AgentStudio() {
   const relevantMissions = missions.filter(m => m.page_id === pageId);
   const selectedMission = missions.find(m => m.id === missionId) || null;
   const approvedCount = missions.filter(m => m.status === "approved").length;
+  const selectedProvider = providers.find(p => p.id === aiProvider) || providers[0];
+  const aiReady = Boolean(aiKey.trim()) || Boolean(ready?.configuredProviders?.includes(aiProvider));
+  const canGenerateImage = aiReady && selectedProvider.image;
 
   const loadWorkspace = useCallback(async (activeUser: User | null) => {
     if (!db || !activeUser) {
@@ -195,12 +213,13 @@ export default function AgentStudio() {
 
   async function callAgentAPI(endpoint: string, id: string, busyKey: string) {
     if (!db || !member) return;
-    if (!window.confirm(busyKey==="design" ? "توليد صورة حقيقية قد يستهلك رصيد OpenAI. هل تريد المتابعة؟" : "تشغيل 7 وكلاء يستخدم رصيد واجهة OpenAI ويولد مسودات فقط. هل توافق؟")) return;
+    if (!aiReady) { setShowAiSettings(true); setError("اختار مزوّد الذكاء الاصطناعي وحط مفتاحه الأول."); return; }
+    if (!window.confirm(busyKey==="design" ? "توليد الصورة قد يستهلك من حصة المزوّد المختار. هل تريد المتابعة؟" : "تشغيل 7 وكلاء يستخدم حصة أو رصيد المزوّد المختار وينتج مسودات فقط. هل توافق؟")) return;
     setBusy(busyKey); setError(""); setNotice("");
     try {
       const response = await fetch(endpoint, {
         method: "POST", headers: await authHeaders(),
-        body: JSON.stringify({ missionId: id })
+        body: JSON.stringify({ missionId: id, ai: { provider: aiProvider, model: aiModel.trim(), apiKey: aiKey.trim() } })
       });
       const result = await response.json() as { error?: string; agents?: number };
       if (!response.ok) { setError(result.error || "تعذر تشغيل الوكيل."); return; }
@@ -269,10 +288,36 @@ export default function AgentStudio() {
           <div><span>بانتظار مراجعتك</span><strong>{missions.filter(m=>m.status==="review").length}</strong></div>
           <div><span>اعتماد داخلي</span><strong>{approvedCount}</strong></div>
         </div>
+        <section className="studio-ai-settings">
+          <div className="studio-ai-settings-head">
+            <div><strong><Sparkles size={17}/> إعدادات الذكاء الاصطناعي</strong>
+              <p>اختار المزوّد واستخدم مفتاحه مباشرة لتشغيل وكلائك. مش لازم مفتاح OpenAI.</p></div>
+            <button type="button" onClick={()=>setShowAiSettings(v=>!v)}>{showAiSettings?"إخفاء الإعدادات":"تعديل المزوّد"}</button>
+          </div>
+          {showAiSettings && <div className="studio-ai-config">
+            <label>مزوّد AI
+              <select value={aiProvider} onChange={e=>{
+                const picked = providers.find(p=>p.id===e.target.value);
+                if (!picked) return;
+                setAiProvider(picked.id); setAiModel(picked.model); setAiKey("");
+              }}>
+                {providers.map(p=><option key={p.id} value={p.id}>{p.title}</option>)}
+              </select>
+            </label>
+            <label>مفتاح API الخاص بالمزوّد
+              <input type="password" autoComplete="off" spellCheck={false} placeholder="الصق المفتاح هنا" value={aiKey} onChange={e=>setAiKey(e.target.value)} />
+            </label>
+            <label>نموذج الكتابة
+              <input dir="ltr" spellCheck={false} autoComplete="off" value={aiModel} onChange={e=>setAiModel(e.target.value)} placeholder="Model ID"/>
+            </label>
+            <button type="button" disabled={!aiKey} onClick={()=>setAiKey("")}>مسح المفتاح</button>
+          </div>}
+          <p className="studio-privacy-note"><ShieldCheck size={13}/> المفتاح موجود في الصفحة دي مؤقتًا فقط، مش بيتحفظ في قاعدة البيانات أو المتصفح. عند تحديث الصفحة هتحتاج تدخله تاني. لو فيه مفتاح مُعدّ على Vercel للمزوّد المختار تقدر تسيب الخانة فاضية.</p>
+        </section>
         <div className="studio-readiness">
           <CircleAlert size={16}/>
-          <span>{ready?.aiReady ? "محرك الوكلاء متاح" : "محرك AI ينتظر إضافة OPENAI_API_KEY إلى Vercel"} · {ready?.metaConnected ? "Meta متصل" : "Meta غير متصل حتى الآن؛ لا نشر ولا إعلان ممول ولا رد خارجي"}</span>
-          <button type="button" onClick={()=>void statusCheck()} title="فحص الاتصال"><RefreshCcw size={15}/></button>
+          <span>{aiReady ? `مزوّد ${selectedProvider.title} جاهز من ناحية إدخال المفتاح (لسه محتاج اختبار صلاحية المفتاح)` : `اختار مفتاح ${selectedProvider.title} لتشغيل الوكلاء`} · {selectedProvider.image ? "يدعم توليد الصور بنموذج صور منفصل حسب الحصة" : "هذا المزوّد مخصص للمهام النصية هنا"} · {ready?.metaConnected ? "Meta متصل" : "Meta غير متصل، لا نشر ولا إعلان ممول ولا رد خارجي"}</span>
+          <button type="button" onClick={()=>void statusCheck()} title="فحص الإعدادات"><RefreshCcw size={15}/></button>
         </div>
         <div className="studio-layout">
           <aside className="studio-pages">
@@ -316,7 +361,7 @@ export default function AgentStudio() {
               </div>
               {selectedMission && selectedMission.page_id===pageId && <section className="studio-workspace">
                 <div className="studio-section-head"><div><h2>مهمة الوكلاء المحددة</h2><p>{statusLabels[selectedMission.status]}</p></div>
-                  {["queued","failed"].includes(selectedMission.status) && <button className="studio-run" disabled={Boolean(busy)} onClick={()=>void callAgentAPI("/api/agents/run",selectedMission.id,"run")}><WandSparkles size={16}/>{busy==="run"?"الوكلاء يعملون...":"تشغيل مدير الوكلاء"}</button>}
+                  {["queued","failed"].includes(selectedMission.status) && <button className="studio-run" disabled={Boolean(busy)||!aiReady} onClick={()=>void callAgentAPI("/api/agents/run",selectedMission.id,"run")}><WandSparkles size={16}/>{busy==="run"?"الوكلاء يعملون...":"تشغيل مدير الوكلاء"}</button>}
                   {selectedMission.status==="review" && outputs.length>0 && <button className="studio-approve" disabled={Boolean(busy)} onClick={()=>void approveMission()}><CheckCircle2 size={16}/> اعتماد المسودات</button>}
                 </div>
                 <div className="studio-tabs">
@@ -335,8 +380,8 @@ export default function AgentStudio() {
                   {selectedMission.status==="approved" && <p className="studio-success-note">المسودات معتمدة داخليًا فقط. لم يحدث نشر أو إنفاق.</p>}
                 </div>}
                 {activeTab==="creatives" && <div className="studio-creatives">
-                  <p>صورة دعائية مولّدة فعليًا، تُحفظ في مساحة خاصة ولا تُنشر دون موافقة.</p>
-                  <button disabled={Boolean(busy)||!["review","approved"].includes(selectedMission.status)||assets.length>=3} onClick={()=>void callAgentAPI("/api/agents/design",selectedMission.id,"design")}><ImageIcon size={17}/>{busy==="design"?"جارٍ توليد الصورة...":"توليد تصميم بالذكاء الاصطناعي"}</button>
+                  <p>صورة دعائية مولّدة فعليًا عبر OpenAI أو Gemini عند توفر نموذج صور في حسابك؛ تُحفظ في مساحة خاصة ولا تُنشر دون موافقة.</p>
+                  <button disabled={Boolean(busy)||!canGenerateImage||!["review","approved"].includes(selectedMission.status)||assets.length>=3} onClick={()=>void callAgentAPI("/api/agents/design",selectedMission.id,"design")}><ImageIcon size={17}/>{busy==="design"?"جارٍ توليد الصورة...":"توليد تصميم بالذكاء الاصطناعي"}</button>
                   {assets.length>=3 && <small>وصلت للحد الأقصى 3 تصاميم لهذه المهمة.</small>}
                   <div className="studio-image-grid">{assets.map(a=><figure key={a.id}>
                     {a.signedUrl ? <img src={a.signedUrl} alt="تصميم دعائي مولّد بالذكاء الاصطناعي" /> : <div className="studio-image-missing">تعذر تحميل الصورة</div>}
