@@ -139,7 +139,7 @@ export default function WorkspaceShell({children}:{children:ReactNode}){
             <group.icon size={19}/><span>{group.label}</span>
             <ChevronDown size={17} className="workspace-group-chevron"/>
           </button>
-          {openGroup===group.id&&<div id={"workspace-group-"+group.id} className="workspace-subnav">
+          <div id={"workspace-group-"+group.id} className="workspace-subnav" hidden={openGroup!==group.id}>
             {group.items.map(item=><Link key={item.href} href={item.href} title={item.label}
               className={"workspace-nav-link"+(activeHref===item.href?" selected":"")}
               aria-current={activeHref===item.href?"page":undefined}
@@ -148,7 +148,7 @@ export default function WorkspaceShell({children}:{children:ReactNode}){
             </Link>)}
             {group.id==="assistant"&&pathname==="/assistant"&&
               <div id="workspace-sidebar-slot" className="workspace-sidebar-slot"/>}
-          </div>}
+          </div>
         </div>)}
       </nav>
       <div className="workspace-navigation-footer">
