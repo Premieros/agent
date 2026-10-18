@@ -128,8 +128,8 @@ export default function GeneralAssistant() {
       window.dispatchEvent(new Event("agent:close-navigation"));
       setNote("");setSourceFiles([]);setSourceProject("");setWorkSteps([]);setWorkProgress("");
       setSiteChange(null);
-    setStudioDraft(null);setStudioMissions([]);setStudioPages([]);
-    setStudioPageId("");setStudioMissionId("");
+      setStudioDraft(null);setStudioMissions([]);setStudioPages([]);
+      setStudioPageId("");setStudioMissionId("");
       void loadWorkState(id);
       void loadSiteState(id);
       void loadStudioState(id);
@@ -158,7 +158,8 @@ export default function GeneralAssistant() {
   async function createThread(){
     if(busy)return;
     setBusy("create");setError("");setNote("");setWorkSteps([]);setWorkProgress("");setPendingWork(null);
-    setSiteChange(null);
+    setSiteChange(null);setStudioDraft(null);setStudioMissions([]);setStudioPages([]);
+    setStudioPageId("");setStudioMissionId("");
     try {
       const res=await fetch("/api/assistant",{
         method:"POST",headers:await authHeaders(),
@@ -261,7 +262,9 @@ export default function GeneralAssistant() {
   }
 
   async function runStudioMission(){
-    const id=studioMissionId||studioDraft?.mission_id||studioMissions[0]?.id;
+    const id=studioMissionId||
+      (studioDraft?.status==="created"?studioDraft.mission_id:null)||
+      (!studioDraft?studioMissions[0]?.id:null);
     if(busy||!threadId||!id)return;
     const selected=studioMissions.find(m=>m.id===id);
     if(selected&&!["queued","failed"].includes(selected.status)){
@@ -279,9 +282,13 @@ export default function GeneralAssistant() {
       });
       const result=await res.json() as {error?:string;agents?:number;apiCalls?:number};
       if(!res.ok)throw new Error(result.error||"تعذر تشغيل الوكلاء.");
-      await studioRequest(threadId,"summary",{missionId:id});
+      let summarySaved=true;
+      try{await studioRequest(threadId,"summary",{missionId:id});}
+      catch{summarySaved=false;}
       await loadStudioState(threadId);
-      setNote("تم حفظ "+(result.agents||0)+" مخرجات في الاستوديو للمراجعة. لا نشر خارجي.");
+      setNote("تم حفظ "+(result.agents||0)+" مخرجات في الاستوديو للمراجعة."+
+        (summarySaved?"":" تعذر التلخيص؛ يمكنك الضغط على تلخيص المخرجات لاحقًا.")+
+        " لا نشر خارجي.");
     }catch(e){setError(e instanceof Error?e.message:"تعذر التشغيل.");setNote("");}
     finally{setBusy("");}
   }
@@ -394,9 +401,9 @@ export default function GeneralAssistant() {
       setMessages(current=>[...current,optimistic]);
       setDraft("");
       if(studioMode){
-        const creating=/(?:انشئ|أنشئ|اضف|أضف|اعمل|جهز|جهّز|سجل|مهمةs+جديدة|create|new task)/i.test(message);
+        const creating=/(?:انشئ|أنشئ|اضف|أضف|اعمل|جهز|جهّز|سجل|مهمة\s+جديدة|create|new task)/i.test(message);
         const summarizing=/(?:لخص|لخّص|ملخص|مخرجات|نتائج|summary|summarize)/i.test(message);
-        const running=/(?:شغّل|شغلs+(?:الوكلاء|المهمة)|تشغيلs+(?:الوكلاء|المهمة)|وزّع|وزعs+علىs+الوكلاء|run agents)/i.test(message);
+        const running=/(?:شغّل|شغل\s+(?:الوكلاء|المهمة)|تشغيل\s+(?:الوكلاء|المهمة)|وزّع|وزع\s+على\s+الوكلاء|run agents)/i.test(message);
         if(running){
           setMessages(current=>current.filter(m=>m.id!==optimistic.id));
           setDraft(message);
@@ -644,7 +651,9 @@ export default function GeneralAssistant() {
                   {studioDraft.status==="creating"&&<small>جارٍ حفظ المهمة؛ انتظر تحديث حالتها.</small>}
                 </div>}
                 <div className="assistant-studio-control-actions">
-                  <button type="button" disabled={Boolean(busy)||!(studioMissionId||studioDraft?.mission_id||studioMissions.length)}
+                  <button type="button" disabled={Boolean(busy)||!(studioMissionId||
+                      (studioDraft?.status==="created"&&studioDraft.mission_id)||
+                      (!studioDraft&&studioMissions.length))}
                     onClick={()=>void runStudioMission()}>تشغيل الوكلاء بعد الموافقة</button>
                   <button type="button" disabled={Boolean(busy)||studioMissions.length===0}
                     onClick={()=>void sendMessage("لخص نتائج المهام")}>تلخيص المخرجات</button>

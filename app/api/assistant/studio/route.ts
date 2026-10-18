@@ -106,13 +106,18 @@ export async function POST(req:NextRequest){
         data.pages.map(p=>"- "+p.name+" ("+(p.platform==="facebook"?"فيسبوك":"إنستجرام")+
           "، "+(p.connection_status==="connected"?"متصلة":"غير متصلة")+")").join("\n"):
         "لا توجد صفحات مسجلة.";
+      const requested=typeof body.task==="string"?body.task.toLocaleLowerCase("ar"):"";
+      const target=data.pages.find(p=>requested.includes(p.name.toLocaleLowerCase("ar")));
+      const pageDetails=target?"\n\n**تفاصيل "+target.name+"**\n"+
+        "الجمهور: "+(target.target_audience||"غير محدد")+"\n"+
+        "وصف النشاط: "+(target.product_context||"غير محدد"):"";
       const missionsText=data.missions.length?
         data.missions.slice(0,8).map(m=>"- "+(pageNames.get(m.page_id)||"صفحة غير معروفة")+
           " · "+(objectives[m.objective]||m.objective)+" · "+
           (statusNames[m.status]||m.status)).join("\n"):
         "لا توجد مهام مسجلة.";
       const answer="**صفحات AGENT المسجلة ("+data.pages.length+")**\n"+
-        pagesText+"\n\n**المهام الحالية**\n"+missionsText+"\n\n"+
+        pagesText+pageDetails+"\n\n**المهام الحالية**\n"+missionsText+"\n\n"+
         "البيانات مقروءة من Supabase الخاصة بمؤسستك. "+
         "لإضافة مهمة، اكتب المطلوب ثم راجع المقترح قبل الحفظ. لا يوجد نشر خارجي.";
       const messages=await saveExchange(s,threadId,typeof body.task==="string"?body.task:"اعرض صفحات ومهام AGENT",answer);
@@ -195,8 +200,11 @@ export async function POST(req:NextRequest){
     }
     if(body.action==="summary"){
       const data=await snapshot(s,threadId);
+      const requested=typeof body.task==="string"?body.task.toLocaleLowerCase("ar"):"";
+      const target=data.pages.find(p=>requested.includes(p.name.toLocaleLowerCase("ar")));
       const mission=typeof body.missionId==="string"&&uuid.test(body.missionId)?
-        data.missions.find(m=>m.id===body.missionId):data.missions[0];
+        data.missions.find(m=>m.id===body.missionId):
+        target?data.missions.find(m=>m.page_id===target.id):data.missions[0];
       if(!mission)throw new Error("STUDIO_MISSION_NOT_FOUND");
       const page=data.pages.find(p=>p.id===mission.page_id);
       const {data:outputs,error}=await s.db.from("agent_outputs")
