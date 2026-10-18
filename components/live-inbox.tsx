@@ -5,6 +5,7 @@ import Link from "next/link";
 import { ArrowRight, Bot, CheckCircle2, CircleAlert, ClipboardList, Inbox, LoaderCircle, MessageCircle, Phone, Plus, RefreshCw, Search, Send, ShieldCheck, UserRound } from "lucide-react";
 import type { User } from "@supabase/supabase-js";
 import { getSupabase } from "@/lib/supabase-browser";
+import AgentReplyRule from "@/components/agent-reply-rule";
 
 type Member = { organization_id: string; role: string };
 type Lead = { id: string; full_name: string; business_name: string | null; phone: string | null; stage: string; source: string };
@@ -183,6 +184,7 @@ export default function LiveInbox() {
       {db && !loading && !user && <div className="crm-card inbox-gate"><h2>يلزم تسجيل الدخول</h2><p>سجّل الدخول أولًا من صفحة إدارة المبيعات، ثم ارجع لمركز المحادثات.</p><Link href="/crm">الذهاب إلى تسجيل الدخول</Link></div>}
       {db && !loading && user && !member && <div className="crm-card inbox-gate"><h2>حسابك ليس له عضوية مفعلة</h2><p>لا يمكنك رؤية محادثات الشركات بدون صلاحية.</p></div>}
       {db && !loading && member && <>
+        {(member.role==="admin"||member.role==="manager")&&<AgentReplyRule canEdit />}
         <div className="inbox-toolbar">
           <span><Inbox size={17}/> {threads.length} متابعة / محادثة</span>
           <span>{roleLabels[member.role] || member.role}</span>
