@@ -16,6 +16,7 @@ type ChatMessage = {id:string;role:"user"|"assistant";content:string;model?:stri
 type AssistantResponse = {
   error?:string; threads?:Thread[]; thread?:Thread; messages?:ChatMessage[];
   title?:string; skill?:string; model?:string; attempts?:number; ok?:boolean;
+  projectContext?:{loadedDocuments:number;missingDocuments:number;source:"github-public-readonly"}|null;
 };
 const starters=[
   {label:"كتابة", icon:FileText, text:"اكتب لي منشور احترافي لصفحة Premier.OS عن فوائد أنظمة الكاشير للمطاعم، بدون أسعار غير مؤكدة."},
@@ -158,7 +159,12 @@ export default function GeneralAssistant() {
       if(!res.ok||!data.messages?.length)throw new Error(data.error||"لم يصل رد من المساعد.");
       setMessages(current=>[...current.filter(m=>m.id!==optimistic.id),...(data.messages||[])]);
       if(data.title)setThreads(current=>current.map(t=>t.id===id?{...t,title:data.title!}:t));
-      setNote(`مهارة ${assistantSkills.find(s=>s.id===data.skill)?.title||data.skill} · ${data.model||"نموذج غير محدد"} · ${data.attempts||1} محاولة`);
+      const projectNote=data.projectContext
+        ? data.projectContext.loadedDocuments>0
+          ? ` · GitHub: ${data.projectContext.loadedDocuments} وثائق للقراءة فقط`
+          : " · تعذر قراءة وثائق GitHub في هذه المحاولة"
+        : "";
+      setNote(`مهارة ${assistantSkills.find(s=>s.id===data.skill)?.title||data.skill} · ${data.model||"نموذج غير محدد"} · ${data.attempts||1} محاولة`+projectNote);
       await loadThreads(false);
     }catch(e){
       setMessages(current=>current.filter(m=>!m.id.startsWith("pending-")));
@@ -224,7 +230,7 @@ export default function GeneralAssistant() {
               {messages.length===0 && <div className="assistant-welcome">
                 <div className="assistant-logo"><WandSparkles size={32}/></div>
                 <h2>اطلب اللي محتاجه من AGENT</h2>
-                <p>كتابة، برمجة، شرح، تخطيط، تحليل، تسويق وترجمة. اختار مهارة أو سيب المساعد يختار تلقائيًا.</p>
+                <p>كتابة، برمجة، شرح، تخطيط، تحليل، تسويق وترجمة. مهارة تطوير POS بتستند لوثائق عامة من مستودع Premier.OS عند توفرها.</p>
                 <div className="assistant-starters">
                   {starters.map(item=><button type="button" key={item.label} onClick={()=>{setDraft(item.text);inputRef.current?.focus();}}>
                     <item.icon size={18}/><strong>{item.label}</strong><span>{item.text}</span>
