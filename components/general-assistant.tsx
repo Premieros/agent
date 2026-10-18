@@ -24,7 +24,7 @@ const starters=[
   {label:"كتابة", icon:FileText, text:"اكتب لي منشور احترافي لصفحة Premier.OS عن فوائد أنظمة الكاشير للمطاعم، بدون أسعار غير مؤكدة."},
   {label:"تطوير POS", icon:Code2, text:"أنت مدير تطوير نظام Premier.OS الحالي. ابدأ بخطة لمراجعة علاقات الفروع والمخازن والمخزون والمبيعات والمشتريات والوصفات والتكاليف والحسابات. قل ما تحتاج رؤيته ولا تفترض مواصفات غير مؤكدة."},
   {label:"تخطيط", icon:Lightbulb, text:"حوّل فكرة إنشاء شركة برمجيات لخطة عملية من 30 يوم بخطوات وأولويات."},
-  {label:"تعليم", icon:BookOpen, text:"اشرح لي مفهوم AI Agents والفرق بينهم وبين الشات العادي بأمثلة بسيطة."}
+  {label:"المتصفح", icon:Globe, text:"افحص الصفحة العامة https://premieros-sage.vercel.app/#/login واشرح ما يمكن قراءته فعلاً من HTML فقط، وحدود قدرتك على فحص تطبيقات JavaScript."}
 ];
 
 export default function GeneralAssistant() {
