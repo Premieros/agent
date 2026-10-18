@@ -269,7 +269,7 @@ export default function GeneralAssistant() {
         });
         const planData=await planRes.json() as {
           ok?:boolean;error?:string;runId?:string;steps?:string[];
-          title?:string;answered?:boolean;messages?:ChatMessage[];
+          title?:string;answered?:boolean;messages?:ChatMessage[];note?:string;
         };
         if(!planRes.ok)throw new Error(planData.error||"تعذر إعداد خطة العمل.");
         if(planData.answered&&planData.messages?.length){
@@ -279,7 +279,7 @@ export default function GeneralAssistant() {
           if(planData.title)setThreads(current=>current.map(t=>
             t.id===id?{...t,title:planData.title!}:t));
           setPendingWork(null);setWorkSteps([]);setWorkProgress("");
-          setNote("مطلوب أرقام الحملة قبل الحساب.");
+          setNote(planData.note||"تمت الإجابة مباشرة.");
           return;
         }
         if(!planData.runId)throw new Error("تعذر إعداد خطة العمل.");
