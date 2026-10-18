@@ -37,6 +37,19 @@ export default function LiveCrm() {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [form, setForm] = useState(base);
   const [showForm, setShowForm] = useState(false);
+  const [crmView,setCrmView]=useState<"leads"|"tasks"|"account">("leads");
+  useEffect(()=>{
+    const valid=["leads","tasks","account"];
+    const navigate=(value:string|null)=>{
+      setCrmView(valid.includes(value||"")?value as "leads"|"tasks"|"account":"leads");
+    };
+    const sync=()=>navigate(new URLSearchParams(window.location.search).get("view"));
+    const handle=(event:Event)=>navigate((event as CustomEvent<string>).detail);
+    sync();
+    window.addEventListener("popstate",sync);
+    window.addEventListener("agent:select-crm-view",handle);
+    return()=>{window.removeEventListener("popstate",sync);window.removeEventListener("agent:select-crm-view",handle);};
+  },[]);
 
   const load = useCallback(async (activeUser: User | null) => {
     if (!db || !activeUser) { setMembership(null); setLeads([]); setTasks([]); setChecking(false); return; }
@@ -153,7 +166,7 @@ export default function LiveCrm() {
   return <div className="crm-root">
     <div className="crm-wrap">
       <header className="crm-header"><div><strong>AGENT</strong><span> · إدارة المبيعات الفعلية</span></div><div className="crm-actions"><Link href="/studio">مدير الوكلاء</Link><Link href="/crm/inbox">مركز المحادثات الفعلي</Link><Link href="/"><ArrowRight size={17}/> الواجهة التجريبية</Link>{user && <button onClick={async () => {await db?.auth.signOut();setUser(null);setMembership(null);}}>خروج <LogOut size={15}/></button>}</div></header>
-      <div className="crm-title"><div><span className="crm-overline">Sales CRM</span><h1>إدارة العملاء والمتابعة</h1><p>حسابات منفصلة وصلاحيات محمية وتخزين فعلي على Supabase.</p></div><span className="crm-status"><ShieldCheck size={15}/> بيانات فعلية</span></div>
+      <div className="crm-title"><div><span className="crm-overline">Sales CRM</span><h1>{crmView==="tasks"?"مهام المتابعة":crmView==="account"?"حسابي وتسجيل الدخول":"إدارة العملاء"}</h1><p>{crmView==="tasks"?"متابعة مهام تسليم العملاء للفريق":crmView==="account"?"إعدادات تسجيل الدخول والأمان":"ملفات العملاء والفرص المحفوظة"}</p></div><span className="crm-status"><ShieldCheck size={15}/> بيانات فعلية</span></div>
       {error && <p className="crm-error" role="alert">{error}</p>}
       {!db && <div className="crm-card"><h2>ربط قاعدة البيانات غير مكتمل</h2><p>الموقع يحتاج متغيرات الاتصال العامة في إعدادات الاستضافة.</p></div>}
       {db && checking && <div className="crm-card"><LoaderCircle size={21} className="crm-spin"/> جارٍ التحقق من الجلسة والصلاحيات...</div>}
@@ -180,7 +193,7 @@ export default function LiveCrm() {
       </div>}
       {db && !checking && user && !membership && <div className="crm-card"><h2>حسابك جاهز، وينتظر إضافتك للفريق</h2><p>البريد: <b dir="ltr">{user.email}</b></p><p>مسؤول النظام لازم يضيف حسابك لعضوية الشركة. ده إجراء مقصود لحماية العملاء والمحادثات، ومش هنسمح لحساب غير معتمد يشوف أي بيانات.</p><button className="crm-btn-secondary" onClick={()=>void load(user)}>إعادة فحص العضوية <RefreshCw size={15}/></button></div>}
       {db && !checking && membership && user && <>
-        <section className="crm-card crm-password-panel">
+        {crmView==="account" && <section className="crm-card crm-password-panel">
           <div className="crm-section-head"><div><h2>تسجيل الدخول بكلمة مرور</h2><p>عيّن كلمة مرور مرة واحدة، علشان متحتاجش رسالة بريد في كل دخول.</p></div>
           <button type="button" onClick={() => setShowPasswordSetup(v => !v)}>{showPasswordSetup ? "إلغاء" : "تعيين / تغيير كلمة المرور"}</button></div>
           {passwordSaved && <p className="crm-success"><CheckCircle2 size={16}/> تم حفظ كلمة المرور. يمكنك استخدامها عند تسجيل الدخول لاحقًا.</p>}
@@ -190,13 +203,13 @@ export default function LiveCrm() {
             <button disabled={busy || newPassword.length < 12 || newPassword !== confirmPassword}>حفظ كلمة المرور</button>
             <p className="crm-help-text">اختر كلمة مرور قوية من 12 حرفًا على الأقل. لا تشاركها مع أي شخص.</p>
           </form>}
-        </section>
-        <div className="crm-metrics"><div><span>العملاء المسجلون</span><strong>{leads.length}</strong></div><div><span>مهام المتابعة</span><strong>{tasks.filter(t=>t.status==="pending").length}</strong></div><div><span>صلاحيتك</span><strong className="crm-role">{membership.role}</strong></div></div>
-        <section className="crm-card"><div className="crm-section-head"><div><h2><UsersRound size={19}/> العملاء المحتملون</h2><p>معلومات حقيقية محفوظة في قاعدة البيانات</p></div><button onClick={()=>setShowForm(v=>!v)}><Plus size={17}/> إضافة عميل</button></div>
+        </section>}
+        {crmView==="leads" && <div className="crm-metrics"><div><span>العملاء المسجلون</span><strong>{leads.length}</strong></div><div><span>مهام المتابعة</span><strong>{tasks.filter(t=>t.status==="pending").length}</strong></div><div><span>صلاحيتك</span><strong className="crm-role">{membership.role}</strong></div></div>}
+        {crmView==="leads" && <section className="crm-card"><div className="crm-section-head"><div><h2><UsersRound size={19}/> العملاء المحتملون</h2><p>معلومات حقيقية محفوظة في قاعدة البيانات</p></div><button onClick={()=>setShowForm(v=>!v)}><Plus size={17}/> إضافة عميل</button></div>
         {showForm && <form className="crm-form" onSubmit={e=>{e.preventDefault();void createLead();}}><label>اسم العميل<input required maxLength={180} value={form.full_name} onChange={e=>setForm(v=>({...v,full_name:e.target.value}))}/></label><label>اسم النشاط<input maxLength={180} value={form.business_name} onChange={e=>setForm(v=>({...v,business_name:e.target.value}))}/></label><label>رقم التواصل<input maxLength={40} value={form.phone} onChange={e=>setForm(v=>({...v,phone:e.target.value}))}/></label><label>نوع النشاط<select value={form.business_type} onChange={e=>setForm(v=>({...v,business_type:e.target.value}))}>{types.map(t=><option key={t.value} value={t.value}>{t.label}</option>)}</select></label><button disabled={busy || !form.full_name.trim()}>حفظ العميل</button></form>}
         {leads.length===0?<div className="crm-empty">لسه مفيش عملاء مسجلين. أضف أول عميل من الزر بالأعلى.</div>:<div className="crm-table-wrap"><table className="crm-table"><thead><tr><th>العميل</th><th>النشاط</th><th>الهاتف</th><th>المرحلة</th><th>التسليم للموظف</th></tr></thead><tbody>{leads.map(lead=><tr key={lead.id}><td><strong>{lead.full_name}</strong><small>{lead.business_name || "—"}</small></td><td>{types.find(t=>t.value===lead.business_type)?.label || lead.business_type}</td><td dir="ltr">{lead.phone||"—"}</td><td>{stages[lead.stage]||lead.stage}</td><td><div className="crm-row-actions"><button disabled={busy} onClick={()=>void createHandoff(lead,"chat")}>شات</button><button disabled={busy} onClick={()=>void createHandoff(lead,"call")}>اتصال</button></div></td></tr>)}</tbody></table></div>}
-        </section>
-        <section className="crm-card crm-tasks"><div className="crm-section-head"><div><h2>مهام تسليم العملاء</h2><p>مهام محفوظة فعليًا — الاتصال أو استكمال المحادثة</p></div></div>{tasks.length===0?<div className="crm-empty">مافيش مهام متابعة حتى الآن.</div>:tasks.map(t=><div className="crm-task" key={t.id}><span className="crm-task-kind">{t.handoff_type==="call"?"اتصال تليفوني":t.handoff_type==="chat"?"استكمال شات":"معاينة"}</span><span>{leads.find(l=>l.id===t.lead_id)?.full_name||"عميل"}</span><span>{t.summary}</span><small>{t.status==="pending"?"بانتظار الموظف":t.status}</small></div>)}</section>
+        </section>}
+        {crmView==="tasks" && <section className="crm-card crm-tasks"><div className="crm-section-head"><div><h2>مهام تسليم العملاء</h2><p>مهام محفوظة فعليًا — الاتصال أو استكمال المحادثة</p></div></div>{tasks.length===0?<div className="crm-empty">مافيش مهام متابعة حتى الآن.</div>:tasks.map(t=><div className="crm-task" key={t.id}><span className="crm-task-kind">{t.handoff_type==="call"?"اتصال تليفوني":t.handoff_type==="chat"?"استكمال شات":"معاينة"}</span><span>{leads.find(l=>l.id===t.lead_id)?.full_name||"عميل"}</span><span>{t.summary}</span><small>{t.status==="pending"?"بانتظار الموظف":t.status}</small></div>)}</section>}
       </>}
     </div>
   </div>;
