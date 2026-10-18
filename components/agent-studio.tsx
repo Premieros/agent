@@ -5,6 +5,7 @@ import Link from "next/link";
 import { ArrowRight, Bot, CheckCircle2, CircleAlert, ClipboardList, Image as ImageIcon, LoaderCircle, Megaphone, MessageCircle, Plus, RefreshCcw, Rocket, ShieldCheck, Sparkles, WandSparkles } from "lucide-react";
 import type { User } from "@supabase/supabase-js";
 import { getSupabase } from "@/lib/supabase-browser";
+import { currentSession, currentUser, isExpiredAuthError, recoverExpiredSession } from "@/lib/auth-session";
 import { renderFreeCreative } from "@/lib/free-creative";
 
 type Member = { organization_id: string; role: string };
@@ -128,10 +129,32 @@ export default function AgentStudio() {
       setMember(null); setPages([]); setMissions([]); setLoading(false); return;
     }
     setLoading(true);
-    const { data: memberships, error: membershipError } = await db.from("organization_members")
+    // A dormant browser tab can retain a user profile while its JWT is
+    // expired. Retry once with a fresh session before checking membership.
+    let membershipResult = await db.from("organization_members")
       .select("organization_id,role").eq("user_id", activeUser.id)
       .in("role", ["admin","manager"]).limit(1);
-    if (membershipError) { setError(membershipError.message); setLoading(false); return; }
+    if (membershipResult.error && isExpiredAuthError(membershipResult.error)) {
+      const restored = await recoverExpiredSession(db);
+      if (!restored) {
+        setUser(null); setMember(null);
+        setError("انتهت صلاحية جلسة AGENT. افتح تسجيل الدخول من جديد للمتابعة.");
+        setLoading(false); return;
+      }
+      membershipResult = await db.from("organization_members")
+        .select("organization_id,role").eq("user_id", restored.id)
+        .in("role", ["admin","manager"]).limit(1);
+    }
+    const { data: memberships, error: membershipError } = membershipResult;
+    if (membershipError) {
+      setMember(null);
+      if (isExpiredAuthError(membershipError)) {
+        setUser(null);
+        setError("انتهت جلسة الدخول. سجّل الدخول مرة أخرى.");
+      } else setError("تعذر التحقق من صلاحيات الحساب. جرّب تحديث الصفحة أو تسجيل الدخول مجددًا.");
+      setLoading(false); return;
+    }
+    setError("");
     const currentMember = (memberships?.[0] ?? null) as Member | null;
     setMember(currentMember);
     if (!currentMember) { setLoading(false); return; }
@@ -173,14 +196,14 @@ export default function AgentStudio() {
 
   async function authHeaders() {
     if (!db) throw new Error("برجاء تسجيل الدخول.");
-    const { data: { session } } = await db.auth.getSession();
+    const session = await currentSession(db);
     if (!session?.access_token) throw new Error("جلسة الدخول انتهت. سجل الدخول مرة أخرى.");
     return { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` };
   }
 
   const statusCheck = useCallback(async () => {
     if (!db) return;
-    const { data: { session } } = await db.auth.getSession();
+    const session = await currentSession(db);
     if (!session) return;
     try {
       const r = await fetch("/api/agents/status", { headers: { Authorization: `Bearer ${session.access_token}` } });
@@ -191,8 +214,10 @@ export default function AgentStudio() {
   useEffect(() => {
     if (!db) { setLoading(false); return; }
     let active = true;
-    void db.auth.getUser().then(({ data }) => {
-      if (active) { setUser(data.user); void loadWorkspace(data.user); if (data.user) void statusCheck(); }
+    void currentUser(db).then((signedInUser) => {
+      if (active) { setUser(signedInUser); void loadWorkspace(signedInUser); if (signedInUser) void statusCheck(); }
+    }).catch(() => {
+      if (active) { setUser(null); setMember(null); setLoading(false); }
     });
     const { data: listener } = db.auth.onAuthStateChange((_event, session) => {
       if (!active) return;
@@ -458,7 +483,7 @@ export default function AgentStudio() {
         <h2>سجل الدخول أولًا</h2><p>النظام مرتبط بحسابك على Supabase. انتقل لصفحة تسجيل الدخول علشان تبدأ إدارة الصفحات.</p><Link href="/crm">تسجيل الدخول</Link>
       </section>}
       {db && !loading && user && !member && <section className="crm-card studio-gate">
-        <h2>يلزم صلاحية مدير</h2><p>هذه المساحة مخصصة لمدير الشركة ومدير التسويق فقط.</p>
+        <h2>يلزم صلاحية مدير</h2><p>هذه المساحة مخصصة لمدير الشركة ومدير التسويق فقط. إذا كنت مديرًا بالفعل، جرّب تسجيل الدخول من جديد للتحقق من الجلسة.</p><Link href="/crm">تسجيل الدخول</Link>
       </section>}
       {db && !loading && member && <>
         <div className="studio-metrics">
