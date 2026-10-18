@@ -8,6 +8,7 @@ import {
   Sparkles, Trash2, WandSparkles, PlugZap, Globe, Minus, PlusCircle
 } from "lucide-react";
 import { getSupabase } from "@/lib/supabase-browser";
+import { currentSession } from "@/lib/auth-session";
 import { assistantSkills, type AssistantSkill } from "@/lib/assistant-skills";
 import AssistantMarkdown from "@/components/assistant-markdown";
 
@@ -50,8 +51,8 @@ export default function GeneralAssistant() {
 
   const authHeaders=useCallback(async () => {
     if(!db)throw new Error("تعذر اتصال قاعدة البيانات.");
-    const {data:{session}}=await db.auth.getSession();
-    if(!session?.access_token)throw new Error("سجّل دخولك من صفحة العملاء أولًا.");
+    const session=await currentSession(db);
+    if(!session?.access_token)throw new Error("انتهت جلسة AGENT. افتح صفحة تسجيل الدخول ثم ارجع للمحادثة.");
     return {Authorization:`Bearer ${session.access_token}`,"Content-Type":"application/json"};
   },[db]);
 
