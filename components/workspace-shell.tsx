@@ -17,7 +17,9 @@ type NavGroup={id:GroupId;label:string;icon:typeof Bot;items:NavItem[]};
 const navigation:NavGroup[]=[
   {id:"assistant",label:"المساعد",icon:MessageSquareText,items:[
     {href:"/assistant",label:"المحادثات الذكية",icon:MessagesSquare},
-    {href:"/assistant?skill=pos_development",label:"مساعد البرمجة",icon:Code2},
+    {href:"/assistant?skill=coding",label:"مساعد البرمجة",icon:Code2},
+    {href:"/assistant?skill=github",label:"فحص مشاريع GitHub",icon:Boxes},
+    {href:"/assistant?skill=pos_development",label:"تطوير أنظمة POS",icon:Bot},
     {href:"/assistant?skill=browser",label:"قراءة المواقع",icon:Globe}
   ]},
   {id:"agents",label:"الوكلاء",icon:Bot,items:[
