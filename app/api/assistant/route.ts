@@ -133,7 +133,7 @@ export async function POST(req:NextRequest) {
             "TITLE: "+browserPage.title,
             "BROWSER_LIMITS: "+browserPage.note,
             "<UNTRUSTED_PAGE_TEXT>",browserPage.text,"</UNTRUSTED_PAGE_TEXT>"
-          ].join("\\n")
+          ].join("\n")
           : "لم تُجلب الصفحة: "+browserPage.note+" الرابط: "+browserPage.url)
         : isBrowserTask ? "لم يقدّم المستخدم عنوانًا من المواقع المسموح بها، أو رفضت أداة المتصفح العنوان. المواقع المسموح بها: Premier.OS demo وAGENT وGitHub Premieros فقط. لا تدعِ الاطلاع على موقع آخر." : "",
       "طلب المستخدم الحالي:",
