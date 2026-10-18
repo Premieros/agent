@@ -15,6 +15,8 @@ import AssistantMarkdown from "@/components/assistant-markdown";
 
 type Thread = { id:string; title:string; skill:AssistantSkill; updated_at:string; created_at:string };
 type ChatMessage = {id:string;role:"user"|"assistant";content:string;model?:string|null;skill?:string|null;created_at:string};
+type WorkRun={id:string;status:"planned"|"running"|"executed"|"reporting"|"completed"|"failed";
+  steps:string[];stage_note:string;sandbox_ran:boolean;sandbox_succeeded:boolean|null};
 type AssistantResponse = {
   error?:string; threads?:Thread[]; thread?:Thread; messages?:ChatMessage[];
   title?:string; skill?:string; model?:string; attempts?:number; ok?:boolean;
@@ -43,6 +45,7 @@ export default function GeneralAssistant() {
   const [workMode,setWorkMode]=useState(false);
   const [workProgress,setWorkProgress]=useState("");
   const [workSteps,setWorkSteps]=useState<string[]>([]);
+  const [pendingWork,setPendingWork]=useState<WorkRun|null>(null);
   const [busy,setBusy]=useState("");
   const [loading,setLoading]=useState(true);
   const [authorized,setAuthorized]=useState(false);
@@ -104,6 +107,7 @@ export default function GeneralAssistant() {
       setShowSidebar(false);
       window.dispatchEvent(new Event("agent:close-navigation"));
       setNote("");setSourceFiles([]);setSourceProject("");setWorkSteps([]);setWorkProgress("");
+      void loadWorkState(id);
     }catch(e){setError(e instanceof Error?e.message:"فشل تحميل المحادثة.");}
     finally{setBusy("");}
   },[authHeaders]);
@@ -128,7 +132,7 @@ export default function GeneralAssistant() {
 
   async function createThread(){
     if(busy)return;
-    setBusy("create");setError("");setNote("");setWorkSteps([]);setWorkProgress("");
+    setBusy("create");setError("");setNote("");setWorkSteps([]);setWorkProgress("");setPendingWork(null);
     try {
       const res=await fetch("/api/assistant",{
         method:"POST",headers:await authHeaders(),
@@ -158,10 +162,83 @@ export default function GeneralAssistant() {
       const remaining=threads.filter(t=>t.id!==id);
       setThreads(remaining);
       if(id===threadId){
-        setThreadId("");setMessages([]);setNote("");setBrowserResult(null);
+        setThreadId("");setMessages([]);setNote("");setBrowserResult(null);setPendingWork(null);
       }
     }catch(e){setError(e instanceof Error?e.message:"تعذر الحذف.");}
     finally{setBusy("");}
+  }
+
+
+  async function loadWorkState(id:string){
+    try{
+      const res=await fetch("/api/assistant/work?threadId="+encodeURIComponent(id),{
+        headers:await authHeaders(),cache:"no-store"
+      });
+      if(!res.ok)return;
+      const data=await res.json() as {runs?:WorkRun[]};
+      const running=(data.runs||[]).find(r=>
+        ["planned","running","executed","reporting"].includes(r.status));
+      setPendingWork(running||null);
+      if(running){
+        setWorkSteps(running.steps||[]);
+        setWorkProgress(running.stage_note||"مهمة محفوظة بانتظار استكمال.");
+      }
+    }catch{/* The normal chat stays usable even when run history is unavailable. */}
+  }
+
+  async function finishWork(initial:WorkRun,id:string){
+    setBusy("work");setError("");
+    let run=initial;
+    try{
+      if(run.status==="planned"){
+        setWorkProgress("تنفيذ خطة العمل...");
+        const resp=await fetch("/api/assistant/work",{
+          method:"POST",headers:await authHeaders(),
+          body:JSON.stringify({action:"execute",runId:run.id})
+        });
+        const result=await resp.json() as {error?:string;status?:WorkRun["status"];
+          sandboxAttempted?:boolean;sandboxSucceeded?:boolean|null};
+        if(!resp.ok)throw new Error(result.error||"تعذر تشغيل المهمة.");
+        run={...run,status:"executed",
+          sandbox_ran:Boolean(result.sandboxAttempted),
+          sandbox_succeeded:result.sandboxSucceeded??null,
+          stage_note:result.sandboxAttempted?
+            (result.sandboxSucceeded?"اكتمل الاختبار المعزول.":"تعذر الاختبار المعزول."):
+            "التحليل لا يحتاج تشغيل كود."};
+        setPendingWork(run);
+      }
+      if(run.status!=="executed")throw new Error(
+        "التنفيذ الجاري لم ينتهِ بعد. اضغط تحديث بعد قليل.");
+      setWorkProgress("تحليل النتائج وإعداد التقرير...");
+      const resp=await fetch("/api/assistant/work",{
+        method:"POST",headers:await authHeaders(),
+        body:JSON.stringify({action:"finalize",runId:run.id,
+          allowConditionalFreeTier:allowConditional})
+      });
+      const result=await resp.json() as {status?:string;error?:string;message?:ChatMessage};
+      if(!resp.ok||!result.message)throw new Error(result.error||"تعذر تجهيز التقرير.");
+      setPendingWork(null);
+      setWorkProgress(result.status==="completed"?
+        (run.sandbox_ran?"اكتمل التحليل في البيئة المعزولة.":"اكتمل تحليل الأدلة دون تشغيل كود."):
+        "انتهت المحاولة مع فشل الاختبار. راجع التقرير.");
+      setNote(run.sandbox_ran?
+        (run.sandbox_succeeded?"تجربة Sandbox ناجحة.":"تعذر اختبار Sandbox؛ النتيجة توضح ذلك."):
+        "تحليل مصادر ونتائج، بدون تشغيل Sandbox.");
+    }catch(e){
+      setError(e instanceof Error?e.message:"تعذر استكمال العمل.");
+      await loadWorkState(id);
+    }finally{
+      try{
+        const response=await fetch("/api/assistant?threadId="+encodeURIComponent(id),{
+          headers:await authHeaders(),cache:"no-store"
+        });
+        if(response.ok){
+          const saved=await response.json() as AssistantResponse;
+          setMessages(saved.messages||[]);setThreads(saved.threads||[]);
+        }
+      }catch{/* The saved task can still be reopened later. */}
+      setBusy("");
+    }
   }
 
   async function sendMessage(text=draft) {
@@ -194,26 +271,11 @@ export default function GeneralAssistant() {
           ok?:boolean;error?:string;runId?:string;steps?:string[];title?:string
         };
         if(!planRes.ok||!planData.runId)throw new Error(planData.error||"تعذر إعداد خطة العمل.");
-        setWorkSteps(planData.steps||[]);
-        setWorkProgress("تنفيذ المهمة في بيئة معزولة...");
-        const workRes=await fetch("/api/assistant/work",{
-          method:"POST",headers:await authHeaders(),
-          body:JSON.stringify({action:"execute",runId:planData.runId})
-        });
-        const work=await workRes.json() as {
-          error?:string;status?:string;message?:ChatMessage;steps?:string[]
-        };
-        if(!workRes.ok||!work.message)throw new Error(work.error||"تعذر إكمال التنفيذ.");
-        const restored=await fetch("/api/assistant?threadId="+encodeURIComponent(id),{
-          headers:await authHeaders(),cache:"no-store"
-        });
-        const restoredData=await restored.json() as AssistantResponse;
-        if(!restored.ok)throw new Error(restoredData.error||"تعذر تحميل نتيجة العمل.");
-        setMessages(restoredData.messages||[]);
-        setThreads(restoredData.threads||[]);
-        setWorkProgress(work.status==="completed"?"اكتملت المهمة في Sandbox":"تعذر التنفيذ في Sandbox");
-        setNote(work.status==="completed"?"تم التنفيذ في بيئة معزولة، بدون تعديلات خارجية.":
-          "تعذر التنفيذ المعزول. راجع النتيجة.");
+        const work:WorkRun={id:planData.runId,status:"planned",steps:planData.steps||[],
+          stage_note:"الخطة محفوظة وجاهزة للتنفيذ.",sandbox_ran:false,sandbox_succeeded:null};
+        setPendingWork(work);setWorkSteps(work.steps);
+        setMessages(current=>current.filter(m=>m.id!==optimistic.id));
+        await finishWork(work,id);
         return;
       }
       const res=await fetch("/api/assistant",{
@@ -355,9 +417,15 @@ export default function GeneralAssistant() {
                 <button type="button" aria-label="إرسال الرسالة" disabled={Boolean(busy)||!draft.trim()}
                   onClick={()=>void sendMessage()}><Send size={18}/></button>
               </div>
-              {workMode&&workSteps.length>0&&<div className="assistant-work-steps" role="status">
-                <strong>{workProgress}</strong>
+              {(pendingWork||(workMode&&workSteps.length>0))&&<div className="assistant-work-steps" role="status">
+                <strong>{workProgress||pendingWork?.stage_note}</strong>
                 <span>{workSteps.map((step,i)=>(i+1)+". "+step).join(" · ")}</span>
+                {pendingWork&&["planned","executed"].includes(pendingWork.status)&&
+                  <button type="button" disabled={Boolean(busy)}
+                    onClick={()=>void finishWork(pendingWork,threadId)}>استكمال</button>}
+                {pendingWork&&["running","reporting"].includes(pendingWork.status)&&
+                  <button type="button" disabled={Boolean(busy)}
+                    onClick={()=>void loadWorkState(threadId)}>تحديث</button>}
               </div>}
               <div className="assistant-compose-foot">
                 <label><input type="checkbox" checked={allowConditional} onChange={e=>setAllowConditional(e.target.checked)}/>

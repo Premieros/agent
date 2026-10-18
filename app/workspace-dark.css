@@ -394,3 +394,12 @@
 }
 .workspace-shell .workspace-page .assistant-work-steps strong{color:#eaeaea}
 .workspace-shell .workspace-page .assistant-work-steps span{color:#bfbfbf;font-size:11px;line-height:1.65}
+
+
+.workspace-shell .workspace-page .assistant-work-steps>button{
+  padding:4px 12px;border-radius:7px;border:1px solid #5b5b5b;
+  background:#393939;color:#ececec;font:700 11px "Cairo",Tahoma,sans-serif;
+  cursor:pointer;margin-inline-start:auto
+}
+.workspace-shell .workspace-page .assistant-work-steps>button:hover{background:#454545}
+.workspace-shell .workspace-page .assistant-work-steps>button:disabled{opacity:.5;cursor:wait}
