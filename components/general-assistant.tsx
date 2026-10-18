@@ -40,6 +40,9 @@ export default function GeneralAssistant() {
   const [draft,setDraft]=useState("");
   const [skill,setSkill]=useState<AssistantSkill>("auto");
   const [allowConditional,setAllowConditional]=useState(true);
+  const [workMode,setWorkMode]=useState(false);
+  const [workProgress,setWorkProgress]=useState("");
+  const [workSteps,setWorkSteps]=useState<string[]>([]);
   const [busy,setBusy]=useState("");
   const [loading,setLoading]=useState(true);
   const [authorized,setAuthorized]=useState(false);
@@ -100,7 +103,7 @@ export default function GeneralAssistant() {
       setThreads(data.threads||[]);
       setShowSidebar(false);
       window.dispatchEvent(new Event("agent:close-navigation"));
-      setNote("");setSourceFiles([]);setSourceProject("");
+      setNote("");setSourceFiles([]);setSourceProject("");setWorkSteps([]);setWorkProgress("");
     }catch(e){setError(e instanceof Error?e.message:"فشل تحميل المحادثة.");}
     finally{setBusy("");}
   },[authHeaders]);
@@ -125,7 +128,7 @@ export default function GeneralAssistant() {
 
   async function createThread(){
     if(busy)return;
-    setBusy("create");setError("");setNote("");
+    setBusy("create");setError("");setNote("");setWorkSteps([]);setWorkProgress("");
     try {
       const res=await fetch("/api/assistant",{
         method:"POST",headers:await authHeaders(),
@@ -164,7 +167,7 @@ export default function GeneralAssistant() {
   async function sendMessage(text=draft) {
     const message=text.trim();
     if(busy||!message||message.length>4500)return;
-    setBusy("send");setError("");setNote("");
+    setBusy("send");setError("");setNote("");setWorkSteps([]);setWorkProgress("");
     try {
       let id=threadId;
       if(!id){
@@ -180,6 +183,39 @@ export default function GeneralAssistant() {
       const optimistic:ChatMessage={id:"pending-"+Date.now(),role:"user",content:message,created_at:new Date().toISOString()};
       setMessages(current=>[...current,optimistic]);
       setDraft("");
+      if(workMode){
+        setWorkProgress("تجهيز خطة العمل...");
+        const planRes=await fetch("/api/assistant/work",{
+          method:"POST",headers:await authHeaders(),
+          body:JSON.stringify({action:"plan",threadId:id,task:message,
+            allowConditionalFreeTier:allowConditional})
+        });
+        const planData=await planRes.json() as {
+          ok?:boolean;error?:string;runId?:string;steps?:string[];title?:string
+        };
+        if(!planRes.ok||!planData.runId)throw new Error(planData.error||"تعذر إعداد خطة العمل.");
+        setWorkSteps(planData.steps||[]);
+        setWorkProgress("تنفيذ المهمة في بيئة معزولة...");
+        const workRes=await fetch("/api/assistant/work",{
+          method:"POST",headers:await authHeaders(),
+          body:JSON.stringify({action:"execute",runId:planData.runId})
+        });
+        const work=await workRes.json() as {
+          error?:string;status?:string;message?:ChatMessage;steps?:string[]
+        };
+        if(!workRes.ok||!work.message)throw new Error(work.error||"تعذر إكمال التنفيذ.");
+        const restored=await fetch("/api/assistant?threadId="+encodeURIComponent(id),{
+          headers:await authHeaders(),cache:"no-store"
+        });
+        const restoredData=await restored.json() as AssistantResponse;
+        if(!restored.ok)throw new Error(restoredData.error||"تعذر تحميل نتيجة العمل.");
+        setMessages(restoredData.messages||[]);
+        setThreads(restoredData.threads||[]);
+        setWorkProgress(work.status==="completed"?"اكتملت المهمة في Sandbox":"تعذر التنفيذ في Sandbox");
+        setNote(work.status==="completed"?"تم التنفيذ في بيئة معزولة، بدون تعديلات خارجية.":
+          "تعذر التنفيذ المعزول. راجع النتيجة.");
+        return;
+      }
       const res=await fetch("/api/assistant",{
         method:"POST",headers:await authHeaders(),
         body:JSON.stringify({action:"send",threadId:id,text:message,skill,allowConditionalFreeTier:allowConditional})
@@ -200,7 +236,7 @@ export default function GeneralAssistant() {
       await loadThreads(false);
     }catch(e){
       setMessages(current=>current.filter(m=>!m.id.startsWith("pending-")));
-      setDraft(message);
+      setDraft(message);setWorkProgress("");
       setError(e instanceof Error?e.message:"تعذر إرسال الرسالة.");
     }finally{setBusy("");}
   }
@@ -319,12 +355,25 @@ export default function GeneralAssistant() {
                 <button type="button" aria-label="إرسال الرسالة" disabled={Boolean(busy)||!draft.trim()}
                   onClick={()=>void sendMessage()}><Send size={18}/></button>
               </div>
+              {workMode&&workSteps.length>0&&<div className="assistant-work-steps" role="status">
+                <strong>{workProgress}</strong>
+                <span>{workSteps.map((step,i)=>(i+1)+". "+step).join(" · ")}</span>
+              </div>}
               <div className="assistant-compose-foot">
                 <label><input type="checkbox" checked={allowConditional} onChange={e=>setAllowConditional(e.target.checked)}/>
                   السماح بحصص Gemini وGroq المشروطة
+                </label>
+                <label className="assistant-work-option"><input type="checkbox" checked={workMode}
+                  disabled={Boolean(busy)} onChange={e=>{
+                    if(e.target.checked&&!window.confirm(
+                      "وضع عمل يستخدم Vercel Sandbox وقد يستهلك موارد حسابك. سيتم منع الإنترنت والتعديل الخارجي. تشغيل؟"
+                    ))return;
+                    setWorkMode(e.target.checked);setWorkSteps([]);setWorkProgress("");
+                  }}/>
+                  وضع عمل
                 </label><span>{draft.length}/4500</span>
               </div>
-              <p className="assistant-limit-note">القراءة من GitHub والصفحات العامة المحددة فقط؛ المتصفح التفاعلي والنشر والإرسال والتعديل الخارجي مش مفعّلين. النماذج قد تخطئ.</p>
+              <p className="assistant-limit-note">وضع العمل يشغّل بيئة مؤقتة معزولة بدون إنترنت أو مفاتيح. لا نشر أو تعديل خارجي. النتائج تحتاج مراجعة.</p>
             </div>
           </main>
         </div>}

@@ -375,3 +375,22 @@
   .workspace-shell .workspace-page .agent-reply-rule{align-items:flex-start;gap:9px}
   .workspace-shell .workspace-page .agent-reply-rule-title>span{flex-basis:100%}
 }
+
+
+/* Compact work mode: same chat, no separate dashboard */
+.workspace-shell .workspace-page .assistant-compose-foot{display:flex;gap:9px;align-items:center;flex-wrap:wrap}
+.workspace-shell .workspace-page .assistant-compose-foot .assistant-work-option{
+  display:inline-flex;align-items:center;gap:5px;padding:2px 9px;
+  border:1px solid #525252;border-radius:99px;color:#ededed;font-size:11px;
+}
+.workspace-shell .workspace-page .assistant-compose-foot .assistant-work-option input{
+  accent-color:#6898f8;width:14px;height:14px
+}
+.workspace-shell .workspace-page .assistant-work-steps{
+  display:flex;flex-wrap:wrap;align-items:baseline;gap:7px;
+  max-width:860px;margin:0 auto 8px;padding:7px 10px;
+  border:1px solid #444;border-radius:8px;background:#292929;
+  color:#cfcfcf;font-size:11px
+}
+.workspace-shell .workspace-page .assistant-work-steps strong{color:#eaeaea}
+.workspace-shell .workspace-page .assistant-work-steps span{color:#bfbfbf;font-size:11px;line-height:1.65}
