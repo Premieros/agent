@@ -107,7 +107,7 @@ export async function POST(req:NextRequest) {
     ).join("\n\n");
     // Read-only tools have independently checked per-user permissions.
     const isBrowserTask=resolvedSkill==="browser";
-    const wantsGitHub=resolvedSkill==="pos_development" ||
+    const wantsGitHub=resolvedSkill==="pos_development" || resolvedSkill==="github" ||
       (resolvedSkill!=="browser"&&/(github|git hub|repository|repo|مستودع|افحص.*(?:كود|ملف)|راجع.*(?:كود|ملف))/i.test(prompt));
     const githubEnabled=permission("github");
     const {data:githubSelection,error:githubSelectionError}=wantsGitHub&&githubEnabled
