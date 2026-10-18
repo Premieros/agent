@@ -2,7 +2,7 @@
 
 ## Current release (v1)
 
-The new `/assistant/integrations` hub is a **registry and setup interface**, not an OAuth marketplace yet. The backend `GET /api/assistant/integrations` requires a valid organization member session and provides only environment-variable NAMES, metadata and bounded capability flags. No secret values are transmitted. AI provider secrets remain on Vercel Production environment variables; changing them requires a redeploy.
+The new `/assistant/integrations` hub is a **registry and setup interface**, not an OAuth marketplace yet. It also supports persistent per-user enable/disable switches for the implemented public GitHub code reader and the bounded public browser reader, backed by `assistant_connector_settings` with organization/user RLS. Every chat tool invocation checks this setting on the server (UI-only disabling is not trusted). The backend `GET /api/assistant/integrations` requires a valid organization member session and provides only environment-variable NAMES, metadata and bounded capability flags. No secret values are transmitted. AI provider secrets remain on Vercel Production environment variables; changing them requires a redeploy.
 
 | Capability | Implemented | Missing |
 | --- | --- | --- |
