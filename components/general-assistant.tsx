@@ -217,7 +217,7 @@ export default function GeneralAssistant() {
       });
       const result=await resp.json() as {status?:string;error?:string;message?:ChatMessage};
       if(!resp.ok||!result.message)throw new Error(result.error||"تعذر تجهيز التقرير.");
-      setPendingWork(null);
+      setPendingWork(null);setWorkSteps([]);
       setWorkProgress(result.status==="completed"?
         (run.sandbox_ran?"اكتمل التحليل في البيئة المعزولة.":"اكتمل تحليل الأدلة دون تشغيل كود."):
         "انتهت المحاولة مع فشل الاختبار. راجع التقرير.");
@@ -268,9 +268,21 @@ export default function GeneralAssistant() {
             allowConditionalFreeTier:allowConditional})
         });
         const planData=await planRes.json() as {
-          ok?:boolean;error?:string;runId?:string;steps?:string[];title?:string
+          ok?:boolean;error?:string;runId?:string;steps?:string[];
+          title?:string;answered?:boolean;messages?:ChatMessage[];
         };
-        if(!planRes.ok||!planData.runId)throw new Error(planData.error||"تعذر إعداد خطة العمل.");
+        if(!planRes.ok)throw new Error(planData.error||"تعذر إعداد خطة العمل.");
+        if(planData.answered&&planData.messages?.length){
+          setMessages(current=>[
+            ...current.filter(m=>m.id!==optimistic.id),...planData.messages!
+          ]);
+          if(planData.title)setThreads(current=>current.map(t=>
+            t.id===id?{...t,title:planData.title!}:t));
+          setPendingWork(null);setWorkSteps([]);setWorkProgress("");
+          setNote("مطلوب أرقام الحملة قبل الحساب.");
+          return;
+        }
+        if(!planData.runId)throw new Error("تعذر إعداد خطة العمل.");
         const work:WorkRun={id:planData.runId,status:"planned",steps:planData.steps||[],
           stage_note:"الخطة محفوظة وجاهزة للتنفيذ.",sandbox_ran:false,sandbox_succeeded:null};
         setPendingWork(work);setWorkSteps(work.steps);
@@ -417,7 +429,7 @@ export default function GeneralAssistant() {
                 <button type="button" aria-label="إرسال الرسالة" disabled={Boolean(busy)||!draft.trim()}
                   onClick={()=>void sendMessage()}><Send size={18}/></button>
               </div>
-              {(pendingWork||(workMode&&workSteps.length>0))&&<div className="assistant-work-steps" role="status">
+              {pendingWork&&<div className="assistant-work-steps" role="status">
                 <strong>{workProgress||pendingWork?.stage_note}</strong>
                 <span>{workSteps.map((step,i)=>(i+1)+". "+step).join(" · ")}</span>
                 {pendingWork&&["planned","executed"].includes(pendingWork.status)&&
@@ -436,12 +448,14 @@ export default function GeneralAssistant() {
                     if(e.target.checked&&!window.confirm(
                       "وضع عمل يستخدم Vercel Sandbox وقد يستهلك موارد حسابك. سيتم منع الإنترنت والتعديل الخارجي. تشغيل؟"
                     ))return;
-                    setWorkMode(e.target.checked);setWorkSteps([]);setWorkProgress("");
+                    setWorkMode(e.target.checked);
+                    if(e.target.checked)setSkill("auto");
+                    setWorkSteps([]);setWorkProgress("");
                   }}/>
                   وضع عمل
                 </label><span>{draft.length}/4500</span>
               </div>
-              <p className="assistant-limit-note">وضع العمل يشغّل بيئة مؤقتة معزولة بدون إنترنت أو مفاتيح. لا نشر أو تعديل خارجي. النتائج تحتاج مراجعة.</p>
+              <p className="assistant-limit-note">وضع العمل يشغّل Sandbox للحسابات البرمجية فقط. لا تعديل خارجي. راجع النتائج.</p>
             </div>
           </main>
         </div>}
