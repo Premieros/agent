@@ -22,7 +22,6 @@ const icons:Record<ConnectorId,typeof Cloud>={
   "ai-models":Bot,github:Code2,browser:Globe,"agent-database":Database,
   "pos-database":Database,facebook:Facebook,whatsapp:MessageCircle
 };
-const docs:string[]=[]; // URLs and required key names come from the server's fixed allowlist.
 export default function AssistantIntegrationsHub(){
   const db=getSupabase();
   const [connectors,setConnectors]=useState<ConnectorDescriptor[]>([]);
