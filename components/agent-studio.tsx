@@ -106,15 +106,15 @@ export default function AgentStudio() {
   const [brief, setBrief] = useState("");
   const [budget, setBudget] = useState("");
   const [activeTab, setActiveTab] = useState<"manager" | "output" | "creatives">("manager");
-  const [studioSection, setStudioSection] = useState<"agents"|"models"|"pages"|"outputs"|"creatives">("agents");
+  const [studioSection, setStudioSection] = useState<"agents"|"models"|"pages"|"campaigns"|"outputs"|"creatives">("agents");
   useEffect(()=>{
-    const valid=["agents","models","pages","outputs","creatives"];
+    const valid=["agents","models","pages","campaigns","outputs","creatives"];
     const update=(value:string|null)=>{
       const next=valid.includes(value||"")?value as typeof studioSection:"agents";
       setStudioSection(next);
       if(next==="outputs")setActiveTab("output");
       else if(next==="creatives")setActiveTab("creatives");
-      else if(next==="agents"||next==="pages")setActiveTab("manager");
+      else if(next==="agents"||next==="pages"||next==="campaigns")setActiveTab("manager");
     };
     update(new URLSearchParams(window.location.search).get("section"));
     const onPop=()=>update(new URLSearchParams(window.location.search).get("section"));
@@ -513,8 +513,8 @@ export default function AgentStudio() {
           <div><span>اعتماد داخلي</span><strong>{approvedCount}</strong></div>
         </div>}
         <div className="studio-view-intro">
-          <div><h2>{studioSection==="models"?"النماذج والذكاء الاصطناعي":studioSection==="pages"?"الصفحات والحملات":studioSection==="outputs"?"مخرجات الوكلاء":studioSection==="creatives"?"مكتبة التصميمات":"فريق الوكلاء والحملات"}</h2>
-          <p>{studioSection==="models"?"إعداد مفاتيح النماذج واختيار طريقة التشغيل في مكان واحد":studioSection==="pages"?"إدارة العلامات التجارية والصفحات ومهام التسويق":studioSection==="outputs"?"مراجعة المسودات والمحتوى الناتج عن الوكلاء":studioSection==="creatives"?"تصميمات المهمة والقوالب المجانية والصور الخاصة":"تشغيل مهام الفريق وإدارة اعتماد المخرجات"}</p></div>
+          <div><h2>{studioSection==="models"?"النماذج والذكاء الاصطناعي":studioSection==="pages"?"الصفحات والعلامات":studioSection==="campaigns"?"الحملات والمهام":studioSection==="outputs"?"مخرجات الوكلاء":studioSection==="creatives"?"مكتبة التصميمات":"فريق الوكلاء والحملات"}</h2>
+          <p>{studioSection==="models"?"إعداد مفاتيح النماذج واختيار طريقة التشغيل في مكان واحد":studioSection==="pages"?"إدارة ملفات العلامات التجارية والصفحات":studioSection==="campaigns"?"تشغيل مهام التسويق واعتمادها":studioSection==="outputs"?"مراجعة المسودات والمحتوى الناتج عن الوكلاء":studioSection==="creatives"?"تصميمات المهمة والقوالب المجانية والصور الخاصة":"تشغيل مهام الفريق وإدارة اعتماد المخرجات"}</p></div>
         </div>
         {studioSection==="models" && <>
         <section className="studio-auto-routing">
@@ -626,7 +626,7 @@ export default function AgentStudio() {
           <button type="button" onClick={()=>void statusCheck()} title="فحص الإعدادات"><RefreshCcw size={15}/></button>
         </div>
         </>}
-        {studioSection!=="models" && <div className="studio-layout">
+        {studioSection!=="models" && <div className={"studio-layout studio-view-"+studioSection}>
           <aside className="studio-pages">
             <div className="studio-side-head"><h2>الصفحات</h2><button title="إضافة صفحة" onClick={openNewPage}><Plus size={16}/></button></div>
             {pages.length===0 && <p className="studio-muted">سجّل أول صفحة أو علامة تجارية. ده ملف إدارة داخلي، مش تفويض Meta.</p>}
@@ -652,7 +652,7 @@ export default function AgentStudio() {
                 <div><span className="crm-overline">ملف الإدارة الحالي</span><h2>{selectedPage.name}</h2><p>{selectedPage.target_audience || "أضف الجمهور المستهدف لتحسين دقة خطة الوكلاء."}</p></div>
                 <span className="studio-disconnected">غير متصلة بـMeta</span>
               </div>
-              <div className="studio-section-head"><h2>مهام الوكلاء</h2><button onClick={()=>setMissionFormOpen(v=>!v)}><Plus size={16}/> مهمة جديدة</button></div>
+              {studioSection!=="pages" && <><div className="studio-section-head"><h2>مهام الوكلاء</h2><button onClick={()=>setMissionFormOpen(v=>!v)}><Plus size={16}/> مهمة جديدة</button></div>
               {missionFormOpen && <form className="studio-mission-form" onSubmit={e=>{e.preventDefault();void createMission();}}>
                 <label>الهدف<select value={objective} onChange={e=>setObjective(e.target.value as Objective)}>{objectives.map(o=><option key={o.id} value={o.id}>{o.label}</option>)}</select></label>
                 <label>ميزانية مقترحة (اختياري، ج.م)<input type="number" min={0} max={100000000} step="any" placeholder="مش معناها صرف فعلي" value={budget} onChange={e=>setBudget(e.target.value)} /></label>
@@ -661,12 +661,14 @@ export default function AgentStudio() {
               </form>}
               <div className="studio-mission-list">
                 {relevantMissions.length===0 && <p className="studio-muted">لا توجد مهمات للصفحة دي. أنشئ تكليفًا لمدير الوكلاء.</p>}
-                {relevantMissions.map(m=><button key={m.id} onClick={()=>{setMissionId(m.id);setActiveTab("manager");}} className={"studio-mission-row "+(missionId===m.id?"selected":"")}>
+                {relevantMissions.map(m=><button key={m.id} onClick={()=>{setMissionId(m.id);setActiveTab(studioSection==="outputs"?"output":studioSection==="creatives"?"creatives":"manager");}} className={"studio-mission-row "+(missionId===m.id?"selected":"")}>
                   <span><strong>{objectives.find(o=>o.id===m.objective)?.label || m.objective}</strong><small>{m.brief}</small></span>
                   <em className={"studio-status "+m.status}>{statusLabels[m.status] || m.status}</em>
                 </button>)}
               </div>
-              {selectedMission && selectedMission.page_id===pageId && <section className="studio-workspace">
+              </>}
+              {studioSection==="pages" && <div className="studio-page-overview"><h3>بيانات الصفحة</h3><p>تقدر تضيف صفحة أو تختار صفحة موجودة وتعدّل وصف المنتجات والجمهور المستهدف من القائمة الموجودة هنا. تشغيل المهام من قسم الحملات.</p><button type="button" onClick={openEditPage}>تعديل بيانات الصفحة</button></div>}
+              {studioSection!=="pages" && selectedMission && selectedMission.page_id===pageId && <section className="studio-workspace">
                 <div className="studio-section-head"><div><h2>مهمة الوكلاء المحددة</h2><p>{statusLabels[selectedMission.status]}</p></div>
                   {["queued","failed"].includes(selectedMission.status) && <button className="studio-run" disabled={Boolean(busy)||!aiReady} onClick={()=>void callAgentAPI("/api/agents/run",selectedMission.id,"run")}><WandSparkles size={16}/>{busy==="run"?"الوكلاء يعملون...":"تشغيل مدير الوكلاء"}</button>}
                   {selectedMission.status==="review" && outputs.length>0 && <button className="studio-approve" disabled={Boolean(busy)} onClick={()=>void approveMission()}><CheckCircle2 size={16}/> اعتماد المسودات</button>}
