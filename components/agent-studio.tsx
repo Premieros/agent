@@ -106,6 +106,26 @@ export default function AgentStudio() {
   const [brief, setBrief] = useState("");
   const [budget, setBudget] = useState("");
   const [activeTab, setActiveTab] = useState<"manager" | "output" | "creatives">("manager");
+  const [studioSection, setStudioSection] = useState<"agents"|"models"|"pages"|"outputs"|"creatives">("agents");
+  useEffect(()=>{
+    const valid=["agents","models","pages","outputs","creatives"];
+    const update=(value:string|null)=>{
+      const next=valid.includes(value||"")?value as typeof studioSection:"agents";
+      setStudioSection(next);
+      if(next==="outputs")setActiveTab("output");
+      else if(next==="creatives")setActiveTab("creatives");
+      else if(next==="agents"||next==="pages")setActiveTab("manager");
+    };
+    update(new URLSearchParams(window.location.search).get("section"));
+    const onPop=()=>update(new URLSearchParams(window.location.search).get("section"));
+    const onNavigate=(event:Event)=>update((event as CustomEvent<string>).detail);
+    window.addEventListener("popstate",onPop);
+    window.addEventListener("agent:select-studio-section",onNavigate);
+    return()=>{
+      window.removeEventListener("popstate",onPop);
+      window.removeEventListener("agent:select-studio-section",onNavigate);
+    };
+  },[]);
 
   const selectedPage = pages.find(p => p.id === pageId) || null;
   const relevantMissions = missions.filter(m => m.page_id === pageId);
@@ -486,12 +506,17 @@ export default function AgentStudio() {
         <h2>يلزم صلاحية مدير</h2><p>هذه المساحة مخصصة لمدير الشركة ومدير التسويق فقط. إذا كنت مديرًا بالفعل، جرّب تسجيل الدخول من جديد للتحقق من الجلسة.</p><Link href="/crm">تسجيل الدخول</Link>
       </section>}
       {db && !loading && member && <>
-        <div className="studio-metrics">
+        {studioSection==="agents" && <div className="studio-metrics">
           <div><span>الصفحات المسجلة</span><strong>{pages.length}</strong></div>
           <div><span>المهمات</span><strong>{missions.length}</strong></div>
           <div><span>بانتظار مراجعتك</span><strong>{missions.filter(m=>m.status==="review").length}</strong></div>
           <div><span>اعتماد داخلي</span><strong>{approvedCount}</strong></div>
+        </div>}
+        <div className="studio-view-intro">
+          <div><h2>{studioSection==="models"?"النماذج والذكاء الاصطناعي":studioSection==="pages"?"الصفحات والحملات":studioSection==="outputs"?"مخرجات الوكلاء":studioSection==="creatives"?"مكتبة التصميمات":"فريق الوكلاء والحملات"}</h2>
+          <p>{studioSection==="models"?"إعداد مفاتيح النماذج واختيار طريقة التشغيل في مكان واحد":studioSection==="pages"?"إدارة العلامات التجارية والصفحات ومهام التسويق":studioSection==="outputs"?"مراجعة المسودات والمحتوى الناتج عن الوكلاء":studioSection==="creatives"?"تصميمات المهمة والقوالب المجانية والصور الخاصة":"تشغيل مهام الفريق وإدارة اعتماد المخرجات"}</p></div>
         </div>
+        {studioSection==="models" && <>
         <section className="studio-auto-routing">
           <div className="studio-auto-head">
             <div><strong><RefreshCcw size={16}/> اختيار النموذج تلقائيًا</strong>
@@ -600,7 +625,8 @@ export default function AgentStudio() {
           <span>{routing==="auto" ? (aiReady ? `تشغيل تلقائي: ${autoCandidates.length} نموذج مرصود، وحد أقصى 3 محاولات` : "التشغيل التلقائي ينتظر اكتشاف النماذج") : (aiReady ? `${selectedProvider.title}: ${keySource==="server"?"مفتاح Vercel محدد":"مفتاح يدوي محدد"} — اختبار الصلاحية مطلوب` : `اختار مفتاح ${selectedProvider.title} لتشغيل الوكلاء`)} · {routing==="auto" ? "التوجيه متاح للكتابة فقط" : selectedProvider.image ? "يدعم توليد الصور بنموذج صور منفصل حسب الحصة" : "هذا المزوّد مخصص للمهام النصية هنا"} · {ready?.metaConnected ? "Meta متصل" : "Meta غير متصل، لا نشر ولا إعلان ممول ولا رد خارجي"}</span>
           <button type="button" onClick={()=>void statusCheck()} title="فحص الإعدادات"><RefreshCcw size={15}/></button>
         </div>
-        <div className="studio-layout">
+        </>}
+        {studioSection!=="models" && <div className="studio-layout">
           <aside className="studio-pages">
             <div className="studio-side-head"><h2>الصفحات</h2><button title="إضافة صفحة" onClick={openNewPage}><Plus size={16}/></button></div>
             {pages.length===0 && <p className="studio-muted">سجّل أول صفحة أو علامة تجارية. ده ملف إدارة داخلي، مش تفويض Meta.</p>}
@@ -697,7 +723,7 @@ export default function AgentStudio() {
               </section>}
             </>}
           </main>
-        </div>
+        </div>}
       </>}
     </div>
   </div>;
