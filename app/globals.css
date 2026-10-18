@@ -782,3 +782,9 @@ td>b { font-weight: 700; color: #233944; }
 .assistant-md-code-label{background:#213b46;color:#aedbd1;font:10px/1.8 ui-monospace,Consolas,monospace;padding:4px 11px}
 .assistant-md-code pre{margin:0;padding:12px 14px;overflow:auto;max-width:100%;color:#e6f8f3;font:12px/1.65 ui-monospace,SFMono-Regular,Consolas,monospace;white-space:pre}
 .assistant-md-code pre code{background:transparent;color:inherit;padding:0;font:inherit}
+
+
+/* Assistant tool receipts: show only files actually fetched from the test repository. */
+.assistant-source-list{display:flex;flex-wrap:wrap;gap:5px 10px;align-items:center;padding:8px 10px;margin:0 0 8px;border:1px solid #d9e9e3;border-radius:8px;background:#f5faf8;font:10px/1.7 "Cairo",Tahoma,sans-serif}
+.assistant-source-list strong{color:#26745e;flex-basis:100%}
+.assistant-source-list a{color:#276b80;text-decoration:underline;text-underline-offset:2px;overflow-wrap:anywhere}
