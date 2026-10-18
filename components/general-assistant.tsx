@@ -19,7 +19,10 @@ type AssistantResponse = {
   error?:string; threads?:Thread[]; thread?:Thread; messages?:ChatMessage[];
   title?:string; skill?:string; model?:string; attempts?:number; ok?:boolean;
   projectContext?:{loadedDocuments:number;missingDocuments:number;source:"github-public-readonly"}|null;
-  sourceInspection?:{inspected:Array<{path:string;url:string;truncated:boolean}>;failed:string[]}|null;
+  sourceInspection?:{
+    repository:string;branch:string;indexed:number;truncatedTree:boolean;
+    inspected:Array<{path:string;url:string;truncated:boolean}>;failed:string[]
+  }|null;
   browserResult?:{url:string;title:string;fetched:boolean;note:string}|null;
 };
 const starters=[
@@ -43,6 +46,7 @@ export default function GeneralAssistant() {
   const [error,setError]=useState("");
   const [note,setNote]=useState("");
   const [sourceFiles,setSourceFiles]=useState<Array<{path:string;url:string;truncated:boolean}>>([]);
+  const [sourceProject,setSourceProject]=useState("");
   const [showSidebar,setShowSidebar]=useState(false);
   const [sidebarPortalTarget,setSidebarPortalTarget]=useState<HTMLElement|null>(null);
   const [fontSize,setFontSize]=useState(15);
@@ -96,7 +100,7 @@ export default function GeneralAssistant() {
       setThreads(data.threads||[]);
       setShowSidebar(false);
       window.dispatchEvent(new Event("agent:close-navigation"));
-      setNote("");setSourceFiles([]);
+      setNote("");setSourceFiles([]);setSourceProject("");
     }catch(e){setError(e instanceof Error?e.message:"فشل تحميل المحادثة.");}
     finally{setBusy("");}
   },[authHeaders]);
@@ -191,6 +195,7 @@ export default function GeneralAssistant() {
         : "";
       setNote(`مهارة ${assistantSkills.find(s=>s.id===data.skill)?.title||data.skill} · ${data.model||"نموذج غير محدد"} · ${data.attempts||1} محاولة`+projectNote);
       setSourceFiles(data.sourceInspection?.inspected||[]);
+      setSourceProject(data.sourceInspection?.repository||"");
       setBrowserResult(data.browserResult||null);
       await loadThreads(false);
     }catch(e){
@@ -301,7 +306,7 @@ export default function GeneralAssistant() {
                   : <span>تعذرت قراءة الصفحة: {browserResult.note}</span>}
               </div>}
               {sourceFiles.length>0 && <div className="assistant-source-list">
-                <strong>ملفات الكود اللي اتقرأت فعلًا (GitHub - قراءة فقط):</strong>
+                <strong>ملفات الكود المقروءة من {sourceProject||"GitHub"} — قراءة فقط:</strong>
                 {sourceFiles.map(file=><a key={file.path} href={file.url} target="_blank" rel="noopener noreferrer">
                   {file.path}{file.truncated?" · مقتطف":""}
                 </a>)}
