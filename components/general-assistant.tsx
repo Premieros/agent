@@ -17,6 +17,9 @@ type Thread = { id:string; title:string; skill:AssistantSkill; updated_at:string
 type ChatMessage = {id:string;role:"user"|"assistant";content:string;model?:string|null;skill?:string|null;created_at:string};
 type WorkRun={id:string;status:"planned"|"running"|"executed"|"reporting"|"completed"|"failed";
   steps:string[];stage_note:string;sandbox_ran:boolean;sandbox_succeeded:boolean|null};
+type SiteChange={id:string;title:string;summary:string;task:string;
+  status:"draft"|"opening_pr"|"pr_opened"|"failed";
+  edits:Array<{path:string;search:string;replace:string}>;pr_url?:string|null};
 type AssistantResponse = {
   error?:string; threads?:Thread[]; thread?:Thread; messages?:ChatMessage[];
   title?:string; skill?:string; model?:string; attempts?:number; ok?:boolean;
@@ -43,6 +46,9 @@ export default function GeneralAssistant() {
   const [skill,setSkill]=useState<AssistantSkill>("auto");
   const [allowConditional,setAllowConditional]=useState(true);
   const [workMode,setWorkMode]=useState(false);
+  const [siteMode,setSiteMode]=useState(false);
+  const [siteChange,setSiteChange]=useState<SiteChange|null>(null);
+  const [siteWriteReady,setSiteWriteReady]=useState(false);
   const [workProgress,setWorkProgress]=useState("");
   const [workSteps,setWorkSteps]=useState<string[]>([]);
   const [pendingWork,setPendingWork]=useState<WorkRun|null>(null);
@@ -107,7 +113,9 @@ export default function GeneralAssistant() {
       setShowSidebar(false);
       window.dispatchEvent(new Event("agent:close-navigation"));
       setNote("");setSourceFiles([]);setSourceProject("");setWorkSteps([]);setWorkProgress("");
+      setSiteChange(null);
       void loadWorkState(id);
+      void loadSiteState(id);
     }catch(e){setError(e instanceof Error?e.message:"فشل تحميل المحادثة.");}
     finally{setBusy("");}
   },[authHeaders]);
@@ -133,6 +141,7 @@ export default function GeneralAssistant() {
   async function createThread(){
     if(busy)return;
     setBusy("create");setError("");setNote("");setWorkSteps([]);setWorkProgress("");setPendingWork(null);
+    setSiteChange(null);
     try {
       const res=await fetch("/api/assistant",{
         method:"POST",headers:await authHeaders(),
@@ -184,6 +193,39 @@ export default function GeneralAssistant() {
         setWorkProgress(running.stage_note||"مهمة محفوظة بانتظار استكمال.");
       }
     }catch{/* The normal chat stays usable even when run history is unavailable. */}
+  }
+
+  async function loadSiteState(id:string){
+    if(!id)return;
+    try{
+      const res=await fetch("/api/assistant/site?threadId="+encodeURIComponent(id),{
+        headers:await authHeaders(),cache:"no-store"
+      });
+      if(!res.ok)return;
+      const data=await res.json() as {changes?:SiteChange[];writeReady?:boolean};
+      setSiteChange(data.changes?.find(c=>c.status==="draft"||c.status==="opening_pr")||
+        data.changes?.[0]||null);
+      setSiteWriteReady(Boolean(data.writeReady));
+    }catch{/* Site manager remains optional. */}
+  }
+
+  async function approveSiteChange(){
+    if(!siteChange||siteChange.status!=="draft"||busy)return;
+    if(!window.confirm(
+      "هل توافق على فتح Pull Request في Premieros/agent للمراجعة؟ لن يتم الدمج أو النشر تلقائيًا."
+    ))return;
+    setBusy("site-approve");setError("");
+    try{
+      const res=await fetch("/api/assistant/site",{
+        method:"POST",headers:await authHeaders(),
+        body:JSON.stringify({action:"approve",changeId:siteChange.id})
+      });
+      const data=await res.json() as {error?:string;url?:string};
+      if(!res.ok||!data.url)throw new Error(data.error||"تعذر فتح طلب المراجعة.");
+      setSiteChange({...siteChange,status:"pr_opened",pr_url:data.url});
+      setNote("تم فتح Pull Request للمراجعة فقط؛ لم يُنشر أي تعديل.");
+    }catch(e){setError(e instanceof Error?e.message:"تعذر فتح طلب المراجعة.");}
+    finally{setBusy("");}
   }
 
   async function finishWork(initial:WorkRun,id:string){
@@ -260,6 +302,23 @@ export default function GeneralAssistant() {
       const optimistic:ChatMessage={id:"pending-"+Date.now(),role:"user",content:message,created_at:new Date().toISOString()};
       setMessages(current=>[...current,optimistic]);
       setDraft("");
+      if(siteMode){
+        const diagnose=/^(?:افحص|فحص|تحقق|حالة|راقب|check|status|diagnose)(?:\s|$)/iu.test(message);
+        const res=await fetch("/api/assistant/site",{
+          method:"POST",headers:await authHeaders(),
+          body:JSON.stringify({action:diagnose?"diagnose":"draft",
+            threadId:id,task:message,allowConditionalFreeTier:allowConditional})
+        });
+        const data=await res.json() as {error?:string;change?:SiteChange;
+          messages?:ChatMessage[];writeReady?:boolean};
+        if(!res.ok||!data.messages?.length)
+          throw new Error(data.error||"تعذر فحص الموقع أو إعداد المقترح.");
+        setMessages(current=>[...current.filter(m=>m.id!==optimistic.id),...data.messages!]);
+        if(data.change)setSiteChange(data.change);
+        if(typeof data.writeReady==="boolean")setSiteWriteReady(data.writeReady);
+        setNote(diagnose?"فحص الموقع بدون Sandbox.":"المقترح محفوظ للمراجعة؛ بدون تغيير مباشر.");
+        return;
+      }
       if(workMode){
         setWorkProgress("تجهيز خطة العمل...");
         const planRes=await fetch("/api/assistant/work",{
@@ -439,9 +498,48 @@ export default function GeneralAssistant() {
                   <button type="button" disabled={Boolean(busy)}
                     onClick={()=>void loadWorkState(threadId)}>تحديث</button>}
               </div>}
+              {siteMode&&<div className="assistant-site-manager" role="region" aria-label="إدارة الموقع">
+                <div className="assistant-site-manager-head">
+                  <strong>إدارة موقع AGENT</strong>
+                  <button type="button" disabled={Boolean(busy)}
+                    onClick={()=>void sendMessage("افحص حالة الموقع")}>فحص الحالة</button>
+                </div>
+                {siteChange&&<div className="assistant-site-draft">
+                  <strong>{siteChange.title}</strong>
+                  <span>{siteChange.summary}</span>
+                  <details>
+                    <summary>مراجعة التعديلات ({siteChange.edits?.length||0})</summary>
+                    {siteChange.edits?.map((e,i)=><div key={i} className="assistant-site-diff">
+                      <small>{e.path}</small>
+                      <pre>قبل: {e.search}</pre>
+                      <pre>بعد: {e.replace}</pre>
+                    </div>)}
+                  </details>
+                  {siteChange.status==="draft"&&
+                    <button type="button" disabled={!siteWriteReady||Boolean(busy)}
+                      onClick={()=>void approveSiteChange()}>فتح Pull Request للمراجعة</button>}
+                  {siteChange.status==="pr_opened"&&siteChange.pr_url&&
+                    <a href={siteChange.pr_url} target="_blank" rel="noopener noreferrer">عرض طلب المراجعة على GitHub</a>}
+                  {siteChange.status==="opening_pr"&&<small>جارٍ إعداد طلب المراجعة...</small>}
+                  {siteChange.status==="failed"&&<small>المقترح يحتاج إعادة إعداد.</small>}
+                </div>}
+                <small>{siteWriteReady?
+                  "لا نشر تلقائي ولا تغيير على main؛ موافقتك تفتح طلب مراجعة فقط.":
+                  "فحص واقتراحات حاليًا. فتح Pull Request يحتاج تصريح GitHub محدودًا لهذا المستودع."}</small>
+              </div>}
               <div className="assistant-compose-foot">
                 <label><input type="checkbox" checked={allowConditional} onChange={e=>setAllowConditional(e.target.checked)}/>
                   السماح بحصص Gemini وGroq المشروطة
+                </label>
+                <label className="assistant-work-option"><input type="checkbox" checked={siteMode}
+                  disabled={Boolean(busy)} onChange={e=>{
+                    setSiteMode(e.target.checked);
+                    if(e.target.checked){
+                      setWorkMode(false);setSkill("auto");
+                      if(threadId)void loadSiteState(threadId);
+                    }
+                  }}/>
+                  إدارة الموقع
                 </label>
                 <label className="assistant-work-option"><input type="checkbox" checked={workMode}
                   disabled={Boolean(busy)} onChange={e=>{
@@ -449,13 +547,15 @@ export default function GeneralAssistant() {
                       "وضع عمل يستخدم Vercel Sandbox وقد يستهلك موارد حسابك. سيتم منع الإنترنت والتعديل الخارجي. تشغيل؟"
                     ))return;
                     setWorkMode(e.target.checked);
-                    if(e.target.checked)setSkill("auto");
+                    if(e.target.checked){setSkill("auto");setSiteMode(false);}
                     setWorkSteps([]);setWorkProgress("");
                   }}/>
                   وضع عمل
                 </label><span>{draft.length}/4500</span>
               </div>
-              <p className="assistant-limit-note">وضع العمل يشغّل Sandbox للحسابات البرمجية فقط. لا تعديل خارجي. راجع النتائج.</p>
+              <p className="assistant-limit-note">{siteMode?
+                "إدارة الموقع: فحص وتشخيص ومسودات تعديل ومراجعة GitHub. لا تعديل مباشر أو نشر تلقائي.":
+                "وضع العمل يشغّل Sandbox للحسابات البرمجية فقط. لا تعديل خارجي. راجع النتائج."}</p>
             </div>
           </main>
         </div>}

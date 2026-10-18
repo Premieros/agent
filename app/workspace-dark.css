@@ -630,3 +630,58 @@
   .workspace-shell .agent-home-links{grid-template-columns:minmax(0,1fr)}
   .workspace-shell .agent-home-heading h1{font-size:20px!important}
 }
+
+/* Site management is integrated into existing chat; compact, review-first. */
+.workspace-shell .workspace-page .assistant-site-manager{
+  max-width:860px;margin:0 auto 9px;padding:8px 11px;
+  border:1px solid #414141;border-radius:10px;background:#202020;
+  color:#e8e8e8;display:flex;flex-direction:column;gap:6px;font-size:11px
+}
+.workspace-shell .workspace-page .assistant-site-manager-head{
+  display:flex;gap:12px;align-items:center;justify-content:space-between
+}
+.workspace-shell .workspace-page .assistant-site-manager-head strong{
+  color:#f1f1f1;font-size:12px
+}
+.workspace-shell .workspace-page .assistant-site-manager button{
+  font:700 11px "Cairo",Tahoma,sans-serif;padding:5px 10px;
+  border:1px solid #575757;border-radius:7px;background:#333;color:#eee;
+  cursor:pointer
+}
+.workspace-shell .workspace-page .assistant-site-manager button:hover{background:#424242}
+.workspace-shell .workspace-page .assistant-site-manager button:disabled{
+  opacity:.45;cursor:not-allowed
+}
+.workspace-shell .workspace-page .assistant-site-manager>small{
+  color:#a7a7a7;font-size:10px
+}
+.workspace-shell .workspace-page .assistant-site-draft{
+  border-top:1px solid #414141;padding-top:8px;
+  display:flex;flex-direction:column;align-items:flex-start;gap:6px
+}
+.workspace-shell .workspace-page .assistant-site-draft>strong{font-size:12px;color:#eee}
+.workspace-shell .workspace-page .assistant-site-draft>span{
+  line-height:1.65;color:#c7c7c7;overflow-wrap:anywhere
+}
+.workspace-shell .workspace-page .assistant-site-draft details{
+  width:100%;max-height:200px;overflow:auto;
+  border:1px solid #414141;border-radius:7px;padding:6px 8px;
+  color:#dedede
+}
+.workspace-shell .workspace-page .assistant-site-draft summary{
+  cursor:pointer;font-weight:700
+}
+.workspace-shell .workspace-page .assistant-site-diff{
+  padding:7px 0;border-top:1px solid #373737;margin-top:6px;
+  overflow-wrap:anywhere
+}
+.workspace-shell .workspace-page .assistant-site-diff small{color:#b0b0b0}
+.workspace-shell .workspace-page .assistant-site-diff pre{
+  overflow:auto;white-space:pre-wrap;direction:ltr;text-align:left;
+  font:11px/1.55 ui-monospace,Consolas,monospace;
+  border:1px solid #414141;border-radius:6px;padding:7px;
+  color:#d6d6d6;background:#151515;
+}
+.workspace-shell .workspace-page .assistant-site-draft>a{
+  color:#a4c8ff;text-decoration:underline;text-underline-offset:3px
+}
