@@ -4,9 +4,9 @@ import {useEffect,useState,type ReactNode} from "react";
 import Link from "next/link";
 import {usePathname} from "next/navigation";
 import {
-  PanelRightClose,PanelRightOpen,Menu,MessageSquareText,Bot,BrainCircuit,
+  Menu,MessageSquareText,Bot,BrainCircuit,
   Megaphone,PanelsTopLeft,Palette,UsersRound,Inbox,PlugZap,LayoutDashboard,
-  Settings2,X,ShieldCheck,ChevronDown,Plus,Code2,Globe,ClipboardList,
+  Settings2,X,Plus,Code2,Globe,ClipboardList,
   MessagesSquare,Share2,Boxes,BriefcaseBusiness,LockKeyhole
 } from "lucide-react";
 
@@ -71,15 +71,12 @@ export default function WorkspaceShell({children}:{children:ReactNode}){
   const isWorkspace=pathname==="/studio"||pathname==="/assistant"||
     pathname.startsWith("/assistant/")||pathname==="/crm"||pathname.startsWith("/crm/");
   const [mobileOpen,setMobileOpen]=useState(false);
-  const [collapsed,setCollapsed]=useState(false);
-  const [openGroup,setOpenGroup]=useState<GroupId|null>("assistant");
   const [activeHref,setActiveHref]=useState("/assistant");
 
   useEffect(()=>{
     const sync=()=>{
       const current=activeSelection(pathname,window.location.search);
       setActiveHref(current.href);
-      setOpenGroup(current.group);
     };
     sync();
     setMobileOpen(false);
@@ -98,8 +95,8 @@ export default function WorkspaceShell({children}:{children:ReactNode}){
   },[]);
   if(!isWorkspace)return <>{children}</>;
 
-  function choose(item:NavItem,group:GroupId){
-    setActiveHref(item.href);setOpenGroup(group);setMobileOpen(false);
+  function choose(item:NavItem){
+    setActiveHref(item.href);setMobileOpen(false);
     const u=new URL(item.href,"https://agent.local");
     const dispatch=(name:string,param:string,fallback:string)=>
       window.dispatchEvent(new CustomEvent(name,{detail:u.searchParams.get(param)||fallback}));
@@ -111,7 +108,7 @@ export default function WorkspaceShell({children}:{children:ReactNode}){
   }
 
   const pageTitle=navigation.flatMap(g=>g.items).find(i=>i.href===activeHref)?.label||"المساعد الذكي";
-  return <div className={"workspace-shell"+(collapsed?" workspace-collapsed":"")}>
+  return <div className="workspace-shell">
     {mobileOpen&&<button className="workspace-backdrop" type="button" aria-label="إغلاق القائمة"
       onClick={()=>setMobileOpen(false)}/>}
     <aside className={"workspace-navigation"+(mobileOpen?" workspace-navigation-open":"")} aria-label="القائمة الجانبية">
@@ -119,11 +116,6 @@ export default function WorkspaceShell({children}:{children:ReactNode}){
         <Link href="/assistant" className="workspace-logo">
           <span className="workspace-brand-symbol">✦</span><strong>AGENT</strong>
         </Link>
-        <button className="workspace-collapse" type="button" onClick={()=>setCollapsed(v=>!v)}
-          aria-label={collapsed?"توسيع القائمة":"تصغير القائمة"}
-          title={collapsed?"توسيع القائمة":"تصغير القائمة"}>
-          {collapsed?<PanelRightOpen size={20}/>:<PanelRightClose size={20}/>}
-        </button>
         <button className="workspace-close-mobile" type="button" onClick={()=>setMobileOpen(false)}
           aria-label="إغلاق القائمة"><X size={20}/></button>
       </div>
@@ -133,40 +125,28 @@ export default function WorkspaceShell({children}:{children:ReactNode}){
           if(pathname==="/assistant"){e.preventDefault();window.dispatchEvent(new Event("agent:new-chat"));}
         }}><Plus size={19}/><span>محادثة جديدة</span></Link>
       <nav className="workspace-nav-list">
-        {navigation.map(group=><div key={group.id} className={"workspace-nav-group"+(openGroup===group.id?" is-open":"")}>
-          <button className={"workspace-group-toggle"+(openGroup===group.id?" is-open":"")} type="button"
-            onClick={()=>{setOpenGroup(current=>current===group.id?null:group.id);if(collapsed)setCollapsed(false);}}
-            aria-expanded={openGroup===group.id} aria-controls={"workspace-group-"+group.id}
-            title={group.label}>
-            <group.icon size={19}/><span>{group.label}</span>
-            <ChevronDown size={17} className="workspace-group-chevron"/>
-          </button>
-          <div id={"workspace-group-"+group.id} className="workspace-subnav" hidden={openGroup!==group.id}>
+        {navigation.map(group=><div key={group.id} className="workspace-nav-group">
+          <div className="workspace-group-heading"><group.icon size={15}/><span>{group.label}</span></div>
+          <div className="workspace-subnav">
             {group.items.map(item=><Link key={item.href} href={item.href} title={item.label}
               className={"workspace-nav-link"+(activeHref===item.href?" selected":"")}
               aria-current={activeHref===item.href?"page":undefined}
-              onClick={()=>choose(item,group.id)}>
-              <item.icon size={17} strokeWidth={1.85}/><span>{item.label}</span>
+              onClick={()=>choose(item)}>
+              <item.icon size={17} strokeWidth={1.8}/><span>{item.label}</span>
             </Link>)}
             {group.id==="assistant"&&pathname==="/assistant"&&
               <div id="workspace-sidebar-slot" className="workspace-sidebar-slot"/>}
-          </div>
-        </div>)}
+          </div>        </div>)}
       </nav>
       <div className="workspace-navigation-footer">
         <Link href="/" title="الصفحة الرئيسية"><LayoutDashboard size={18}/><span>الرئيسية</span></Link>
-        <div className="workspace-security"><ShieldCheck size={16}/><span>لا تعديل أو نشر خارجي بدون موافقة</span></div>
       </div>
     </aside>
     <main className="workspace-main">
       <header className="workspace-topbar">
         <button type="button" className="workspace-mobile-menu" aria-label="فتح القائمة"
           onClick={()=>setMobileOpen(true)}><Menu size={21}/></button>
-        {collapsed&&<button type="button" className="workspace-desktop-open"
-          aria-label="توسيع القائمة" onClick={()=>setCollapsed(false)}><PanelRightOpen size={20}/></button>}
         <span className="workspace-current-title">{pageTitle}</span>
-        <div className="workspace-topbar-right"><span className="workspace-workspace-label">AGENT Workspace</span>
-          <span className="workspace-status-dot" title="مساحة العمل"/></div>
       </header>
       <div className={"workspace-page"+(pathname==="/assistant"?" workspace-chat-page":"")}>{children}</div>
     </main>

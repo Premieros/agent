@@ -89,13 +89,13 @@ export default function AssistantIntegrationsHub(){
         <div>
           <span className="crm-overline">AGENT CONNECTORS • V1</span>
           <h1><PlugZap size={26}/>{categoryView==="social"?"فيسبوك وواتساب":categoryView==="developer"?"GitHub وأدوات التطوير":"الإضافات والاتصالات"}</h1>
-          <p>مكان واحد للمهارات والبرامج ومفاتيح API. تفعيل الوصلة يختلف عن وجود مفتاح: أي اتصال حقيقي لازم يمر بالمصادقة والصلاحيات والاختبار.</p>
+          <p>إدارة الأدوات والاتصالات من مكان واحد.</p>
         </div>
         <button type="button" onClick={()=>void load()} disabled={loading}><RefreshCw size={16}/> تحديث الحالة</button>
       </section>
       <div className="integrations-security">
         <ShieldCheck size={20}/>
-        <span>مفاتيح API محفوظة على سيرفر Vercel، ولا تظهر قيمها داخل AGENT. لا توجد صلاحية للنشر أو إرسال رسائل أو تعديل مستودعات/قواعد بيانات خارجية في النسخة الحالية.</span>
+        <span>المفاتيح على السيرفر فقط. الإجراءات الخارجية تتطلب موافقتك.</span>
       </div>
       {error && <div className="crm-error" role="alert">{error} <Link href="/crm">تسجيل الدخول</Link></div>}
       {loading && <p className="integrations-loading">جارٍ التحقق من حالة الإضافات...</p>}
@@ -136,13 +136,13 @@ export default function AssistantIntegrationsHub(){
                 {focused===item.id && <div className="integration-details">
                   <strong>إعداد الوصلة</strong>
                   {item.requiredKeys.length>0?<>
-                    <p>أضف المتغيرات التالية إلى Vercel → Production → Environment Variables، وفعّل Sensitive ثم أعد النشر. لا تلصق المفاتيح في الشات.</p>
+                    <p>أضف المفاتيح إلى Vercel كمتغيرات سرية، ثم أعد النشر. لا تضعها في الشات.</p>
                     {item.requiredKeys.map(key=><div className="integration-key" key={key}>
                       <code dir="ltr">{key}</code>
                       <button type="button" onClick={()=>void navigator.clipboard.writeText(key)} aria-label={"نسخ "+key}><Copy size={15}/></button>
                     </div>)}
-                  </>:<p>هذه الوصلة لا تحتاج مفتاحًا حاليًا في وضع القراءة المحدود. الصلاحيات الجديدة ستحتاج مراجعة وتفويض منفصل.</p>}
-                  {["facebook","whatsapp","pos-database"].includes(item.id)&&<p className="integration-warning">وجود متغيرات API لا يُفعّل الربط تلقائيًا. OAuth / Webhooks / صلاحيات قواعد البيانات قيد التطوير، ولن تستخدم AGENT مفتاحًا خارجيًا قبل تفعيل مسار آمن.</p>}
+                  </>:<p>قراءة محدودة بدون مفتاح. الكتابة تحتاج تفويضًا.</p>}
+                  {["facebook","whatsapp","pos-database"].includes(item.id)&&<p className="integration-warning">المفتاح وحده مش ربطًا. يلزم تفويض واختبار الاتصال.</p>}
                   <a href={item.docsUrl} target="_blank" rel="noopener noreferrer"><ExternalLink size={14}/> توثيق الإضافة</a>
                 </div>}
                 <div className="integration-actions">
@@ -159,8 +159,8 @@ export default function AssistantIntegrationsHub(){
         </section>)}
       </>}
       <div className="integrations-footer">
-        <h2>إزاي هنوسع AGENT بعد كده؟</h2>
-        <p>كل إضافة هتكون وحدة مستقلة بعقد واضح: صلاحيات محددة، اختبار اتصال، سجل عمليات، حد إنفاق، وموافقة بشرية قبل أي تعديل أو إرسال خارجي. هنبدأ بالقراءة والتحليل ثم نضيف الأفعال واحدة واحدة.</p>
+        <h2>الخطوة القادمة</h2>
+        <p>GitHub قراءة أولًا، ثم صلاحيات مراجعة؛ ربط Meta وWhatsApp يحتاج تفويضًا.</p>
         <a href="https://vercel.com/dashboard" target="_blank" rel="noopener noreferrer"><Cloud size={16}/> افتح Vercel لإضافة مفاتيح السيرفر <ExternalLink size={14}/></a>
       </div>
     </div>

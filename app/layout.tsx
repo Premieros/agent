@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import "./workspace-dark.css";
 import WorkspaceShell from "@/components/workspace-shell";
 
 export const metadata: Metadata = {
