@@ -17,6 +17,7 @@ type AssistantResponse = {
   error?:string; threads?:Thread[]; thread?:Thread; messages?:ChatMessage[];
   title?:string; skill?:string; model?:string; attempts?:number; ok?:boolean;
   projectContext?:{loadedDocuments:number;missingDocuments:number;source:"github-public-readonly"}|null;
+  sourceInspection?:{inspected:Array<{path:string;url:string;truncated:boolean}>;failed:string[]}|null;
 };
 const starters=[
   {label:"كتابة", icon:FileText, text:"اكتب لي منشور احترافي لصفحة Premier.OS عن فوائد أنظمة الكاشير للمطاعم، بدون أسعار غير مؤكدة."},
@@ -38,6 +39,7 @@ export default function GeneralAssistant() {
   const [authorized,setAuthorized]=useState(false);
   const [error,setError]=useState("");
   const [note,setNote]=useState("");
+  const [sourceFiles,setSourceFiles]=useState<Array<{path:string;url:string;truncated:boolean}>>([]);
   const [showSidebar,setShowSidebar]=useState(false);
   const endRef=useRef<HTMLDivElement|null>(null);
   const inputRef=useRef<HTMLTextAreaElement|null>(null);
@@ -73,7 +75,7 @@ export default function GeneralAssistant() {
       setSkill((data.thread?.skill||"auto") as AssistantSkill);
       setThreads(data.threads||[]);
       setShowSidebar(false);
-      setNote("");
+      setNote("");setSourceFiles([]);
     }catch(e){setError(e instanceof Error?e.message:"فشل تحميل المحادثة.");}
     finally{setBusy("");}
   },[authHeaders]);
@@ -165,6 +167,7 @@ export default function GeneralAssistant() {
           : " · تعذر قراءة وثائق GitHub في هذه المحاولة"
         : "";
       setNote(`مهارة ${assistantSkills.find(s=>s.id===data.skill)?.title||data.skill} · ${data.model||"نموذج غير محدد"} · ${data.attempts||1} محاولة`+projectNote);
+      setSourceFiles(data.sourceInspection?.inspected||[]);
       await loadThreads(false);
     }catch(e){
       setMessages(current=>current.filter(m=>!m.id.startsWith("pending-")));
@@ -252,6 +255,12 @@ export default function GeneralAssistant() {
             </div>
             <div className="assistant-compose">
               {note && <p className="assistant-run-note"><Check size={14}/>{note}</p>}
+              {sourceFiles.length>0 && <div className="assistant-source-list">
+                <strong>ملفات الكود اللي اتقرأت فعلًا (GitHub - قراءة فقط):</strong>
+                {sourceFiles.map(file=><a key={file.path} href={file.url} target="_blank" rel="noopener noreferrer">
+                  {file.path}{file.truncated?" · مقتطف":""}
+                </a>)}
+              </div>}
               <div className="assistant-composer-box">
                 <textarea ref={inputRef} rows={3} maxLength={4500} value={draft}
                   disabled={Boolean(busy)} placeholder="اكتب أي طلب هنا... مثال: اشرح لي، اعمل خطة، اكتب كود، صيغ رسالة..."
