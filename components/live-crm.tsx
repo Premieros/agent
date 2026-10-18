@@ -4,6 +4,7 @@ import { ArrowRight, CheckCircle2, LoaderCircle, LogOut, Plus, RefreshCw, Shield
 import Link from "next/link";
 import type { User } from "@supabase/supabase-js";
 import { getSupabase } from "@/lib/supabase-browser";
+import { currentUser, isExpiredAuthError, recoverExpiredSession } from "@/lib/auth-session";
 
 type Member = { organization_id: string; role: string };
 type Lead = { id: string; full_name: string; business_name: string | null; phone: string | null; business_type: string; source: string; stage: string; priority: string; created_at: string };
@@ -40,8 +41,28 @@ export default function LiveCrm() {
   const load = useCallback(async (activeUser: User | null) => {
     if (!db || !activeUser) { setMembership(null); setLeads([]); setTasks([]); setChecking(false); return; }
     setChecking(true);
-    const { data: memberships, error: membershipError } = await db.from("organization_members").select("organization_id, role").eq("user_id", activeUser.id).limit(1);
-    if (membershipError) { setError(membershipError.message); setChecking(false); return; }
+    let membershipResult = await db.from("organization_members")
+      .select("organization_id, role").eq("user_id", activeUser.id).limit(1);
+    if (membershipResult.error && isExpiredAuthError(membershipResult.error)) {
+      const restored = await recoverExpiredSession(db);
+      if (!restored) {
+        setUser(null); setMembership(null);
+        setError("انتهت جلسة الدخول. سجّل الدخول مرة أخرى.");
+        setChecking(false); return;
+      }
+      membershipResult = await db.from("organization_members")
+        .select("organization_id, role").eq("user_id", restored.id).limit(1);
+    }
+    const {data: memberships, error: membershipError} = membershipResult;
+    if (membershipError) {
+      setMembership(null);
+      if (isExpiredAuthError(membershipError)) {
+        setUser(null);
+        setError("انتهت جلسة الدخول. سجّل الدخول مرة أخرى.");
+      } else setError("تعذر تحميل صلاحيات الحساب. جرّب تحديث الصفحة.");
+      setChecking(false); return;
+    }
+    setError("");
     const member = (memberships?.[0] ?? null) as Member | null;
     setMembership(member);
     if (member) {
@@ -58,7 +79,11 @@ export default function LiveCrm() {
   useEffect(() => {
     if (!db) { setChecking(false); return; }
     let active = true;
-    db.auth.getUser().then(({data}) => { if (active) {setUser(data.user); void load(data.user);} });
+    void currentUser(db).then((signedInUser) => {
+      if (active) { setUser(signedInUser); void load(signedInUser); }
+    }).catch(() => {
+      if (active) { setUser(null); setMembership(null); setChecking(false); }
+    });
     const { data: listener } = db.auth.onAuthStateChange((_event, session) => {
       if (!active) return;
       setUser(session?.user ?? null);
