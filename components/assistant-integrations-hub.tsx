@@ -10,7 +10,8 @@ import {
 import { getSupabase } from "@/lib/supabase-browser";
 import type { ConnectorDescriptor,ConnectorId } from "@/lib/assistant-integrations";
 
-type Response={connectors?:ConnectorDescriptor[];aiProviders?:string[];error?:string};
+type ConnectorState=ConnectorDescriptor & {toggleable:boolean;enabled:boolean};
+type Response={connectors?:ConnectorState[];aiProviders?:string[];error?:string};
 const groups=[
   {id:"ai",name:"نماذج الذكاء الاصطناعي"},
   {id:"developer",name:"التطوير والمستودعات"},
@@ -24,7 +25,8 @@ const icons:Record<ConnectorId,typeof Cloud>={
 };
 export default function AssistantIntegrationsHub(){
   const db=getSupabase();
-  const [connectors,setConnectors]=useState<ConnectorDescriptor[]>([]);
+  const [connectors,setConnectors]=useState<ConnectorState[]>([]);
+  const [setting,setSetting]=useState<ConnectorId|null>(null);
   const [aiProviders,setAiProviders]=useState<string[]>([]);
   const [loading,setLoading]=useState(true);
   const [error,setError]=useState("");
@@ -46,6 +48,23 @@ export default function AssistantIntegrationsHub(){
     finally{setLoading(false);}
   },[db]);
   useEffect(()=>{void load();},[load]);
+  async function toggleConnector(connectorId:ConnectorId,enabled:boolean){
+    if(!db||setting)return;
+    setSetting(connectorId);setError("");
+    try{
+      const {data:{session}}=await db.auth.getSession();
+      if(!session?.access_token)throw new Error("سجّل الدخول لإدارة إضافاتك.");
+      const resp=await fetch("/api/assistant/integrations",{
+        method:"POST",
+        headers:{Authorization:`Bearer ${session.access_token}`,"Content-Type":"application/json"},
+        body:JSON.stringify({connectorId,enabled})
+      });
+      const result=await resp.json() as {error?:string;ok?:boolean};
+      if(!resp.ok||!result.ok)throw new Error(result.error||"تعذر تغيير حالة الإضافة.");
+      setConnectors(items=>items.map(c=>c.id===connectorId?{...c,enabled}:c));
+    }catch(e){setError(e instanceof Error?e.message:"تعذر حفظ إعداد الإضافة.");}
+    finally{setSetting(null);}
+  }
   return <div className="crm-root agent-integrations-root">
     <div className="crm-wrap">
       <header className="crm-header">
@@ -71,7 +90,7 @@ export default function AssistantIntegrationsHub(){
       {loading && <p className="integrations-loading">جارٍ التحقق من حالة الإضافات...</p>}
       {!loading && connectors.length>0 && <>
         <div className="integrations-stats">
-          <div><strong>{connectors.filter(c=>["internal","read-only"].includes(c.status)).length}</strong><span>إمكانيات متاحة حاليًا</span></div>
+          <div><strong>{connectors.filter(c=>["internal","read-only"].includes(c.status)&&c.enabled).length}</strong><span>إمكانيات مفعّلة</span></div>
           <div><strong>{aiProviders.length}</strong><span>مزوّد AI بمفتاح سيرفر</span></div>
           <div><strong>{connectors.filter(c=>c.status==="credentials-present").length}</strong><span>وصلات مفاتيحها موجودة وتحتاج تفعيل</span></div>
         </div>
@@ -80,17 +99,23 @@ export default function AssistantIntegrationsHub(){
           <div className="integrations-grid">
             {connectors.filter(item=>item.category===group.id).map(item=>{
               const Icon=icons[item.id];
-              const isActive=["internal","read-only"].includes(item.status);
+              const isActive=["internal","read-only"].includes(item.status)&&item.enabled;
               return <article className="integration-card" key={item.id}>
                 <div className="integration-card-head"><span className="integration-icon"><Icon size={20}/></span>
                   <div className="integration-card-name"><h3>{item.title}</h3>
                     <span className={isActive?"integration-status ready":"integration-status"}>
                       {isActive?<CheckCircle2 size={13}/>:<CircleAlert size={13}/>}
-                      {item.statusLabel}
+                      {item.toggleable&&!item.enabled?"موقوفة من إعداداتك":item.statusLabel}
                     </span></div>
                 </div>
                 <p>{item.description}</p>
                 <div className="integration-capability"><LockKeyhole size={14}/>{item.capability}</div>
+                {item.toggleable && <label className="integration-toggle">
+                  <span>{item.enabled?"الإضافة مفعّلة لحسابك":"الإضافة متوقفة لحسابك"}</span>
+                  <input type="checkbox" checked={item.enabled} disabled={Boolean(setting)}
+                    onChange={e=>void toggleConnector(item.id,e.target.checked)}
+                    aria-label={"تفعيل إضافة "+item.title}/>
+                </label>}
                 {item.id==="ai-models" && <div className="integration-models">{aiProviders.length?
                   aiProviders.map(p=><span key={p}>{p}</span>):"لم يتم العثور على مفاتيح AI في السيرفر"}</div>}
                 {focused===item.id && <div className="integration-details">
@@ -110,8 +135,8 @@ export default function AssistantIntegrationsHub(){
                     <KeyRound size={15}/>{focused===item.id?"إخفاء التفاصيل":"الإعداد ومفاتيح API"}
                   </button>
                   {item.id==="ai-models"&&<Link href="/studio">تجربة النماذج</Link>}
-                  {item.id==="github"&&<Link href="/assistant">افحص كود GitHub</Link>}
-                  {item.id==="browser"&&<Link href="/assistant">جرب قراءة صفحة</Link>}
+                  {item.id==="github"&&item.enabled&&<Link href="/assistant">افحص كود GitHub</Link>}
+                  {item.id==="browser"&&item.enabled&&<Link href="/assistant">جرب قراءة صفحة</Link>}
                 </div>
               </article>;
             })}
