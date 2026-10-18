@@ -51,6 +51,19 @@ export default function GeneralAssistant() {
   const inputRef=useRef<HTMLTextAreaElement|null>(null);
   const active=threads.find(t=>t.id===threadId);
   useEffect(()=>setSidebarPortalTarget(document.getElementById("workspace-sidebar-slot")),[]);
+  useEffect(()=>{
+    const pick=(value:string|null)=>{
+      const allowed=assistantSkills.some(item=>item.id===value);
+      if(allowed)setSkill(value as AssistantSkill);
+      else if(value==="auto")setSkill("auto");
+    };
+    pick(new URLSearchParams(window.location.search).get("skill"));
+    const onNavigate=(event:Event)=>pick((event as CustomEvent<string>).detail);
+    const onPop=()=>pick(new URLSearchParams(window.location.search).get("skill"));
+    window.addEventListener("agent:select-assistant-skill",onNavigate);
+    window.addEventListener("popstate",onPop);
+    return()=>{window.removeEventListener("agent:select-assistant-skill",onNavigate);window.removeEventListener("popstate",onPop);};
+  },[]);
 
   const authHeaders=useCallback(async () => {
     if(!db)throw new Error("تعذر اتصال قاعدة البيانات.");
