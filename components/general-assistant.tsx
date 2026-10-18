@@ -18,6 +18,13 @@ type Thread = { id:string; title:string; skill:AssistantSkill; updated_at:string
 type ChatMessage = {id:string;role:"user"|"assistant";content:string;model?:string|null;skill?:string|null;created_at:string};
 type WorkRun={id:string;status:"planned"|"running"|"executed"|"reporting"|"completed"|"failed";
   steps:string[];stage_note:string;sandbox_ran:boolean;sandbox_succeeded:boolean|null};
+type StudioPage={id:string;name:string;platform:string;connection_status:string};
+type StudioMission={id:string;page_id:string;objective:string;brief:string;status:string;created_at:string};
+type StudioDraft={id:string;page_id:string;objective:string;brief:string;
+  status:"draft"|"creating"|"created";mission_id:string|null};
+type StudioResponse={error?:string;ok?:boolean;messages?:ChatMessage[];
+  pages?:StudioPage[];missions?:StudioMission[];drafts?:StudioDraft[];
+  draft?:StudioDraft;missionId?:string};
 type SiteChange={id:string;title:string;summary:string;task:string;
   status:"draft"|"opening_pr"|"pr_opened"|"failed";
   edits:Array<{path:string;search:string;replace:string}>;pr_url?:string|null};
@@ -48,6 +55,12 @@ export default function GeneralAssistant() {
   const [allowConditional,setAllowConditional]=useState(true);
   const [workMode,setWorkMode]=useState(false);
   const [siteMode,setSiteMode]=useState(false);
+  const [studioMode,setStudioMode]=useState(false);
+  const [studioPages,setStudioPages]=useState<StudioPage[]>([]);
+  const [studioMissions,setStudioMissions]=useState<StudioMission[]>([]);
+  const [studioDraft,setStudioDraft]=useState<StudioDraft|null>(null);
+  const [studioPageId,setStudioPageId]=useState("");
+  const [studioMissionId,setStudioMissionId]=useState("");
   const [siteChange,setSiteChange]=useState<SiteChange|null>(null);
   const [siteWriteReady,setSiteWriteReady]=useState(false);
   const [workProgress,setWorkProgress]=useState("");
@@ -115,8 +128,11 @@ export default function GeneralAssistant() {
       window.dispatchEvent(new Event("agent:close-navigation"));
       setNote("");setSourceFiles([]);setSourceProject("");setWorkSteps([]);setWorkProgress("");
       setSiteChange(null);
+    setStudioDraft(null);setStudioMissions([]);setStudioPages([]);
+    setStudioPageId("");setStudioMissionId("");
       void loadWorkState(id);
       void loadSiteState(id);
+      void loadStudioState(id);
     }catch(e){setError(e instanceof Error?e.message:"فشل تحميل المحادثة.");}
     finally{setBusy("");}
   },[authHeaders]);
@@ -194,6 +210,80 @@ export default function GeneralAssistant() {
         setWorkProgress(running.stage_note||"مهمة محفوظة بانتظار استكمال.");
       }
     }catch{/* The normal chat stays usable even when run history is unavailable. */}
+  }
+
+  async function loadStudioState(id:string){
+    if(!id)return;
+    try{
+      const res=await fetch("/api/assistant/studio?threadId="+encodeURIComponent(id),{
+        headers:await authHeaders(),cache:"no-store"
+      });
+      if(!res.ok)return;
+      const data=await res.json() as StudioResponse;
+      if(data.pages)setStudioPages(data.pages);
+      if(data.missions)setStudioMissions(data.missions);
+      if(data.drafts)setStudioDraft(
+        data.drafts.find(x=>x.status==="draft"||x.status==="creating")||
+        data.drafts[0]||null
+      );
+    }catch{/* Marketing tools stay optional and don't block normal chat. */}
+  }
+
+  async function studioRequest(id:string,action:"overview"|"prepare"|"confirm"|"summary",
+    extra:Record<string,unknown>={}):Promise<StudioResponse>{
+    const res=await fetch("/api/assistant/studio",{
+      method:"POST",headers:await authHeaders(),
+      body:JSON.stringify({action,threadId:id,...extra})
+    });
+    const data=await res.json() as StudioResponse;
+    if(!res.ok)throw new Error(data.error||"تعذر إتمام طلب مدير الوكلاء.");
+    if(data.messages?.length)setMessages(current=>[
+      ...current.filter(m=>!m.id.startsWith("pending-")),...data.messages!
+    ]);
+    if(data.draft)setStudioDraft(data.draft);
+    if(data.pages)setStudioPages(data.pages);
+    if(data.missions)setStudioMissions(data.missions);
+    if(data.missionId)setStudioMissionId(data.missionId);
+    return data;
+  }
+
+  async function confirmStudioDraft(){
+    if(busy||!threadId||studioDraft?.status!=="draft")return;
+    const pageName=studioPages.find(p=>p.id===studioDraft.page_id)?.name||"الصفحة";
+    if(!window.confirm("حفظ مهمة "+pageName+" في قاعدة AGENT؟ لن تعمل الوكلاء أو يُنشر شيء تلقائيًا."))return;
+    setBusy("studio-create");setError("");setNote("");
+    try{
+      await studioRequest(threadId,"confirm",{draftId:studioDraft.id});
+      await loadStudioState(threadId);
+      setNote("تم حفظ المهمة. تشغيل الوكلاء خطوة منفصلة تحتاج موافقتك.");
+    }catch(e){setError(e instanceof Error?e.message:"تعذر حفظ المهمة.");}
+    finally{setBusy("");}
+  }
+
+  async function runStudioMission(){
+    const id=studioMissionId||studioDraft?.mission_id||studioMissions[0]?.id;
+    if(busy||!threadId||!id)return;
+    const selected=studioMissions.find(m=>m.id===id);
+    if(selected&&!["queued","failed"].includes(selected.status)){
+      setError("المهمة ليست جاهزة للتشغيل. راجع حالتها في الاستوديو.");return;
+    }
+    if(!window.confirm(
+      "تشغيل الوكلاء في الوضع الاقتصادي لمهمة محفوظة؟ سيستخدم نموذج AI من الحصة المتاحة؛ لا نشر ولا إنفاق إعلاني."
+    ))return;
+    setBusy("studio-run");setError("");setNote("جارٍ توزيع العمل على الوكلاء...");
+    try{
+      const res=await fetch("/api/agents/run",{
+        method:"POST",headers:await authHeaders(),
+        body:JSON.stringify({missionId:id,mode:"economy",routing:"auto",
+          allowConditionalFreeTier:allowConditional})
+      });
+      const result=await res.json() as {error?:string;agents?:number;apiCalls?:number};
+      if(!res.ok)throw new Error(result.error||"تعذر تشغيل الوكلاء.");
+      await studioRequest(threadId,"summary",{missionId:id});
+      await loadStudioState(threadId);
+      setNote("تم حفظ "+(result.agents||0)+" مخرجات في الاستوديو للمراجعة. لا نشر خارجي.");
+    }catch(e){setError(e instanceof Error?e.message:"تعذر التشغيل.");setNote("");}
+    finally{setBusy("");}
   }
 
   async function loadSiteState(id:string){
@@ -303,6 +393,26 @@ export default function GeneralAssistant() {
       const optimistic:ChatMessage={id:"pending-"+Date.now(),role:"user",content:message,created_at:new Date().toISOString()};
       setMessages(current=>[...current,optimistic]);
       setDraft("");
+      if(studioMode){
+        const creating=/(?:انشئ|أنشئ|اضف|أضف|اعمل|جهز|جهّز|سجل|مهمةs+جديدة|create|new task)/i.test(message);
+        const summarizing=/(?:لخص|لخّص|ملخص|مخرجات|نتائج|summary|summarize)/i.test(message);
+        const running=/(?:شغّل|شغلs+(?:الوكلاء|المهمة)|تشغيلs+(?:الوكلاء|المهمة)|وزّع|وزعs+علىs+الوكلاء|run agents)/i.test(message);
+        if(running){
+          setMessages(current=>current.filter(m=>m.id!==optimistic.id));
+          setDraft(message);
+          setNote("تشغيل الوكلاء يحتاج تأكيدًا مستقلًا من الزر داخل لوحة إدارة المهام.");
+          return;
+        }
+        await studioRequest(id,creating?"prepare":summarizing?"summary":"overview",{
+          task:message,
+          pageId:creating&&studioPageId?studioPageId:undefined,
+          missionId:summarizing&&studioMissionId?studioMissionId:undefined
+        });
+        await loadStudioState(id);
+        setNote(creating?"المهمة مقترحة ولم تُحفظ بعد؛ راجعها ووافق من اللوحة.":
+          "تمت القراءة من بيانات مدير الوكلاء الفعلية، بدون Sandbox.");
+        return;
+      }
       if(siteMode){
         const diagnose=/^(?:افحص|فحص|تحقق|حالة|راقب|check|status|diagnose)(?:\s|$)/iu.test(message);
         const res=await fetch("/api/assistant/site",{
@@ -499,6 +609,49 @@ export default function GeneralAssistant() {
                   <button type="button" disabled={Boolean(busy)}
                     onClick={()=>void loadWorkState(threadId)}>تحديث</button>}
               </div>}
+              {studioMode&&<div className="assistant-studio-control" role="region" aria-label="إدارة صفحات التسويق والمهام">
+                <div className="assistant-studio-control-head">
+                  <strong>إدارة الصفحات والمهام</strong>
+                  <button type="button" disabled={Boolean(busy)}
+                    onClick={()=>void sendMessage("اعرض صفحات ومهام AGENT")}>عرض الحالة</button>
+                </div>
+                <div className="assistant-studio-control-selects">
+                  <label>الصفحة
+                    <select value={studioPageId} onChange={e=>setStudioPageId(e.target.value)}
+                      disabled={Boolean(busy)}>
+                      <option value="">اختيار تلقائي حسب الطلب</option>
+                      {studioPages.map(p=><option value={p.id} key={p.id}>{p.name}</option>)}
+                    </select>
+                  </label>
+                  <label>مهمة للملخص أو التشغيل
+                    <select value={studioMissionId} onChange={e=>setStudioMissionId(e.target.value)}
+                      disabled={Boolean(busy)}>
+                      <option value="">آخر مهمة</option>
+                      {studioMissions.map(m=><option value={m.id} key={m.id}>
+                        {(studioPages.find(p=>p.id===m.page_id)?.name||"صفحة")+" · "+m.objective+" · "+m.status}
+                      </option>)}
+                    </select>
+                  </label>
+                </div>
+                {studioDraft&&<div className="assistant-studio-draft">
+                  <strong>{studioDraft.status==="created"?"مهمة محفوظة":"مهمة مقترحة للمراجعة"}</strong>
+                  <span>الصفحة: {studioPages.find(p=>p.id===studioDraft.page_id)?.name||"—"}</span>
+                  <span>النوع: {studioDraft.objective}</span>
+                  <p>{studioDraft.brief}</p>
+                  {studioDraft.status==="draft"&&
+                    <button type="button" disabled={Boolean(busy)}
+                      onClick={()=>void confirmStudioDraft()}>تأكيد إضافة المهمة</button>}
+                  {studioDraft.status==="creating"&&<small>جارٍ حفظ المهمة؛ انتظر تحديث حالتها.</small>}
+                </div>}
+                <div className="assistant-studio-control-actions">
+                  <button type="button" disabled={Boolean(busy)||!(studioMissionId||studioDraft?.mission_id||studioMissions.length)}
+                    onClick={()=>void runStudioMission()}>تشغيل الوكلاء بعد الموافقة</button>
+                  <button type="button" disabled={Boolean(busy)||studioMissions.length===0}
+                    onClick={()=>void sendMessage("لخص نتائج المهام")}>تلخيص المخرجات</button>
+                  <Link href="/studio?section=outputs">المخرجات الكاملة</Link>
+                </div>
+                <small>قراءة وتلخيص مباشرة؛ إضافة مهمة وتشغيل الوكلاء بموافقتك. لا نشر ولا إعلانات مدفوعة.</small>
+              </div>}
               {siteMode&&<div className="assistant-site-manager" role="region" aria-label="إدارة الموقع">
                 <div className="assistant-site-manager-head">
                   <strong>إدارة موقع AGENT</strong>
@@ -533,11 +686,21 @@ export default function GeneralAssistant() {
                 <label><input type="checkbox" checked={allowConditional} onChange={e=>setAllowConditional(e.target.checked)}/>
                   السماح بحصص Gemini وGroq المشروطة
                 </label>
+                <label className="assistant-work-option"><input type="checkbox" checked={studioMode}
+                  disabled={Boolean(busy)} onChange={e=>{
+                    setStudioMode(e.target.checked);
+                    if(e.target.checked){
+                      setSiteMode(false);setWorkMode(false);setSkill("auto");
+                      if(threadId)void loadStudioState(threadId);
+                    }
+                  }}/>
+                  إدارة المهام
+                </label>
                 <label className="assistant-work-option"><input type="checkbox" checked={siteMode}
                   disabled={Boolean(busy)} onChange={e=>{
                     setSiteMode(e.target.checked);
                     if(e.target.checked){
-                      setWorkMode(false);setSkill("auto");
+                      setWorkMode(false);setStudioMode(false);setSkill("auto");
                       if(threadId)void loadSiteState(threadId);
                     }
                   }}/>
@@ -549,13 +712,15 @@ export default function GeneralAssistant() {
                       "وضع عمل يستخدم Vercel Sandbox وقد يستهلك موارد حسابك. سيتم منع الإنترنت والتعديل الخارجي. تشغيل؟"
                     ))return;
                     setWorkMode(e.target.checked);
-                    if(e.target.checked){setSkill("auto");setSiteMode(false);}
+                    if(e.target.checked){setSkill("auto");setSiteMode(false);setStudioMode(false);}
                     setWorkSteps([]);setWorkProgress("");
                   }}/>
                   وضع عمل
                 </label><span>{draft.length}/4500</span>
               </div>
-              <p className="assistant-limit-note">{siteMode?
+              <p className="assistant-limit-note">{studioMode?
+                "إدارة المهام: بيانات مؤسستك الفعلية، مسودات مهام، تشغيل الوكلاء بموافقة، وملخص النتائج. بدون Sandbox.":
+                siteMode?
                 "إدارة الموقع: فحص وتشخيص ومسودات تعديل ومراجعة GitHub. لا تعديل مباشر أو نشر تلقائي.":
                 "وضع العمل يشغّل Sandbox للحسابات البرمجية فقط. لا تعديل خارجي. راجع النتائج."}</p>
             </div>

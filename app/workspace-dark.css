@@ -763,3 +763,75 @@
   .workspace-shell .workspace-page .assistant-learning-item{flex-wrap:wrap}
   .workspace-shell .workspace-page .assistant-learning-item>div{flex-basis:100%}
 }
+
+/* Marketing tasks: compact control under AGENT's existing chat composer. */
+.workspace-shell .workspace-page .assistant-studio-control{
+  max-width:860px;margin:0 auto 9px;padding:9px 11px;
+  border:1px solid #414141;border-radius:10px;background:#202020;
+  color:#eaeaea;display:flex;flex-direction:column;gap:8px;font-size:11px
+}
+.workspace-shell .workspace-page .assistant-studio-control-head,
+.workspace-shell .workspace-page .assistant-studio-control-actions{
+  display:flex;align-items:center;gap:8px;flex-wrap:wrap
+}
+.workspace-shell .workspace-page .assistant-studio-control-head{
+  justify-content:space-between
+}
+.workspace-shell .workspace-page .assistant-studio-control-head strong{
+  font-size:12px;color:#f3f3f3
+}
+.workspace-shell .workspace-page .assistant-studio-control button{
+  display:inline-flex;align-items:center;justify-content:center;
+  border:1px solid #535353;background:#333;color:#eee;
+  border-radius:7px;padding:6px 10px;
+  font:700 11px "Cairo",Tahoma,sans-serif;white-space:normal
+}
+.workspace-shell .workspace-page .assistant-studio-control button:hover:not(:disabled){
+  background:#424242
+}
+.workspace-shell .workspace-page .assistant-studio-control button:disabled{
+  opacity:.45;cursor:default
+}
+.workspace-shell .workspace-page .assistant-studio-control-selects{
+  display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px
+}
+.workspace-shell .workspace-page .assistant-studio-control-selects label{
+  display:flex;flex-direction:column;gap:4px;min-width:0;
+  color:#bdbdbd!important;font:700 10.5px "Cairo",Tahoma,sans-serif
+}
+.workspace-shell .workspace-page .assistant-studio-control-selects select{
+  width:100%;min-width:0;min-height:32px;
+  border:1px solid #484848;border-radius:7px;background:#2b2b2b;
+  color:#f0f0f0;padding:4px 8px;font:11px "Cairo",Tahoma,sans-serif
+}
+.workspace-shell .workspace-page .assistant-studio-draft{
+  display:flex;flex-direction:column;align-items:flex-start;gap:4px;
+  border-top:1px solid #414141;padding-top:8px
+}
+.workspace-shell .workspace-page .assistant-studio-draft>strong{
+  color:#f2f2f2;font-size:12px
+}
+.workspace-shell .workspace-page .assistant-studio-draft span,
+.workspace-shell .workspace-page .assistant-studio-draft small{
+  color:#bbb;font-size:10.5px
+}
+.workspace-shell .workspace-page .assistant-studio-draft p{
+  color:#e1e1e1!important;margin:2px 0!important;
+  font-size:11px!important;line-height:1.65!important;
+  max-height:100px;overflow-y:auto;overflow-wrap:anywhere;white-space:pre-wrap
+}
+.workspace-shell .workspace-page .assistant-studio-control-actions a{
+  color:#bbd2ff;text-decoration:underline;text-underline-offset:3px;
+  font-size:10.5px
+}
+.workspace-shell .workspace-page .assistant-studio-control>small{
+  color:#a8a8a8;font-size:10.5px;line-height:1.6
+}
+@media(max-width:560px){
+ .workspace-shell .workspace-page .assistant-studio-control-selects{
+   grid-template-columns:minmax(0,1fr)
+ }
+ .workspace-shell .workspace-page .assistant-studio-control-actions{
+   align-items:stretch
+ }
+}
