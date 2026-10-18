@@ -335,3 +335,43 @@
   .workspace-shell .workspace-page .general-assistant-root .assistant-starters {grid-template-columns:repeat(2,minmax(0,1fr))}
   .workspace-shell .workspace-page .general-assistant-root .assistant-compose {padding:6px 8px}
 }
+
+
+/* Keyword handoff stays in the existing inbox: compact, one-row control. */
+.workspace-shell .workspace-page .agent-reply-rule{
+  display:flex;flex-wrap:wrap;align-items:center;column-gap:13px;row-gap:6px;
+  padding:9px 11px;margin-bottom:10px;border:1px solid #3e3e3e;border-radius:9px;
+  background:#272727;color:#eee;font-size:12px
+}
+.workspace-shell .workspace-page .agent-reply-rule-title,
+.workspace-shell .workspace-page .agent-reply-rule-controls{
+  display:flex;align-items:center;flex-wrap:wrap;gap:9px
+}
+.workspace-shell .workspace-page .agent-reply-rule-title strong{font-size:13px;color:#f0f0f0}
+.workspace-shell .workspace-page .agent-reply-rule-title>span{color:#aeb0b4;font-size:11px}
+.workspace-shell .workspace-page .agent-reply-rule-controls input:not([type=checkbox]){
+  width:118px;min-height:31px;padding:4px 8px;border:1px solid #555!important;
+  font-size:12px!important;background:#303030!important
+}
+.workspace-shell .workspace-page .agent-reply-rule-controls>label{
+  font-size:11px;color:#c7c7c7
+}
+.workspace-shell .workspace-page .agent-reply-rule-switch{display:flex;gap:6px;align-items:center}
+.workspace-shell .workspace-page .agent-reply-rule-switch input{
+  width:15px;height:15px;accent-color:#6494f3
+}
+.workspace-shell .workspace-page .agent-reply-rule-controls button{
+  display:inline-flex;align-items:center;gap:5px;padding:5px 13px;
+  background:#e8e8e8;color:#222;border:0;border-radius:7px;font-size:12px;font-weight:800
+}
+.workspace-shell .workspace-page .agent-reply-rule-controls button:disabled{opacity:.55}
+.workspace-shell .workspace-page .agent-reply-rule :is(.agent-reply-rule-hint,.agent-reply-rule-warning){
+  flex-basis:100%;margin:0;font-size:11px;line-height:1.65;color:#aaa
+}
+.workspace-shell .workspace-page .agent-reply-rule .agent-reply-rule-warning{color:#d5b89b}
+.workspace-shell .workspace-page .agent-reply-rule .agent-reply-rule-error{color:#ffadab;margin:0}
+.workspace-shell .workspace-page .agent-reply-rule .agent-reply-rule-success{color:#a6e7bf;margin:0}
+@media(max-width:560px){
+  .workspace-shell .workspace-page .agent-reply-rule{align-items:flex-start;gap:9px}
+  .workspace-shell .workspace-page .agent-reply-rule-title>span{flex-basis:100%}
+}
