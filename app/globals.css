@@ -931,3 +931,9 @@ td>b { font-weight: 700; color: #233944; }
 .integration-toggle input:checked:before{transform:translateX(16px)}
 .integration-toggle input:focus-visible{outline:3px solid #75c9af;outline-offset:2px}
 .integration-toggle input:disabled{opacity:.45;cursor:wait}
+
+
+.assistant-sidebar-close{display:none}
+@media(max-width:850px){
+  .assistant-sidebar-close{display:block;align-self:flex-start;padding:7px 11px;border:1px solid #dae8e2;border-radius:7px;background:#f4faf6;color:#277663;font:700 12px "Cairo",Tahoma,sans-serif;margin:0 0 10px}
+}
