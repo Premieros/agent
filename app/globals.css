@@ -1263,3 +1263,26 @@ td>b { font-weight: 700; color: #233944; }
 .studio-page-overview h3{font-size:16px;margin:0 0 8px}
 .studio-page-overview p{font-size:13px;color:#63748a;margin:0 0 12px}
 .studio-page-overview button{border:1px solid #c5d7fa;background:#eff5ff;color:#2358d4;padding:9px 13px;border-radius:9px;font-weight:700}
+
+
+/* Exact sampled reference colors from the supplied Premier.OS screenshot. */
+.workspace-shell{
+  --reference-canvas:#f7f6f4;
+  --reference-surface:#fcfbfa;
+  --reference-border:#dce4f0;
+  background:#f7f6f4;
+}
+.workspace-shell .workspace-main,
+.workspace-shell .workspace-page,
+.workspace-shell .workspace-page > .crm-root{background:#f7f6f4}
+.workspace-shell .workspace-navigation,
+.workspace-shell .workspace-topbar{background:#fcfbfa}
+.workspace-shell .workspace-page :is(.crm-card,.studio-pages,.studio-center,.integration-card,.integrations-stats>div,
+  .studio-auto-routing,.studio-ai-settings,.studio-run-mode,.studio-metrics>div,.studio-page-overview,
+  .inbox-chat-panel,.inbox-threads-panel){background:#fcfbfa}
+.workspace-shell .workspace-page .general-assistant-root .assistant-panel,
+.workspace-shell .workspace-page .general-assistant-root>.crm-wrap,
+.workspace-shell .workspace-page .general-assistant-root .assistant-chat-scroll,
+.workspace-shell .workspace-page .general-assistant-root .assistant-compose{background:#fcfbfa}
+.workspace-shell .workspace-page :is(.inbox-thread-entry,.crm-table tr,.studio-page-choice){border-color:#dce4f0}
+.workspace-shell .workspace-page :is(.crm-table thead,.studio-page-banner,.integration-capability){background:#f4f3f2}
