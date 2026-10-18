@@ -40,12 +40,15 @@ type AssistantResponse = {
     inspected:Array<{path:string;url:string;truncated:boolean}>;failed:string[]
   }|null;
   browserResult?:{url:string;title:string;fetched:boolean;note:string}|null;
+  researchResult?:{query:string;searchedAt:string;trustedDomains:number;warnings:string[];
+    sources:Array<{title:string;url:string;excerpt:string;publisher:string;
+      publishedAt:string|null;trusted:boolean}>}|null;
 };
 const starters=[
   {label:"كتابة", icon:FileText, text:"اكتب لي منشور احترافي لصفحة Premier.OS عن فوائد أنظمة الكاشير للمطاعم، بدون أسعار غير مؤكدة."},
   {label:"تطوير POS", icon:Code2, text:"أنت مدير تطوير نظام Premier.OS الحالي. ابدأ بخطة لمراجعة علاقات الفروع والمخازن والمخزون والمبيعات والمشتريات والوصفات والتكاليف والحسابات. قل ما تحتاج رؤيته ولا تفترض مواصفات غير مؤكدة."},
   {label:"تخطيط", icon:Lightbulb, text:"حوّل فكرة إنشاء شركة برمجيات لخطة عملية من 30 يوم بخطوات وأولويات."},
-  {label:"المتصفح", icon:Globe, text:"افحص الصفحة العامة https://premieros-sage.vercel.app/#/login واشرح ما يمكن قراءته فعلاً من HTML فقط، وحدود قدرتك على فحص تطبيقات JavaScript."}
+  {label:"بحث الإنترنت", icon:Globe, text:"ابحث عن أحدث الأخبار الموثوقة في الذكاء الاصطناعي، وأرفق المصادر وتواريخ نشرها مع توضيح حدود التحقق."}
 ];
 
 export default function GeneralAssistant() {
@@ -91,6 +94,7 @@ export default function GeneralAssistant() {
   const [sidebarPortalTarget,setSidebarPortalTarget]=useState<HTMLElement|null>(null);
   const [fontSize,setFontSize]=useState(15);
   const [browserResult,setBrowserResult]=useState<{url:string;title:string;fetched:boolean;note:string}|null>(null);
+  const [researchResult,setResearchResult]=useState<AssistantResponse["researchResult"]>(null);
   const endRef=useRef<HTMLDivElement|null>(null);
   const inputRef=useRef<HTMLTextAreaElement|null>(null);
   const active=threads.find(t=>t.id===threadId);
@@ -127,7 +131,7 @@ export default function GeneralAssistant() {
   },[authHeaders]);
 
   const openThread=useCallback(async (id:string) => {
-    setBusy("loading-thread");setError("");setBrowserResult(null);
+    setBusy("loading-thread");setError("");setBrowserResult(null);setResearchResult(null);
     try {
       const res=await fetch("/api/assistant?threadId="+encodeURIComponent(id),{
         headers:await authHeaders(),cache:"no-store"
@@ -188,7 +192,7 @@ export default function GeneralAssistant() {
       setThreadId(data.thread.id);setMessages([]);setThreads(current=>[data.thread!,...current]);
       setShowSidebar(false);
       window.dispatchEvent(new Event("agent:close-navigation"));
-      setBrowserResult(null);
+      setBrowserResult(null);setResearchResult(null);
       inputRef.current?.focus();
     }catch(e){setError(e instanceof Error?e.message:"تعذر الإنشاء.");}
     finally{setBusy("");}
@@ -207,7 +211,7 @@ export default function GeneralAssistant() {
       const remaining=threads.filter(t=>t.id!==id);
       setThreads(remaining);
       if(id===threadId){
-        setThreadId("");setMessages([]);setNote("");setBrowserResult(null);setPendingWork(null);
+        setThreadId("");setMessages([]);setNote("");setBrowserResult(null);setResearchResult(null);setPendingWork(null);
         setPendingAction(null);setActiveArea(null);setShowLearning(false);
       }
     }catch(e){setError(e instanceof Error?e.message:"تعذر الحذف.");}
@@ -612,6 +616,7 @@ export default function GeneralAssistant() {
       setSourceFiles(data.sourceInspection?.inspected||[]);
       setSourceProject(data.sourceInspection?.repository||"");
       setBrowserResult(data.browserResult||null);
+      setResearchResult(data.researchResult||null);
       await loadThreads(false);
       await suggestLearningApproval(id);
     }catch(e){
@@ -756,6 +761,23 @@ export default function GeneralAssistant() {
                 {browserResult.fetched
                   ? <a href={browserResult.url} target="_blank" rel="noopener noreferrer">صفحة تمت قراءتها: {browserResult.title||browserResult.url}</a>
                   : <span>تعذرت قراءة الصفحة: {browserResult.note}</span>}
+              </div>}
+              {researchResult&&<div className="assistant-source-list" role="region" aria-label="مصادر البحث الحقيقية">
+                <strong>نتائج بحث مباشر · {new Date(researchResult.searchedAt).toLocaleString("ar-EG")} · قراءة مقتطفات</strong>
+                <small>هذه روابط ومقتطفات فهرسة وليست تحققًا من المقالات كاملة. حفظ أي معرفة يتطلب موافقتك.</small>
+                {researchResult.sources.map((source,i)=><div key={source.url}>
+                  <a href={source.url} target="_blank" rel="noopener noreferrer">
+                    {i+1}. {source.title}</a>
+                  <small> {source.publisher}{source.publishedAt?" · "+source.publishedAt.slice(0,10):""}
+                    {source.trusted?" · نطاق مرجعي":" · يحتاج تحققًا إضافيًا"}</small>
+                  {source.excerpt&&<p>{source.excerpt.slice(0,240)}</p>}
+                  <button type="button" disabled={Boolean(busy)} onClick={()=>requestApproval("memory-save",
+                    ("نتيجة بحث للمتابعة: "+source.title+" — "+source.excerpt.slice(0,390)+
+                    " | المصدر: "+source.url).slice(0,850))}>
+                    حفظ معلومة بعد المراجعة
+                  </button>
+                </div>)}
+                {researchResult.warnings.length>0&&<small>{researchResult.warnings.join(" · ")}</small>}
               </div>}
               {sourceFiles.length>0 && <div className="assistant-source-list">
                 <strong>ملفات الكود المقروءة من {sourceProject||"GitHub"} — قراءة فقط:</strong>
