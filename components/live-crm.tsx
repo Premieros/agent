@@ -196,6 +196,7 @@ export default function LiveCrm() {
         {crmView==="account" && <section className="crm-card crm-password-panel">
           <div className="crm-section-head"><div><h2>تسجيل الدخول بكلمة مرور</h2><p>عيّن كلمة مرور مرة واحدة، علشان متحتاجش رسالة بريد في كل دخول.</p></div>
           <button type="button" onClick={() => setShowPasswordSetup(v => !v)}>{showPasswordSetup ? "إلغاء" : "تعيين / تغيير كلمة المرور"}</button></div>
+          <button type="button" className="crm-btn-secondary" onClick={async()=>{await db?.auth.signOut();setUser(null);setMembership(null);}}>تسجيل الخروج <LogOut size={15}/></button>
           {passwordSaved && <p className="crm-success"><CheckCircle2 size={16}/> تم حفظ كلمة المرور. يمكنك استخدامها عند تسجيل الدخول لاحقًا.</p>}
           {showPasswordSetup && <form className="crm-password-form" onSubmit={e => { e.preventDefault(); void savePassword(); }}>
             <label>كلمة مرور جديدة<input type="password" minLength={12} required autoComplete="new-password" value={newPassword} onChange={e => setNewPassword(e.target.value)} /></label>
