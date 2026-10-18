@@ -82,6 +82,7 @@ export default function GeneralAssistant() {
       setSkill((data.thread?.skill||"auto") as AssistantSkill);
       setThreads(data.threads||[]);
       setShowSidebar(false);
+      window.dispatchEvent(new Event("agent:close-navigation"));
       setNote("");setSourceFiles([]);
     }catch(e){setError(e instanceof Error?e.message:"فشل تحميل المحادثة.");}
     finally{setBusy("");}
@@ -117,6 +118,7 @@ export default function GeneralAssistant() {
       if(!res.ok||!data.thread)throw new Error(data.error||"تعذر إنشاء المحادثة.");
       setThreadId(data.thread.id);setMessages([]);setThreads(current=>[data.thread!,...current]);
       setShowSidebar(false);
+      window.dispatchEvent(new Event("agent:close-navigation"));
       setBrowserResult(null);
       inputRef.current?.focus();
     }catch(e){setError(e instanceof Error?e.message:"تعذر الإنشاء.");}
