@@ -43,13 +43,21 @@ export default function WorkspaceShell({children}:{children:ReactNode}){
   const [isCollapsed,setCollapsed]=useState(false);
   const [section,setSection]=useState("agents");
   useEffect(()=>{
+    const readSection=()=>setSection(new URLSearchParams(window.location.search).get("section")||"agents");
     setMobileOpen(false);
-    setSection(new URLSearchParams(window.location.search).get("section")||"agents");
+    readSection();
+    window.addEventListener("popstate",readSection);
+    return()=>window.removeEventListener("popstate",readSection);
   },[pathname]);
   useEffect(()=>{
     const toggle=()=>setMobileOpen(old=>!old);
+    const close=()=>setMobileOpen(false);
     window.addEventListener("agent:toggle-navigation",toggle);
-    return ()=>window.removeEventListener("agent:toggle-navigation",toggle);
+    window.addEventListener("agent:close-navigation",close);
+    return ()=>{
+      window.removeEventListener("agent:toggle-navigation",toggle);
+      window.removeEventListener("agent:close-navigation",close);
+    };
   },[]);
   if(!isWorkspace)return <>{children}</>;
   const matches=(item:NavItem)=>{
