@@ -31,6 +31,15 @@ export default function AssistantIntegrationsHub(){
   const [loading,setLoading]=useState(true);
   const [error,setError]=useState("");
   const [focused,setFocused]=useState<ConnectorId|null>(null);
+  const [categoryView,setCategoryView]=useState("all");
+  useEffect(()=>{
+    const sync=()=>setCategoryView(new URLSearchParams(window.location.search).get("category")||"all");
+    const select=(event:Event)=>setCategoryView((event as CustomEvent<string>).detail||"all");
+    sync();
+    window.addEventListener("popstate",sync);
+    window.addEventListener("agent:select-integrations-category",select);
+    return()=>{window.removeEventListener("popstate",sync);window.removeEventListener("agent:select-integrations-category",select);};
+  },[]);
   const load=useCallback(async ()=>{
     if(!db){setError("تعذر الوصول للجلسة.");setLoading(false);return;}
     setLoading(true);setError("");
@@ -77,7 +86,7 @@ export default function AssistantIntegrationsHub(){
       <section className="integrations-hero">
         <div>
           <span className="crm-overline">AGENT CONNECTORS • V1</span>
-          <h1><PlugZap size={26}/> الإضافات والاتصالات</h1>
+          <h1><PlugZap size={26}/>{categoryView==="social"?"فيسبوك وواتساب":categoryView==="developer"?"GitHub وأدوات التطوير":"الإضافات والاتصالات"}</h1>
           <p>مكان واحد للمهارات والبرامج ومفاتيح API. تفعيل الوصلة يختلف عن وجود مفتاح: أي اتصال حقيقي لازم يمر بالمصادقة والصلاحيات والاختبار.</p>
         </div>
         <button type="button" onClick={()=>void load()} disabled={loading}><RefreshCw size={16}/> تحديث الحالة</button>
@@ -94,7 +103,10 @@ export default function AssistantIntegrationsHub(){
           <div><strong>{aiProviders.length}</strong><span>مزوّد AI بمفتاح سيرفر</span></div>
           <div><strong>{connectors.filter(c=>c.status==="credentials-present").length}</strong><span>وصلات مفاتيحها موجودة وتحتاج تفعيل</span></div>
         </div>
-        {groups.map(group=><section className="integrations-section" key={group.id}>
+        {groups.filter(group=>categoryView==="all"||(
+          categoryView==="social"?group.id==="social":
+          categoryView==="developer"?(group.id==="developer"||group.id==="browser"||group.id==="database"):true
+        )).map(group=><section className="integrations-section" key={group.id}>
           <h2>{group.name}</h2>
           <div className="integrations-grid">
             {connectors.filter(item=>item.category===group.id).map(item=>{
