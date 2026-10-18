@@ -12,6 +12,7 @@ import { getSupabase } from "@/lib/supabase-browser";
 import { currentSession } from "@/lib/auth-session";
 import { assistantSkills, type AssistantSkill } from "@/lib/assistant-skills";
 import AssistantMarkdown from "@/components/assistant-markdown";
+import AssistantLearningPanel from "@/components/assistant-learning-panel";
 
 type Thread = { id:string; title:string; skill:AssistantSkill; updated_at:string; created_at:string };
 type ChatMessage = {id:string;role:"user"|"assistant";content:string;model?:string|null;skill?:string|null;created_at:string};
@@ -22,7 +23,7 @@ type SiteChange={id:string;title:string;summary:string;task:string;
   edits:Array<{path:string;search:string;replace:string}>;pr_url?:string|null};
 type AssistantResponse = {
   error?:string; threads?:Thread[]; thread?:Thread; messages?:ChatMessage[];
-  title?:string; skill?:string; model?:string; attempts?:number; ok?:boolean;
+  title?:string; skill?:string; customSkill?:string|null; model?:string; attempts?:number; ok?:boolean;
   projectContext?:{loadedDocuments:number;missingDocuments:number;source:"github-public-readonly"}|null;
   sourceInspection?:{
     repository:string;branch:string;indexed:number;truncatedTree:boolean;
@@ -362,7 +363,7 @@ export default function GeneralAssistant() {
           ? ` · GitHub: ${data.projectContext.loadedDocuments} وثائق للقراءة فقط`
           : " · تعذر قراءة وثائق GitHub في هذه المحاولة"
         : "";
-      setNote(`مهارة ${assistantSkills.find(s=>s.id===data.skill)?.title||data.skill} · ${data.model||"نموذج غير محدد"} · ${data.attempts||1} محاولة`+projectNote);
+      setNote(`مهارة ${data.customSkill||assistantSkills.find(s=>s.id===data.skill)?.title||data.skill} · ${data.model||"نموذج غير محدد"} · ${data.attempts||1} محاولة`+projectNote);
       setSourceFiles(data.sourceInspection?.inspected||[]);
       setSourceProject(data.sourceInspection?.repository||"");
       setBrowserResult(data.browserResult||null);
@@ -527,6 +528,7 @@ export default function GeneralAssistant() {
                   "لا نشر تلقائي ولا تغيير على main؛ موافقتك تفتح طلب مراجعة فقط.":
                   "فحص واقتراحات حاليًا. فتح Pull Request يحتاج تصريح GitHub محدودًا لهذا المستودع."}</small>
               </div>}
+              <AssistantLearningPanel threadId={threadId} refreshKey={messages.length}/>
               <div className="assistant-compose-foot">
                 <label><input type="checkbox" checked={allowConditional} onChange={e=>setAllowConditional(e.target.checked)}/>
                   السماح بحصص Gemini وGroq المشروطة

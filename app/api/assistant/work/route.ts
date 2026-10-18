@@ -28,7 +28,8 @@ function response(data:unknown,status=200){return NextResponse.json(data,{status
 
 export async function GET(req:NextRequest){
   try{
-    const {db,userId,organizationId}=await requireAgentSession(req);
+    const session=await requireAgentSession(req);
+    const {db,userId,organizationId}=session;
     const threadId=new URL(req.url).searchParams.get("threadId");
     if(!threadId||!uuid.test(threadId))return response({error:"محادثة غير صحيحة."},400);
     // Reopen a timed-out summarization safely; never auto-repeat executed code.
@@ -54,7 +55,8 @@ export async function GET(req:NextRequest){
 
 export async function POST(req:NextRequest){
   try{
-    const {db,userId,organizationId}=await requireAgentSession(req);
+    const session=await requireAgentSession(req);
+    const {db,userId,organizationId}=session;
     const body=await req.json() as {
       action?:unknown;threadId?:unknown;task?:unknown;runId?:unknown;
       allowConditionalFreeTier?:unknown

@@ -685,3 +685,81 @@
 .workspace-shell .workspace-page .assistant-site-draft>a{
   color:#a4c8ff;text-decoration:underline;text-underline-offset:3px
 }
+
+/* Collapsible memory & skills controls, kept in the existing chat composer. */
+.workspace-shell .workspace-page .assistant-learning{
+  max-width:860px;margin:0 auto 8px;border:1px solid #343434;border-radius:9px;
+  background:#1b1b1b;color:#eee;font-size:11.5px
+}
+.workspace-shell .workspace-page .assistant-learning>summary{
+  display:flex;align-items:center;gap:8px;padding:7px 10px;
+  cursor:pointer;font-weight:700;list-style:none;color:#dedede
+}
+.workspace-shell .workspace-page .assistant-learning>summary::-webkit-details-marker{display:none}
+.workspace-shell .workspace-page .assistant-learning>summary:hover{background:#242424}
+.workspace-shell .workspace-page .assistant-learning-count{
+  background:#383838;border-radius:14px;padding:1px 7px;color:#efefef;
+  margin-inline-start:auto;font-size:10px
+}
+.workspace-shell .workspace-page .assistant-learning-content{
+  display:flex;flex-direction:column;gap:9px;
+  max-height:min(64dvh,540px);overflow-y:auto;border-top:1px solid #383838;
+  padding:10px
+}
+.workspace-shell .workspace-page .assistant-learning-content section{
+  display:flex;flex-direction:column;gap:6px;border-top:1px solid #333;
+  padding:8px 0 0;min-width:0
+}
+.workspace-shell .workspace-page .assistant-learning-content section>strong{font-size:12px;color:#fafafa}
+.workspace-shell .workspace-page .assistant-learning-hint{
+  color:#aaa!important;font-size:10.5px!important;margin:0
+}
+.workspace-shell .workspace-page .assistant-learning-item{
+  display:flex;align-items:center;gap:8px;padding:7px 9px;
+  border:1px solid #393939;border-radius:8px;background:#242424;min-width:0
+}
+.workspace-shell .workspace-page .assistant-learning-item>div{
+  display:flex;flex-direction:column;gap:2px;flex:1;min-width:0
+}
+.workspace-shell .workspace-page .assistant-learning-item b{
+  font-size:11px;color:#f0f0f0;overflow-wrap:anywhere
+}
+.workspace-shell .workspace-page .assistant-learning-item p{
+  margin:0!important;color:#c1c1c1!important;font-size:10.5px!important;
+  line-height:1.6;white-space:pre-wrap;overflow-wrap:anywhere
+}
+.workspace-shell .workspace-page .assistant-learning-item small{
+  color:#9b9b9b!important;font-size:10px;overflow-wrap:anywhere
+}
+.workspace-shell .workspace-page .assistant-learning button{
+  display:inline-flex;align-items:center;gap:4px;justify-content:center;
+  border:1px solid #515151;background:#303030;color:#eee;
+  padding:5px 8px;border-radius:7px;font:700 10px "Cairo",Tahoma,sans-serif;
+  white-space:nowrap;flex-shrink:0
+}
+.workspace-shell .workspace-page .assistant-learning button:disabled{opacity:.45}
+.workspace-shell .workspace-page .assistant-learning button:hover:not(:disabled){background:#414141}
+.workspace-shell .workspace-page .assistant-learning-form{
+  display:flex;flex-direction:column;gap:7px;padding:8px;
+  border:1px solid #3b3b3b;border-radius:8px;background:#202020
+}
+.workspace-shell .workspace-page .assistant-learning-form :is(input:not([type=checkbox]),textarea,select){
+  width:100%;min-height:32px;border:1px solid #494949;border-radius:6px;
+  background:#2b2b2b;color:#f1f1f1;padding:6px 9px;
+  outline-offset:2px;font:11px "Cairo",Tahoma,sans-serif;
+}
+.workspace-shell .workspace-page .assistant-learning-form :is(input,textarea)::placeholder{color:#9c9c9c}
+.workspace-shell .workspace-page .assistant-learning-form-actions{
+  display:flex;align-items:center;justify-content:space-between;gap:9px;flex-wrap:wrap
+}
+.workspace-shell .workspace-page .assistant-learning-form-actions label{
+  display:flex;align-items:center;gap:6px;color:#bdbdbd;font-size:10px
+}
+.workspace-shell .workspace-page .assistant-learning-secondary{align-self:flex-start}
+.workspace-shell .workspace-page .assistant-learning-error{
+  color:#ffc1b5!important;font-size:11px!important;margin:0
+}
+@media(max-width:560px){
+  .workspace-shell .workspace-page .assistant-learning-item{flex-wrap:wrap}
+  .workspace-shell .workspace-page .assistant-learning-item>div{flex-basis:100%}
+}
