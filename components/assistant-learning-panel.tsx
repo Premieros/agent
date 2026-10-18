@@ -13,11 +13,11 @@ type Skill={id:string;title:string;description:string;instructions:string;
 const statuses:Record<string,string>={
   suggested:"بانتظار الموافقة",active:"نشط",disabled:"معطّل"
 };
-export default function AssistantLearningPanel({threadId,refreshKey}:{
-  threadId:string;refreshKey:number
+export default function AssistantLearningPanel({threadId,refreshKey,initialOpen=false}:{
+  threadId:string;refreshKey:number;initialOpen?:boolean
 }){
   const db=getSupabase();
-  const [open,setOpen]=useState(false);
+  const [open,setOpen]=useState(initialOpen);
   const [busy,setBusy]=useState(false);
   const [error,setError]=useState("");
   const [memories,setMemories]=useState<Memory[]>([]);

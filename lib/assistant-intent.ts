@@ -4,16 +4,25 @@
  * Ordinary questions, explanations and content writing stay with the LLM.
  */
 export type AgentIntent =
-  "chat"|"memory-save"|"skill-create"|"studio-overview"|"studio-summary"|
+  "chat"|"learning-list"|"learning-hide"|"memory-save"|"skill-create"|"studio-page-create"|"studio-overview"|"studio-summary"|
   "studio-prepare"|"studio-run"|"site-diagnose"|"site-draft"|"work";
 const normal=(s:string)=>s.trim().toLocaleLowerCase("ar")
   .replace(/[أإآ]/g,"ا").replace(/ى/g,"ي").replace(/ـ/g,"").replace(/[\u064b-\u065f]/g,"");
-export const requiresApproval=(intent:AgentIntent)=>intent!=="chat";
+export const requiresApproval=(intent:AgentIntent)=>!["chat","learning-list","learning-hide"].includes(intent);
 
 export function detectAgentIntent(text:string,lastAssistantModel?:string|null):AgentIntent{
   const q=normal(text);
   const latestStudio=lastAssistantModel==="studio-data";
   if(!q||q.length>4500)return "chat";
+
+  // The library is invisible until requested through the conversation.
+  if(/^(?:اعرض|وريني|افتح|راجع|شوف|show|list)\s+(?:لي\s+)?(?:ذاكرتي|الذاكره|الذاكرة|مهاراتي|المهارات|المعلومات\s+المحفوظة|المعلومات\s+المحفوظة|memory|skills)(?:\s|$)/iu.test(q))
+    return "learning-list";
+  if(/^(?:اقفل|اغلق|اخفي|اخف|close|hide)\s+(?:الذاكره|الذاكرة|المهارات|قائمه\s+المهارات|memory|skills)/iu.test(q))
+    return "learning-hide";
+  if(/^(?:اضف|انشئ|سجل|اعمل|جهز|create|add)\s+(?:لي\s+)?(?:صفحه|صفحة|حساب\s+تسويق|marketing\s+page|page)(?:\s|$)/iu.test(q)||
+     /^(?:صفحه|صفحة)\s+جديده\s+(?:باسم|اسمها|على|في)/iu.test(q))
+    return "studio-page-create";
 
   // Persistent data is only stored after explicit user request and approval.
   if(/^(?:افتكر|احفظ\s+(?:في\s+)?(?:الذاكره|المعلومه)|تذكر|سجل\s+(?:في\s+)?الذاكره|remember\s+that)\s*[:،-]?\s+/iu.test(q))
@@ -25,7 +34,7 @@ export function detectAgentIntent(text:string,lastAssistantModel?:string|null):A
   const site=/\b(?:agent|premieros-ai-sales-agent)\b|(?:موقعي|موقعنا|موقع\s+agent|الموقع\s+بتاعنا|كود\s+الموقع|الموقع\s+الخاص\s+بنا)/iu.test(q);
   const siteOps=/(?:افحص|راجع|تحقق|راقب|حاله|status|diagnos|check|اصلح|عدّل|عدل|غير|حسن|ظبط|رتب|طور)/iu.test(q);
   const siteWrite=/(?:اصلح|عدّل|عدل|غير|حسن|ظبط|رتب|طور|اضف|انشئ|اصنع|تعديل)/iu.test(q);
-  const siteTarget=/(?:موقع|الموقع|الموقعs+الرسمي|كود|واجهة|تصميم|قائمه|قائمة|صفحات)s*.{0,55}(?:agent|premieros-ai-sales-agent)|(?:agent|premieros-ai-sales-agent)s*.{0,55}(?:موقع|واجهة|صفحه|الصفحة|تصميم|قائمة|قائمه|كود)|(?:موقعي|موقعنا|الموقعs+بتاعنا|كودs+الموقع|الموقعs+الخاصs+بنا)/iu.test(q);
+  const siteTarget=/(?:موقع|الموقع|كود|واجهة|تصميم|قائمه|قائمة|صفحات)\s*.{0,55}(?:agent|premieros-ai-sales-agent)|(?:agent|premieros-ai-sales-agent)\s*.{0,55}(?:موقع|واجهة|صفحه|الصفحة|تصميم|قائمة|قائمه|كود)|(?:موقعي|موقعنا|الموقع\s+بتاعنا|كود\s+الموقع|الموقع\s+الخاص\s+بنا)/iu.test(q);
   if(site&&siteTarget&&siteOps){
     return siteWrite?"site-draft":"site-diagnose";
   }
@@ -58,6 +67,9 @@ export function detectAgentIntent(text:string,lastAssistantModel?:string|null):A
 export function describeAgentIntent(intent:AgentIntent){
   const text:Record<AgentIntent,{title:string;detail:string;cost:string}>={
     chat:{title:"محادثة عادية",detail:"إجابة نصية تلقائية.",cost:""},
+    "learning-list":{title:"عرض الذاكرة والمهارات",detail:"فتح إدارة الذاكرة والمهارات عند الطلب فقط.",cost:"بدون AI"},
+    "learning-hide":{title:"إخفاء الذاكرة والمهارات",detail:"إغلاق إدارة الذاكرة والمهارات.",cost:"بدون AI"},
+    "studio-page-create":{title:"إضافة صفحة تسويق في AGENT",detail:"سيُحفظ ملف صفحة جديدة داخل قاعدة AGENT بعد مراجعة بياناته. هذا ليس ربطًا بحساب Meta ولا نشرًا خارجيًا.",cost:"بدون Sandbox أو استدعاء نموذج AI"},
     "memory-save":{title:"حفظ معلومة في ذاكرة AGENT",detail:"ستبقى محفوظة في Supabase ويمكن حذفها لاحقًا.",cost:"بدون Sandbox أو نموذج إضافي"},
     "skill-create":{title:"إنشاء مهارة مخصصة",detail:"سيُحفظ مقترح مهارة للمراجعة، ولن يُفعّل قبل موافقتك.",cost:"بدون Sandbox"},
     "studio-overview":{title:"قراءة الصفحات والمهام",detail:"استعراض بيانات المؤسسة المصرّح لك بها، بدون تعديل.",cost:"بدون Sandbox أو نموذج AI"},

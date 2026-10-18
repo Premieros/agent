@@ -6,6 +6,7 @@
  * Studio and Site Manager calls regardless of the selected provider.
  */
 import type {AgentSession} from "@/lib/agent-server";
+import {siteWriteReady} from "@/lib/site-manager";
 
 export const AGENT_CORE_IDENTITY = [
   "هوية التطبيق الثابتة: أنت AGENT، المساعد داخل نظام Premieros.",
@@ -25,12 +26,14 @@ export function agentSystemInstructions(instructions:string,engineId:string){
     "\nتعليمات المهمة الحالية:\n"+instructions;
 }
 
-export type AgentSelfQuestion = "identity"|"memory"|"skills";
+export type AgentSelfQuestion = "identity"|"memory"|"skills"|"capabilities";
 export function agentSelfQuestion(text:string):AgentSelfQuestion|null{
   const q=text.trim();
   // Questions about AGENT itself only. Never intercept unrelated work or
   // explicit instructions such as "افتكر..." or "أنشئ مهارة".
-  if(q.length<3||q.length>230)return null;
+  if(q.length<3||q.length>260)return null;
+  if(/^(?:ايه|إيه|ما|ماهي|ما\s+هي|هل)\s+(?:حدودك|قدراتك|صلاحياتك|تقدر\s+(?:تعمل|تنفذ|تنفّذ|ترسل|تبعت|تعدل|تفتح)|تستطيع\s+(?:تنفيذ|ارسال|إرسال|تعديل))|^(?:هل\s+)?(?:تقدر|تستطيع|يمكنك)\s+(?:تنفيذ|تشغيل|ارسال|إرسال|تعديل|اضافة|إضافة|تغيير|ادارة|إدارة)|^(?:ايه|إيه)\s+(?:اللي\s+)?(?:تقدر\s+تعمله|ممكن\s+تعمله)|^(?:what\s+can\s+you\s+do|your\s+capabilities)/iu.test(q))
+    return "capabilities";
   if(/^(?:هل\s+)?(?:عندك|لديك|عندكوا)\s+(?:ذاكرة|ذاكره|memory)(?:\s|$|[؟?])/iu.test(q)||
     /^(?:هل\s+)?(?:بتفتكر|بتنسى|تنسى|تتذكر)\s+(?:المحادثات|الرسائل|المعلومات|الذاكرة|كل\s+حاجة)/iu.test(q)||
     /^(?:ذاكرتك|الذاكرة\s+(?:عندك|في\s+AGENT)|your memory)/iu.test(q)||
@@ -62,8 +65,16 @@ export async function answerAgentSelfQuestion(s:AgentSession,question:AgentSelfQ
     return intro+"\n\nعندي ذاكرة معتمدة ومحفوظة في **Supabase** مستقلة عن نموذج الذكاء."+
       (active===null?" عدد عناصر الذاكرة غير متاح الآن.":" عندك **"+active+"** معلومة نشطة محفوظة.")+
       "\n\nأستخدم المعلومات المناسبة عند السؤال، لكن مش كل رسائل المحادثات القديمة بتدخل في السياق تلقائيًا. "+
-      "تقدر تراجعها وتضيفها وتحذفها من **«الذاكرة والمهارات»**.";
+      "تقدر تراجعها وتضيفها وتحذفها بكتابة **«اعرض ذاكرتي»** في المحادثة.";
   }
+  if(question==="capabilities")return intro+"\n\n"+
+    "**أقدر أنفذ دلوقتي داخل نظام AGENT:** قراءة بيانات الصفحات والمهام، إنشاء صفحات تسويق ومهام بعد تأكيدك، تشغيل الوكلاء لإنتاج مسودات، إدارة الذاكرة والمهارات، فحص الموقع وإعداد مقترحات تعديل، واستخدام Sandbox لتنفيذ اختبارات كود ضمن الحصة وبعد الموافقة. "+
+    "الأدوات دي مش مجرد كلام؛ ليها مسارات تنفيذ في التطبيق وتتحقق من صلاحية حسابك.\n\n"+
+    (siteWriteReady()
+      ?"**GitHub:** تصريح إنشاء Pull Request للمراجعة مضبوط، لكن الدمج والنشر مش تلقائيين.\n\n"
+      :"**GitHub:** أقدر أقرأ الكود وأجهز المقترح، لكن فتح Pull Request يحتاج تصريح GitHub محدود للمستودع.\n\n")+
+    "**غير متصل حاليًا:** إرسال بريد حقيقي من حسابك، النشر على Meta، وإدارة قواعد بيانات خارج قاعدة AGENT. دي بتحتاج ربط رسمي وصلاحيات محددة. "+
+    "ما فيش تجاوز لتفويض الحساب أو حدود الحصص؛ لو أداة غير متصلة هقول لك بدل ما أدّعي التنفيذ.";
   const active=await countRecords(s,"assistant_custom_skills");
   return intro+"\n\nعندي مهارات أساسية داخل التطبيق، ومهارات مخصصة بتتفعّل بعد موافقتك."+
     (active===null?" عدد المهارات المخصصة غير متاح الآن.":" عندك **"+active+"** مهارة مخصصة مفعّلة.")+

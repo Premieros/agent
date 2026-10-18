@@ -58,6 +58,11 @@ export default function GeneralAssistant() {
   const [allowConditional,setAllowConditional]=useState(false);
   const [activeArea,setActiveArea]=useState<"studio"|"site"|null>(null);
   const [pendingAction,setPendingAction]=useState<AgentApproval|null>(null);
+  const [showLearning,setShowLearning]=useState(false);
+  const [pageName,setPageName]=useState("");
+  const [pagePlatform,setPagePlatform]=useState<"facebook"|"instagram">("facebook");
+  const [pageContext,setPageContext]=useState("");
+  const [pageAudience,setPageAudience]=useState("");
   const [memoryText,setMemoryText]=useState("");
   const [memorySubject,setMemorySubject]=useState("");
   const [memoryGlobal,setMemoryGlobal]=useState(true);
@@ -132,7 +137,7 @@ export default function GeneralAssistant() {
       setThreadId(id);
       setMessages(data.messages||[]);
       setSkill("auto");
-      setPendingAction(null);
+      setPendingAction(null);setShowLearning(false);
       const lastReply=(data.messages||[]).filter(m=>m.role==="assistant").at(-1);
       setActiveArea(lastReply?.model==="studio-data"?"studio":
         lastReply?.model==="site-manager"?"site":null);
@@ -172,7 +177,7 @@ export default function GeneralAssistant() {
     if(busy)return;
     setBusy("create");setError("");setNote("");setWorkSteps([]);setWorkProgress("");setPendingWork(null);
     setSiteChange(null);setStudioDraft(null);setStudioMissions([]);setStudioPages([]);
-    setStudioPageId("");setStudioMissionId("");setPendingAction(null);setActiveArea(null);
+    setStudioPageId("");setStudioMissionId("");setPendingAction(null);setActiveArea(null);setShowLearning(false);
     try {
       const res=await fetch("/api/assistant",{
         method:"POST",headers:await authHeaders(),
@@ -203,7 +208,7 @@ export default function GeneralAssistant() {
       setThreads(remaining);
       if(id===threadId){
         setThreadId("");setMessages([]);setNote("");setBrowserResult(null);setPendingWork(null);
-        setPendingAction(null);setActiveArea(null);
+        setPendingAction(null);setActiveArea(null);setShowLearning(false);
       }
     }catch(e){setError(e instanceof Error?e.message:"تعذر الحذف.");}
     finally{setBusy("");}
@@ -244,7 +249,7 @@ export default function GeneralAssistant() {
     }catch{/* Marketing tools stay optional and don't block normal chat. */}
   }
 
-  async function studioRequest(id:string,action:"overview"|"prepare"|"confirm"|"summary",
+  async function studioRequest(id:string,action:"overview"|"prepare"|"confirm"|"summary"|"create_page",
     extra:Record<string,unknown>={}):Promise<StudioResponse>{
     const res=await fetch("/api/assistant/studio",{
       method:"POST",headers:await authHeaders(),
@@ -306,6 +311,12 @@ export default function GeneralAssistant() {
       const memory=extractMemory(text);
       setMemoryText(memory);setMemorySubject(memory.slice(0,85));
       setMemoryGlobal(true);
+    }
+    if(intent==="studio-page-create"){
+      setPageName(text.replace(/^(?:أضف|اضف|أنشئ|انشئ|سجل|اعمل|جهز|create|add)\s+(?:لي\s+)?(?:صفحة|صفحه|page|marketing\s+page)\s*/iu,"")
+        .replace(/^(?:اسمها|باسم)\s*/iu,"").trim().slice(0,120));
+      setPagePlatform(/(?:instagram|انستجرام|إنستجرام|انستغرام)/iu.test(text)?"instagram":"facebook");
+      setPageContext("");setPageAudience("");
     }
     if(intent==="skill-create"){
       const name=text.replace(/^(?:أنشئ|انشئ|اعمل|أضف|اضف|اصنع|جهز)\s+(?:لي\s+)?(?:مهارة|مهاره|skill)\s*/iu,"")
@@ -453,6 +464,12 @@ export default function GeneralAssistant() {
     if(busy||!message||message.length>4500)return;
     const previous=messages.filter(m=>m.role==="assistant").at(-1);
     const intent=detectAgentIntent(message,previous?.model);
+    if(intent==="learning-list"){
+      setShowLearning(true);setDraft("");setNote("دي معلومات AGENT المحفوظة فعليًا؛ تقدر تراجعها أو تحذفها.");return;
+    }
+    if(intent==="learning-hide"){
+      setShowLearning(false);setDraft("");setNote("تم إغلاق عرض الذاكرة والمهارات.");return;
+    }
     if(!approved&&intent!=="chat"){requestApproval(intent,message);return;}
     setBusy("send");setError("");setNote("");setWorkSteps([]);setWorkProgress("");
     try {
@@ -491,6 +508,18 @@ export default function GeneralAssistant() {
         if(data.id)setPendingAction({
           intent:"approve-skill",text:"تفعيل المهارة الجديدة",title:newSkillTitle,id:data.id
         });
+        return;
+      }
+      if(intent==="studio-page-create"){
+        setActiveArea("studio");
+        await studioRequest(id,"create_page",{
+          pageName:pageName.trim(),platform:pagePlatform,
+          productContext:pageContext.trim(),targetAudience:pageAudience.trim(),
+          brandVoice:"مصري احترافي وواضح"
+        });
+        await loadStudioState(id);
+        setMessages(current=>current.filter(m=>m.id!==optimistic.id));
+        setNote("تم إنشاء صفحة تسويق حقيقية في قاعدة AGENT. لم يتم ربط Meta أو نشر محتوى.");
         return;
       }
       if(intent==="studio-run"){
@@ -826,7 +855,13 @@ export default function GeneralAssistant() {
                   "لا نشر تلقائي ولا تغيير على main؛ موافقتك تفتح طلب مراجعة فقط.":
                   "فحص واقتراحات حاليًا. فتح Pull Request يحتاج تصريح GitHub محدودًا لهذا المستودع."}</small>
               </div>}
-              <AssistantLearningPanel threadId={threadId} refreshKey={messages.length}/>
+              {showLearning&&<div className="assistant-on-demand-learning">
+                <div className="assistant-on-demand-learning-head">
+                  <strong>الذاكرة والمهارات المحفوظة</strong>
+                  <button type="button" onClick={()=>setShowLearning(false)} aria-label="إغلاق الذاكرة والمهارات">إغلاق ×</button>
+                </div>
+                <AssistantLearningPanel threadId={threadId} refreshKey={messages.length} initialOpen/>
+              </div>}
               <div className="assistant-compose-foot">
                 <label><input type="checkbox" checked={allowConditional}
                   onChange={e=>setAllowConditional(e.target.checked)}/>
@@ -856,6 +891,28 @@ export default function GeneralAssistant() {
             <strong>{pendingAction.title}</strong>
             <p>{pendingAction.detail||"مقترح محفوظ ينتظر مراجعتك."}</p>
           </div>}
+        {pendingAction.intent==="studio-page-create"&&<div className="agent-consent-fields">
+          <label>اسم صفحة التسويق
+            <input value={pageName} maxLength={120} autoFocus
+              onChange={e=>setPageName(e.target.value)}/>
+          </label>
+          <label>المنصة
+            <select value={pagePlatform}
+              onChange={e=>setPagePlatform(e.target.value as "facebook"|"instagram")}>
+              <option value="facebook">Facebook</option>
+              <option value="instagram">Instagram</option>
+            </select>
+          </label>
+          <label>وصف النشاط
+            <textarea value={pageContext} maxLength={4000} rows={2}
+              onChange={e=>setPageContext(e.target.value)} placeholder="اختياري"/>
+          </label>
+          <label>الجمهور المستهدف
+            <textarea value={pageAudience} maxLength={2000} rows={2}
+              onChange={e=>setPageAudience(e.target.value)} placeholder="اختياري"/>
+          </label>
+          <small>ده ملف داخلي على Supabase في مؤسستك، مش ربط أو نشر على Meta.</small>
+        </div>}
         {pendingAction.intent==="memory-save"&&<div className="agent-consent-fields">
           <label>عنوان المعلومة
             <input value={memorySubject} maxLength={110}
@@ -926,6 +983,8 @@ export default function GeneralAssistant() {
             disabled={Boolean(busy)||
               (pendingAction.intent==="memory-save"&&
                 (memorySubject.trim().length<3||memoryText.trim().length<4))||
+              (pendingAction.intent==="studio-page-create"&&
+                (pageName.trim().length<2||pageName.trim().length>120))||
               (pendingAction.intent==="skill-create"&&
                 (newSkillTitle.trim().length<3||newSkillPhrase.trim().length<4||
                   newSkillInstructions.trim().length<12))||

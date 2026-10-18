@@ -920,3 +920,26 @@
   .agent-consent-head h2{font-size:14px}
   .workspace-shell .workspace-page .assistant-auto-skill{font-size:10px}
 }
+
+/* On-demand persistent memory/skills: never occupy chat by default. */
+.workspace-shell .workspace-page .assistant-on-demand-learning{
+  max-width:860px;margin:0 auto 9px;
+  border:1px solid #424242;border-radius:10px;
+  background:#1d1d1d;padding:7px;
+  color:#eeeeee
+}
+.workspace-shell .workspace-page .assistant-on-demand-learning-head{
+  display:flex;align-items:center;justify-content:space-between;gap:10px;
+  padding:3px 5px 8px
+}
+.workspace-shell .workspace-page .assistant-on-demand-learning-head strong{
+  font:700 12px "Cairo",Tahoma,sans-serif;color:#f4f4f4
+}
+.workspace-shell .workspace-page .assistant-on-demand-learning-head button{
+  border:1px solid #555;background:#333;color:#eee;
+  border-radius:7px;padding:4px 9px;
+  font:700 10px "Cairo",Tahoma,sans-serif
+}
+.workspace-shell .workspace-page .assistant-on-demand-learning .assistant-learning{
+  margin-bottom:0
+}

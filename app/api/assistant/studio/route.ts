@@ -96,9 +96,51 @@ export async function POST(req:NextRequest){
     const s=await requireAgentSession(req);
     const body=await req.json() as{
       action?:unknown;threadId?:unknown;task?:unknown;pageId?:unknown;
-      objective?:unknown;draftId?:unknown;missionId?:unknown
+      objective?:unknown;draftId?:unknown;missionId?:unknown;
+      pageName?:unknown;platform?:unknown;productContext?:unknown;
+      targetAudience?:unknown;brandVoice?:unknown
     };
     const threadId=await checkThread(s,body.threadId);
+    if(body.action==="create_page"){
+      const field=(value:unknown,max:number)=>typeof value==="string"?value.trim().slice(0,max+1):"";
+      const name=field(body.pageName,120);
+      const platform=body.platform;
+      const productContext=field(body.productContext,4000);
+      const targetAudience=field(body.targetAudience,2000);
+      const brandVoice=field(body.brandVoice,500)||"مصري احترافي وواضح";
+      if(name.length<2||name.length>120||
+        (platform!=="facebook"&&platform!=="instagram")||
+        productContext.length>4000||targetAudience.length>2000||
+        brandVoice.length>500)
+        return reply({error:"راجع اسم الصفحة (2–120 حرفًا)، والمنصة، ومعلومات النشاط."},400);
+      const {data:known,error:lookupError}=await s.db.from("marketing_pages")
+        .select("id,name,created_at").eq("organization_id",s.organizationId)
+        .order("created_at",{ascending:false}).limit(90);
+      if(lookupError)throw lookupError;
+      if((known||[]).length>=80)
+        return reply({error:"وصلت للحد الحالي من الصفحات المسجلة في الاستوديو."},429);
+      if((known||[]).some(p=>p.name.trim().toLocaleLowerCase("ar")===name.toLocaleLowerCase("ar")))
+        return reply({error:"فيه صفحة بنفس الاسم مسجلة بالفعل. اختر اسمًا مختلفًا."},409);
+      const tenMinutesAgo=Date.now()-10*60_000;
+      if((known||[]).filter(p=>Date.parse(p.created_at)>=tenMinutesAgo).length>=5)
+        return reply({error:"الحد 5 صفحات جديدة في 10 دقائق؛ حاول لاحقًا."},429);
+      const {data:page,error:createError}=await s.db.from("marketing_pages")
+        .insert({organization_id:s.organizationId,name,platform,
+          product_context:productContext,target_audience:targetAudience,
+          brand_voice:brandVoice})
+        .select("id,name,platform").single();
+      if(createError||!page)throw createError||new Error("PAGE_CREATE_FAILED");
+      let messages=[];
+      try{
+        messages=await saveExchange(s,threadId,
+          "أضف صفحة التسويق "+name,
+          "**تم إنشاء ملف صفحة "+name+" داخل AGENT** ✅\n\n"+
+          "المنصة: "+(platform==="facebook"?"Facebook":"Instagram")+
+          "\nالحالة: غير متصلة بحساب Meta. ده ملف إدارة داخلي فقط؛ لم يتم نشر محتوى أو ربط حساب خارجي.");
+      }catch{console.warn("AGENT page created but chat history unavailable");}
+      const data=await snapshot(s,threadId);
+      return reply({ok:true,pageId:page.id,page,messages,...data});
+    }
     if(body.action==="overview"){
       const data=await snapshot(s,threadId);
       const pageNames=new Map(data.pages.map(p=>[p.id,p.name]));
