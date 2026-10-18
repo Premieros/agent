@@ -8,6 +8,8 @@ import {
   MessageCircle, PlugZap, RefreshCw, ShieldCheck
 } from "lucide-react";
 import { getSupabase } from "@/lib/supabase-browser";
+import { currentSession } from "@/lib/auth-session";
+import GithubConnectionPanel from "@/components/github-connection-panel";
 import type { ConnectorDescriptor,ConnectorId } from "@/lib/assistant-integrations";
 
 type ConnectorState=ConnectorDescriptor & {toggleable:boolean;enabled:boolean};
@@ -44,7 +46,7 @@ export default function AssistantIntegrationsHub(){
     if(!db){setError("تعذر الوصول للجلسة.");setLoading(false);return;}
     setLoading(true);setError("");
     try{
-      const {data:{session}}=await db.auth.getSession();
+      const session=await currentSession(db);
       if(!session?.access_token)throw new Error("سجّل دخولك أولًا من صفحة العملاء.");
       const response=await fetch("/api/assistant/integrations",{
         headers:{Authorization:`Bearer ${session.access_token}`},cache:"no-store"
@@ -61,7 +63,7 @@ export default function AssistantIntegrationsHub(){
     if(!db||setting)return;
     setSetting(connectorId);setError("");
     try{
-      const {data:{session}}=await db.auth.getSession();
+      const session=await currentSession(db);
       if(!session?.access_token)throw new Error("سجّل الدخول لإدارة إضافاتك.");
       const resp=await fetch("/api/assistant/integrations",{
         method:"POST",
@@ -103,6 +105,7 @@ export default function AssistantIntegrationsHub(){
           <div><strong>{aiProviders.length}</strong><span>مزوّد AI بمفتاح سيرفر</span></div>
           <div><strong>{connectors.filter(c=>c.status==="credentials-present").length}</strong><span>وصلات مفاتيحها موجودة وتحتاج تفعيل</span></div>
         </div>
+        {(categoryView==="all"||categoryView==="developer")&&<GithubConnectionPanel/>}
         {groups.filter(group=>categoryView==="all"||(
           categoryView==="social"?group.id==="social":
           categoryView==="developer"?(group.id==="developer"||group.id==="browser"||group.id==="database"):true
