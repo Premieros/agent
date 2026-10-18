@@ -19,6 +19,22 @@ async function ownThread(s:AgentSession,id:unknown){
   if(error)throw error;
   return Boolean(data);
 }
+async function recordApprovedAction(s:AgentSession,id:unknown,request:string,result:string){
+  if(!(await ownThread(s,id)))return [];
+  const now=Date.now();
+  const {data,error}=await s.db.from("assistant_messages").insert([
+    {organization_id:s.organizationId,thread_id:id,role:"user",
+      content:request.slice(0,4500),skill:"general",created_at:new Date(now).toISOString()},
+    {organization_id:s.organizationId,thread_id:id,role:"assistant",model:"agent-core",
+      content:result,skill:"general",created_at:new Date(now+2).toISOString()}
+  ]).select("id,role,content,model,skill,created_at");
+  // The memory/skill has already been stored; a chat-history logging failure
+  // must not falsely report that saving it failed and invite duplicate writes.
+  if(error){console.warn("AGENT approved-action chat logging unavailable");return [];}
+  await s.db.from("assistant_threads").update({updated_at:new Date().toISOString()})
+    .eq("id",id).eq("user_id",s.userId).eq("organization_id",s.organizationId);
+  return data||[];
+}
 export async function GET(req:NextRequest){
   try{
     const s=await requireAgentSession(req);
@@ -68,7 +84,10 @@ export async function POST(req:NextRequest){
         subject,content,status:"active",source:"user"
       }).select("id").single();
       if(error)throw error;
-      return respond({ok:true,id:data.id});
+      let messages=null;
+      if(b.threadId)messages=await recordApprovedAction(s,b.threadId,
+        "افتكر: "+content,"تم حفظ **"+subject+"** في ذاكرة AGENT المعتمدة. يمكن مراجعتها وحذفها من الذاكرة والمهارات.");
+      return respond({ok:true,id:data.id,messages});
     }
     if(b.action==="create_skill"){
       const title=clean(b.title,3,90);
@@ -92,7 +111,10 @@ export async function POST(req:NextRequest){
         status:"suggested",source:"user"
       }).select("id").single();
       if(error)throw error;
-      return respond({ok:true,id:data.id});
+      let messages=null;
+      if(b.threadId)messages=await recordApprovedAction(s,b.threadId,
+        "أنشئ مهارة: "+title,"تم إعداد مقترح مهارة **"+title+"** للمراجعة. لن تعمل قبل موافقتك على تفعيلها.");
+      return respond({ok:true,id:data.id,messages});
     }
     const memoryActions:Record<string,"active"|"delete">={
       approve_memory:"active",delete_memory:"delete"

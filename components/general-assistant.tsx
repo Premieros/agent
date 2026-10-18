@@ -13,6 +13,7 @@ import { currentSession } from "@/lib/auth-session";
 import { assistantSkills, type AssistantSkill } from "@/lib/assistant-skills";
 import AssistantMarkdown from "@/components/assistant-markdown";
 import AssistantLearningPanel from "@/components/assistant-learning-panel";
+import {detectAgentIntent,describeAgentIntent,extractMemory,type AgentIntent} from "@/lib/assistant-intent";
 
 type Thread = { id:string; title:string; skill:AssistantSkill; updated_at:string; created_at:string };
 type ChatMessage = {id:string;role:"user"|"assistant";content:string;model?:string|null;skill?:string|null;created_at:string};
@@ -25,6 +26,8 @@ type StudioDraft={id:string;page_id:string;objective:string;brief:string;
 type StudioResponse={error?:string;ok?:boolean;messages?:ChatMessage[];
   pages?:StudioPage[];missions?:StudioMission[];drafts?:StudioDraft[];
   draft?:StudioDraft;missionId?:string};
+type AgentApproval={intent:AgentIntent|"studio-confirm"|"site-approve"|"work-resume"|
+  "approve-memory"|"approve-skill";text:string;id?:string;title?:string;detail?:string};
 type SiteChange={id:string;title:string;summary:string;task:string;
   status:"draft"|"opening_pr"|"pr_opened"|"failed";
   edits:Array<{path:string;search:string;replace:string}>;pr_url?:string|null};
@@ -52,10 +55,16 @@ export default function GeneralAssistant() {
   const [messages,setMessages]=useState<ChatMessage[]>([]);
   const [draft,setDraft]=useState("");
   const [skill,setSkill]=useState<AssistantSkill>("auto");
-  const [allowConditional,setAllowConditional]=useState(true);
-  const [workMode,setWorkMode]=useState(false);
-  const [siteMode,setSiteMode]=useState(false);
-  const [studioMode,setStudioMode]=useState(false);
+  const [allowConditional,setAllowConditional]=useState(false);
+  const [activeArea,setActiveArea]=useState<"studio"|"site"|null>(null);
+  const [pendingAction,setPendingAction]=useState<AgentApproval|null>(null);
+  const [memoryText,setMemoryText]=useState("");
+  const [memorySubject,setMemorySubject]=useState("");
+  const [memoryGlobal,setMemoryGlobal]=useState(true);
+  const [newSkillTitle,setNewSkillTitle]=useState("");
+  const [newSkillPhrase,setNewSkillPhrase]=useState("");
+  const [newSkillInstructions,setNewSkillInstructions]=useState("");
+  const seenSuggestions=useRef(new Set<string>());
   const [studioPages,setStudioPages]=useState<StudioPage[]>([]);
   const [studioMissions,setStudioMissions]=useState<StudioMission[]>([]);
   const [studioDraft,setStudioDraft]=useState<StudioDraft|null>(null);
@@ -122,7 +131,11 @@ export default function GeneralAssistant() {
       if(!res.ok)throw new Error(data.error||"تعذر فتح المحادثة.");
       setThreadId(id);
       setMessages(data.messages||[]);
-      setSkill((data.thread?.skill||"auto") as AssistantSkill);
+      setSkill("auto");
+      setPendingAction(null);
+      const lastReply=(data.messages||[]).filter(m=>m.role==="assistant").at(-1);
+      setActiveArea(lastReply?.model==="studio-data"?"studio":
+        lastReply?.model==="site-manager"?"site":null);
       setThreads(data.threads||[]);
       setShowSidebar(false);
       window.dispatchEvent(new Event("agent:close-navigation"));
@@ -159,11 +172,11 @@ export default function GeneralAssistant() {
     if(busy)return;
     setBusy("create");setError("");setNote("");setWorkSteps([]);setWorkProgress("");setPendingWork(null);
     setSiteChange(null);setStudioDraft(null);setStudioMissions([]);setStudioPages([]);
-    setStudioPageId("");setStudioMissionId("");
+    setStudioPageId("");setStudioMissionId("");setPendingAction(null);setActiveArea(null);
     try {
       const res=await fetch("/api/assistant",{
         method:"POST",headers:await authHeaders(),
-        body:JSON.stringify({action:"create",skill})
+        body:JSON.stringify({action:"create",skill:"auto"})
       });
       const data=await res.json() as AssistantResponse;
       if(!res.ok||!data.thread)throw new Error(data.error||"تعذر إنشاء المحادثة.");
@@ -190,6 +203,7 @@ export default function GeneralAssistant() {
       setThreads(remaining);
       if(id===threadId){
         setThreadId("");setMessages([]);setNote("");setBrowserResult(null);setPendingWork(null);
+        setPendingAction(null);setActiveArea(null);
       }
     }catch(e){setError(e instanceof Error?e.message:"تعذر الحذف.");}
     finally{setBusy("");}
@@ -248,31 +262,86 @@ export default function GeneralAssistant() {
     return data;
   }
 
-  async function confirmStudioDraft(){
-    if(busy||!threadId||studioDraft?.status!=="draft")return;
-    const pageName=studioPages.find(p=>p.id===studioDraft.page_id)?.name||"الصفحة";
-    if(!window.confirm("حفظ مهمة "+pageName+" في قاعدة AGENT؟ لن تعمل الوكلاء أو يُنشر شيء تلقائيًا."))return;
+  async function suggestLearningApproval(id:string){
+    try{
+      const res=await fetch("/api/assistant/learning?threadId="+encodeURIComponent(id),{
+        headers:await authHeaders(),cache:"no-store"
+      });
+      if(!res.ok)return;
+      const data=await res.json() as {
+        memories?:Array<{id:string;subject:string;content:string;status:string;source:string}>;
+        skills?:Array<{id:string;title:string;instructions:string;status:string;source:string}>;
+      };
+      const memory=data.memories?.find(x=>x.status==="suggested"&&x.source==="automatic"&&
+        !seenSuggestions.current.has(x.id));
+      const found=memory||data.skills?.find(x=>x.status==="suggested"&&x.source==="automatic"&&
+        !seenSuggestions.current.has(x.id));
+      if(!found)return;
+      seenSuggestions.current.add(found.id);
+      setPendingAction({intent:memory?"approve-memory":"approve-skill",
+        text:memory?"اعتماد معلومة مقترحة":"تفعيل مهارة مقترحة",
+        title:memory?memory.subject:(found as {title?:string}).title,
+        detail:memory?memory.content:(found as {instructions?:string}).instructions,
+        id:found.id});
+    }catch{/* Suggestions never block the chat. */}
+  }
+
+  async function postLearning(action:string,payload:Record<string,unknown>,id:string){
+    const res=await fetch("/api/assistant/learning",{
+      method:"POST",headers:await authHeaders(),
+      body:JSON.stringify({action,threadId:id,...payload})
+    });
+    const data=await res.json() as {error?:string;id?:string;messages?:ChatMessage[]};
+    if(!res.ok)throw new Error(data.error||"تعذر تحديث الذاكرة أو المهارة.");
+    if(data.messages?.length)setMessages(current=>[
+      ...current.filter(m=>!m.id.startsWith("pending-")),...data.messages!
+    ]);
+    return data;
+  }
+
+  function requestApproval(intent:AgentApproval["intent"],text:string,id?:string){
+    if(busy)return;
+    setPendingAction({intent,text,id});
+    if(intent==="memory-save"){
+      const memory=extractMemory(text);
+      setMemoryText(memory);setMemorySubject(memory.slice(0,85));
+      setMemoryGlobal(true);
+    }
+    if(intent==="skill-create"){
+      const name=text.replace(/^(?:أنشئ|انشئ|اعمل|أضف|اضف|اصنع|جهز)\s+(?:لي\s+)?(?:مهارة|مهاره|skill)\s*/iu,"")
+        .replace(/^(?:اسمها|باسم)\s*/iu,"").trim().slice(0,76);
+      const title=name.slice(0,65)||"مهارة مخصصة";
+      setNewSkillTitle(title);
+      setNewSkillPhrase(title.length>=4?title:"مهارة مخصصة");
+      setNewSkillInstructions("عند طلب هذه المهمة، التزم بهذه المتطلبات: "+text.slice(0,700));
+    }
+    if(intent.startsWith("studio")&&threadId)void loadStudioState(threadId);
+    if(intent.startsWith("site")&&threadId)void loadSiteState(threadId);
+  }
+
+  async function confirmStudioDraft(confirmed=false,idOverride=threadId){
+    if(busy||!idOverride||studioDraft?.status!=="draft")return;
+    if(!confirmed){requestApproval("studio-confirm","تأكيد حفظ المهمة في AGENT");return;}
     setBusy("studio-create");setError("");setNote("");
     try{
-      await studioRequest(threadId,"confirm",{draftId:studioDraft.id});
-      await loadStudioState(threadId);
+      await studioRequest(idOverride,"confirm",{draftId:studioDraft.id});
+      await loadStudioState(idOverride);
       setNote("تم حفظ المهمة. تشغيل الوكلاء خطوة منفصلة تحتاج موافقتك.");
     }catch(e){setError(e instanceof Error?e.message:"تعذر حفظ المهمة.");}
     finally{setBusy("");}
   }
 
-  async function runStudioMission(){
+  async function runStudioMission(confirmed=false,idOverride=threadId){
+    if((busy&&busy!=="send")||!idOverride)return;
+    if(!confirmed){requestApproval("studio-run","شغّل الوكلاء للمهمة المحددة");return;}
     const id=studioMissionId||
       (studioDraft?.status==="created"?studioDraft.mission_id:null)||
-      (!studioDraft?studioMissions[0]?.id:null);
-    if(busy||!threadId||!id)return;
+      (!studioDraft&&studioMissions.length===1?studioMissions[0].id:null);
+    if(!id){setError("حدد المهمة المطلوبة قبل التشغيل، لتجنب تشغيل مهمة أخرى بالخطأ.");return;}
     const selected=studioMissions.find(m=>m.id===id);
     if(selected&&!["queued","failed"].includes(selected.status)){
       setError("المهمة ليست جاهزة للتشغيل. راجع حالتها في الاستوديو.");return;
     }
-    if(!window.confirm(
-      "تشغيل الوكلاء في الوضع الاقتصادي لمهمة محفوظة؟ سيستخدم نموذج AI من الحصة المتاحة؛ لا نشر ولا إنفاق إعلاني."
-    ))return;
     setBusy("studio-run");setError("");setNote("جارٍ توزيع العمل على الوكلاء...");
     try{
       const res=await fetch("/api/agents/run",{
@@ -283,9 +352,9 @@ export default function GeneralAssistant() {
       const result=await res.json() as {error?:string;agents?:number;apiCalls?:number};
       if(!res.ok)throw new Error(result.error||"تعذر تشغيل الوكلاء.");
       let summarySaved=true;
-      try{await studioRequest(threadId,"summary",{missionId:id});}
+      try{await studioRequest(idOverride,"summary",{missionId:id});}
       catch{summarySaved=false;}
-      await loadStudioState(threadId);
+      await loadStudioState(idOverride);
       setNote("تم حفظ "+(result.agents||0)+" مخرجات في الاستوديو للمراجعة."+
         (summarySaved?"":" تعذر التلخيص؛ يمكنك الضغط على تلخيص المخرجات لاحقًا.")+
         " لا نشر خارجي.");
@@ -307,11 +376,9 @@ export default function GeneralAssistant() {
     }catch{/* Site manager remains optional. */}
   }
 
-  async function approveSiteChange(){
+  async function approveSiteChange(confirmed=false){
     if(!siteChange||siteChange.status!=="draft"||busy)return;
-    if(!window.confirm(
-      "هل توافق على فتح Pull Request في Premieros/agent للمراجعة؟ لن يتم الدمج أو النشر تلقائيًا."
-    ))return;
+    if(!confirmed){requestApproval("site-approve","فتح طلب مراجعة التعديل على GitHub");return;}
     setBusy("site-approve");setError("");
     try{
       const res=await fetch("/api/assistant/site",{
@@ -381,9 +448,12 @@ export default function GeneralAssistant() {
     }
   }
 
-  async function sendMessage(text=draft) {
+  async function sendMessage(text=draft,approved=false) {
     const message=text.trim();
     if(busy||!message||message.length>4500)return;
+    const previous=messages.filter(m=>m.role==="assistant").at(-1);
+    const intent=detectAgentIntent(message,previous?.model);
+    if(!approved&&intent!=="chat"){requestApproval(intent,message);return;}
     setBusy("send");setError("");setNote("");setWorkSteps([]);setWorkProgress("");
     try {
       let id=threadId;
@@ -400,28 +470,55 @@ export default function GeneralAssistant() {
       const optimistic:ChatMessage={id:"pending-"+Date.now(),role:"user",content:message,created_at:new Date().toISOString()};
       setMessages(current=>[...current,optimistic]);
       setDraft("");
-      if(studioMode){
-        const creating=/(?:انشئ|أنشئ|اضف|أضف|اعمل|جهز|جهّز|سجل|مهمة\s+جديدة|create|new task)/i.test(message);
-        const summarizing=/(?:لخص|لخّص|ملخص|مخرجات|نتائج|summary|summarize)/i.test(message);
-        const running=/(?:شغّل|شغل\s+(?:الوكلاء|المهمة)|تشغيل\s+(?:الوكلاء|المهمة)|وزّع|وزع\s+على\s+الوكلاء|run agents)/i.test(message);
-        if(running){
-          setMessages(current=>current.filter(m=>m.id!==optimistic.id));
-          setDraft(message);
-          setNote("تشغيل الوكلاء يحتاج تأكيدًا مستقلًا من الزر داخل لوحة إدارة المهام.");
-          return;
-        }
-        await studioRequest(id,creating?"prepare":summarizing?"summary":"overview",{
-          task:message,
-          pageId:creating&&studioPageId?studioPageId:undefined,
-          missionId:summarizing&&studioMissionId?studioMissionId:undefined
-        });
-        await loadStudioState(id);
-        setNote(creating?"المهمة مقترحة ولم تُحفظ بعد؛ راجعها ووافق من اللوحة.":
-          "تمت القراءة من بيانات مدير الوكلاء الفعلية، بدون Sandbox.");
+      if(intent==="memory-save"){
+        const data=await postLearning("add_memory",{
+          subject:memorySubject.trim(),content:memoryText.trim(),
+          scope:memoryGlobal?"global":"thread",category:"project"
+        },id);
+        setMessages(current=>current.filter(m=>m.id!==optimistic.id));
+        setNote(data.id?"تم حفظ المعلومة في ذاكرة AGENT المستقلة.":"تم تحديث الذاكرة.");
         return;
       }
-      if(siteMode){
-        const diagnose=/^(?:افحص|فحص|تحقق|حالة|راقب|check|status|diagnose)(?:\s|$)/iu.test(message);
+      if(intent==="skill-create"){
+        const data=await postLearning("create_skill",{
+          title:newSkillTitle.trim(),description:"مهارة مخصصة مقترحة للمراجعة",
+          instructions:newSkillInstructions.trim(),
+          phrases:newSkillPhrase.split(/[،,]/).map(x=>x.trim()).filter(Boolean),
+          baseSkill:"general"
+        },id);
+        setMessages(current=>current.filter(m=>m.id!==optimistic.id));
+        setNote("تم إعداد مهارة مقترحة للمراجعة فقط.");
+        if(data.id)setPendingAction({
+          intent:"approve-skill",text:"تفعيل المهارة الجديدة",title:newSkillTitle,id:data.id
+        });
+        return;
+      }
+      if(intent==="studio-run"){
+        setActiveArea("studio");
+        setMessages(current=>current.filter(m=>m.id!==optimistic.id));
+        await runStudioMission(true,id);
+        return;
+      }
+      if(intent==="studio-overview"||intent==="studio-summary"||intent==="studio-prepare"){
+        setActiveArea("studio");
+        const action=intent==="studio-summary"?"summary":
+          intent==="studio-prepare"?"prepare":"overview";
+        const data=await studioRequest(id,action,{
+          task:message,
+          pageId:intent==="studio-prepare"&&studioPageId?studioPageId:undefined,
+          missionId:intent==="studio-summary"&&studioMissionId?studioMissionId:undefined
+        });
+        await loadStudioState(id);
+        setNote(action==="prepare"?"المقترح جاهز للمراجعة، ولم يُحفظ كمهمة بعد.":
+          "تمت قراءة البيانات الفعلية بدون Sandbox.");
+        if(action==="prepare"&&data.draft){
+          setPendingAction({intent:"studio-confirm",text:"حفظ المهمة المقترحة بعد المراجعة"});
+        }
+        return;
+      }
+      if(intent==="site-diagnose"||intent==="site-draft"){
+        setActiveArea("site");
+        const diagnose=intent==="site-diagnose";
         const res=await fetch("/api/assistant/site",{
           method:"POST",headers:await authHeaders(),
           body:JSON.stringify({action:diagnose?"diagnose":"draft",
@@ -434,10 +531,11 @@ export default function GeneralAssistant() {
         setMessages(current=>[...current.filter(m=>m.id!==optimistic.id),...data.messages!]);
         if(data.change)setSiteChange(data.change);
         if(typeof data.writeReady==="boolean")setSiteWriteReady(data.writeReady);
-        setNote(diagnose?"فحص الموقع بدون Sandbox.":"المقترح محفوظ للمراجعة؛ بدون تغيير مباشر.");
+        setNote(diagnose?"تم فحص موقع AGENT بدون Sandbox.":
+          "تم حفظ مقترح الموقع للمراجعة فقط؛ لا تغيير مباشر.");
         return;
       }
-      if(workMode){
+      if(intent==="work"){
         setWorkProgress("تجهيز خطة العمل...");
         const planRes=await fetch("/api/assistant/work",{
           method:"POST",headers:await authHeaders(),
@@ -467,9 +565,10 @@ export default function GeneralAssistant() {
         await finishWork(work,id);
         return;
       }
+      setActiveArea(null);
       const res=await fetch("/api/assistant",{
         method:"POST",headers:await authHeaders(),
-        body:JSON.stringify({action:"send",threadId:id,text:message,skill,allowConditionalFreeTier:allowConditional})
+        body:JSON.stringify({action:"send",threadId:id,text:message,skill:"auto",allowConditionalFreeTier:allowConditional})
       });
       const data=await res.json() as AssistantResponse;
       if(!res.ok||!data.messages?.length)throw new Error(data.error||"لم يصل رد من المساعد.");
@@ -485,12 +584,54 @@ export default function GeneralAssistant() {
       setSourceProject(data.sourceInspection?.repository||"");
       setBrowserResult(data.browserResult||null);
       await loadThreads(false);
+      await suggestLearningApproval(id);
     }catch(e){
       setMessages(current=>current.filter(m=>!m.id.startsWith("pending-")));
       setDraft(message);setWorkProgress("");
       setError(e instanceof Error?e.message:"تعذر إرسال الرسالة.");
     }finally{setBusy("");}
   }
+
+  async function approvePending(){
+    const choice=pendingAction;
+    if(!choice||busy)return;
+    const kind=choice.intent;
+    if(kind==="studio-run"&&!studioMissionId&&
+      !(studioDraft?.status==="created"&&studioDraft.mission_id)&&studioMissions.length!==1){
+      setError("اختار مهمة واحدة للتشغيل من نافذة الموافقة.");return;
+    }
+    setPendingAction(null);
+    if(kind==="studio-confirm"){await confirmStudioDraft(true);return;}
+    if(kind==="site-approve"){await approveSiteChange(true);return;}
+    if(kind==="work-resume"){if(pendingWork)await finishWork(pendingWork,threadId);return;}
+    if((kind==="approve-memory"||kind==="approve-skill")&&choice.id){
+      setBusy("learning-approval");setError("");
+      try{
+        await postLearning(kind==="approve-memory"?"approve_memory":"approve_skill",
+          {id:choice.id},threadId);
+        setNote(kind==="approve-memory"?
+          "تم اعتماد الذاكرة وسيستخدمها AGENT عند الحاجة.":
+          "تم تفعيل المهارة المخصصة في AGENT.");
+      }catch(e){setError(e instanceof Error?e.message:"تعذر اعتماد الاقتراح.");}
+      finally{setBusy("");}
+      return;
+    }
+    await sendMessage(choice.text,true);
+  }
+
+  const approvalInfo=pendingAction?(
+    pendingAction.intent==="studio-confirm"?
+      {title:"تأكيد إضافة المهمة",detail:"سيُحفظ التكليف داخل AGENT فقط. تشغيل الوكلاء خطوة منفصلة.",cost:"بدون نموذج AI أو Sandbox"}:
+    pendingAction.intent==="site-approve"?
+      {title:"فتح طلب مراجعة الموقع",detail:"Pull Request في Premieros/agent للمراجعة فقط؛ لا دمج أو نشر تلقائي.",cost:"يتطلب تصريح GitHub محدودًا"}:
+    pendingAction.intent==="work-resume"?
+      {title:"استكمال وضع العمل",detail:"قد ينفذ Sandbox خطة محفوظة ضمن حصتك.",cost:"قد يستهلك حصة Sandbox"}:
+    pendingAction.intent==="approve-memory"?
+      {title:"اعتماد ذاكرة مقترحة",detail:"سيستخدم AGENT المعلومة ضمن سياق المحادثات ذات الصلة.",cost:"بدون استدعاء نموذج AI"}:
+    pendingAction.intent==="approve-skill"?
+      {title:"تفعيل مهارة مقترحة",detail:"سيستخدمها AGENT عند توافق الطلب ولا تمنح أي صلاحية إضافية.",cost:"بدون Sandbox"}:
+      describeAgentIntent(pendingAction.intent)
+  ):null;
 
   const sidebar=(
           <aside className={"assistant-sidebar "+(showSidebar?"expanded":"")}>
@@ -530,9 +671,9 @@ export default function GeneralAssistant() {
       <div className="assistant-title">
         <div><span className="crm-overline">AGENT • CHAT & TOOLS</span>
           <h1>مساعدك الذكي</h1>
-          <p>تحدث معه، افحص كود GitHub، أو جرّب مهارة قراءة صفحات الويب. الأدوات الخارجية بصلاحيات محدودة.</p>
+          <p>مساعد واحد للمحادثات والذاكرة والمهارات والموقع والمهام والعمل، مع موافقة قبل الإجراءات.</p>
         </div>
-        <div className="assistant-tag"><ShieldCheck size={15}/> محادثات خاصة • بدون إجراءات تلقائية</div>
+        <div className="assistant-tag"><ShieldCheck size={15}/> أدوات تلقائية الاختيار · تشغيل بموافقتك</div>
       </div>
       {error && <div className="crm-error" role="alert">{error} <button type="button" onClick={()=>setError("")}>×</button></div>}
       {loading ? <div className="assistant-loader"><LoaderCircle className="crm-spin" size={22}/> جاري تحميل مساعدك...</div>
@@ -553,18 +694,13 @@ export default function GeneralAssistant() {
                 <span aria-live="polite">{fontSize}</span>
                 <button type="button" title="تكبير الخط" onClick={()=>setFontSize(x=>Math.min(19,x+1))} disabled={fontSize>=19}><PlusCircle size={15}/></button>
               </div>
-              <label className="assistant-skill-select"><span>المهارة</span>
-                <select value={skill} disabled={Boolean(busy)}
-                  onChange={e=>setSkill(e.target.value as AssistantSkill)}>
-                  {assistantSkills.map(s=><option key={s.id} value={s.id}>{s.title}</option>)}
-                </select><ChevronDown size={14}/>
-              </label>
+              <span className="assistant-auto-skill"><Sparkles size={14}/> اختيار المهارة تلقائيًا</span>
             </div>
             <div className="assistant-chat-scroll">
               {messages.length===0 && <div className="assistant-welcome">
                 <div className="assistant-logo"><WandSparkles size={32}/></div>
                 <h2>اطلب اللي محتاجه من AGENT</h2>
-                <p>اسأل أي سؤال، اختار مهارة، أو اختبر GitHub والمتصفح النصي. اضغط «الإضافات والاتصالات» لربط خدمات جديدة.</p>
+                <p>AGENT يختار المهارة والأداة تلقائيًا من كلامك، ويطلب موافقتك قبل أي حفظ أو تغيير أو تشغيل.</p>
                 <div className="assistant-starters">
                   {starters.map(item=><button type="button" key={item.label} onClick={()=>{setDraft(item.text);inputRef.current?.focus();}}>
                     <item.icon size={18}/><strong>{item.label}</strong><span>{item.text}</span>
@@ -611,12 +747,12 @@ export default function GeneralAssistant() {
                 <span>{workSteps.map((step,i)=>(i+1)+". "+step).join(" · ")}</span>
                 {pendingWork&&["planned","executed"].includes(pendingWork.status)&&
                   <button type="button" disabled={Boolean(busy)}
-                    onClick={()=>void finishWork(pendingWork,threadId)}>استكمال</button>}
+                    onClick={()=>requestApproval("work-resume","استكمال مهمة عمل محفوظة")}>استكمال</button>}
                 {pendingWork&&["running","reporting"].includes(pendingWork.status)&&
                   <button type="button" disabled={Boolean(busy)}
                     onClick={()=>void loadWorkState(threadId)}>تحديث</button>}
               </div>}
-              {studioMode&&<div className="assistant-studio-control" role="region" aria-label="إدارة صفحات التسويق والمهام">
+              {activeArea==="studio"&&<div className="assistant-studio-control" role="region" aria-label="إدارة صفحات التسويق والمهام">
                 <div className="assistant-studio-control-head">
                   <strong>إدارة الصفحات والمهام</strong>
                   <button type="button" disabled={Boolean(busy)}
@@ -661,7 +797,7 @@ export default function GeneralAssistant() {
                 </div>
                 <small>قراءة وتلخيص مباشرة؛ إضافة مهمة وتشغيل الوكلاء بموافقتك. لا نشر ولا إعلانات مدفوعة.</small>
               </div>}
-              {siteMode&&<div className="assistant-site-manager" role="region" aria-label="إدارة الموقع">
+              {activeArea==="site"&&<div className="assistant-site-manager" role="region" aria-label="إدارة الموقع">
                 <div className="assistant-site-manager-head">
                   <strong>إدارة موقع AGENT</strong>
                   <button type="button" disabled={Boolean(busy)}
@@ -692,49 +828,116 @@ export default function GeneralAssistant() {
               </div>}
               <AssistantLearningPanel threadId={threadId} refreshKey={messages.length}/>
               <div className="assistant-compose-foot">
-                <label><input type="checkbox" checked={allowConditional} onChange={e=>setAllowConditional(e.target.checked)}/>
+                <label><input type="checkbox" checked={allowConditional}
+                  onChange={e=>setAllowConditional(e.target.checked)}/>
                   السماح بحصص Gemini وGroq المشروطة
                 </label>
-                <label className="assistant-work-option"><input type="checkbox" checked={studioMode}
-                  disabled={Boolean(busy)} onChange={e=>{
-                    setStudioMode(e.target.checked);
-                    if(e.target.checked){
-                      setSiteMode(false);setWorkMode(false);setSkill("auto");
-                      if(threadId)void loadStudioState(threadId);
-                    }
-                  }}/>
-                  إدارة المهام
-                </label>
-                <label className="assistant-work-option"><input type="checkbox" checked={siteMode}
-                  disabled={Boolean(busy)} onChange={e=>{
-                    setSiteMode(e.target.checked);
-                    if(e.target.checked){
-                      setWorkMode(false);setStudioMode(false);setSkill("auto");
-                      if(threadId)void loadSiteState(threadId);
-                    }
-                  }}/>
-                  إدارة الموقع
-                </label>
-                <label className="assistant-work-option"><input type="checkbox" checked={workMode}
-                  disabled={Boolean(busy)} onChange={e=>{
-                    if(e.target.checked&&!window.confirm(
-                      "وضع عمل يستخدم Vercel Sandbox وقد يستهلك موارد حسابك. سيتم منع الإنترنت والتعديل الخارجي. تشغيل؟"
-                    ))return;
-                    setWorkMode(e.target.checked);
-                    if(e.target.checked){setSkill("auto");setSiteMode(false);setStudioMode(false);}
-                    setWorkSteps([]);setWorkProgress("");
-                  }}/>
-                  وضع عمل
-                </label><span>{draft.length}/4500</span>
+                <span>{draft.length}/4500</span>
               </div>
-              <p className="assistant-limit-note">{studioMode?
-                "إدارة المهام: بيانات مؤسستك الفعلية، مسودات مهام، تشغيل الوكلاء بموافقة، وملخص النتائج. بدون Sandbox.":
-                siteMode?
-                "إدارة الموقع: فحص وتشخيص ومسودات تعديل ومراجعة GitHub. لا تعديل مباشر أو نشر تلقائي.":
-                "وضع العمل يشغّل Sandbox للحسابات البرمجية فقط. لا تعديل خارجي. راجع النتائج."}</p>
+              <p className="assistant-limit-note">AGENT يختار المهارة والأداة حسب الطلب. التغييرات، وتشغيل الوكلاء وSandbox، تحتاج موافقتك أولًا.</p>
             </div>
           </main>
         </div>}
     </div>
+    {pendingAction&&approvalInfo&&<div className="agent-consent-overlay" role="presentation">
+      <section className="agent-consent-dialog" role="dialog" aria-modal="true"
+        aria-labelledby="agent-consent-heading" dir="rtl"
+        onKeyDown={e=>{if(e.key==="Escape")setPendingAction(null);}}>
+        <div className="agent-consent-head">
+          <ShieldCheck size={20}/>
+          <h2 id="agent-consent-heading">{approvalInfo.title}</h2>
+          <button type="button" title="إغلاق الطلب" aria-label="إغلاق طلب الموافقة"
+            onClick={()=>setPendingAction(null)}>×</button>
+        </div>
+        <p>{approvalInfo.detail}</p>
+        <div className="agent-consent-cost">{approvalInfo.cost}</div>
+        {(pendingAction.intent==="approve-memory"||pendingAction.intent==="approve-skill")&&
+          <div className="agent-consent-preview">
+            <strong>{pendingAction.title}</strong>
+            <p>{pendingAction.detail||"مقترح محفوظ ينتظر مراجعتك."}</p>
+          </div>}
+        {pendingAction.intent==="memory-save"&&<div className="agent-consent-fields">
+          <label>عنوان المعلومة
+            <input value={memorySubject} maxLength={110}
+              onChange={e=>setMemorySubject(e.target.value)}/>
+          </label>
+          <label>المعلومة اللي هيفتكرها AGENT
+            <textarea value={memoryText} maxLength={900} rows={3}
+              onChange={e=>setMemoryText(e.target.value)}/>
+          </label>
+          <label className="agent-consent-check">
+            <input type="checkbox" checked={memoryGlobal} onChange={e=>setMemoryGlobal(e.target.checked)}/>
+            تظل متاحة لكل محادثاتي في AGENT
+          </label>
+        </div>}
+        {pendingAction.intent==="skill-create"&&<div className="agent-consent-fields">
+          <label>اسم المهارة
+            <input value={newSkillTitle} maxLength={90}
+              onChange={e=>setNewSkillTitle(e.target.value)}/>
+          </label>
+          <label>عبارات تشغيل المهارة (افصل بينها بفاصلة)
+            <input value={newSkillPhrase} maxLength={250}
+              onChange={e=>setNewSkillPhrase(e.target.value)}/>
+          </label>
+          <label>تعليمات المهارة
+            <textarea value={newSkillInstructions} maxLength={1000} rows={3}
+              onChange={e=>setNewSkillInstructions(e.target.value)}/>
+          </label>
+          <small>الحفظ كمقترح أولًا؛ سيظهر تأكيد منفصل للتفعيل.</small>
+        </div>}
+        {(pendingAction.intent==="studio-run"||pendingAction.intent==="studio-prepare")&&
+          <div className="agent-consent-fields">
+            {pendingAction.intent==="studio-prepare"&&<label>الصفحة المطلوبة
+              <select value={studioPageId} onChange={e=>setStudioPageId(e.target.value)}>
+                <option value="">اختيار بالاسم المذكور في الطلب</option>
+                {studioPages.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}
+              </select>
+            </label>}
+            {pendingAction.intent==="studio-run"&&<label>المهمة التي سيشغّلها AGENT
+              <select value={studioMissionId} onChange={e=>setStudioMissionId(e.target.value)}>
+                <option value="">{studioMissions.length===1?"المهمة الوحيدة": "حدد المهمة قبل التشغيل"}</option>
+                {studioMissions.filter(m=>m.status==="queued"||m.status==="failed").map(m=>
+                  <option key={m.id} value={m.id}>
+                    {(studioPages.find(p=>p.id===m.page_id)?.name||"صفحة")+
+                      " · "+m.objective+" · "+m.status}
+                  </option>)}
+              </select>
+            </label>}
+          </div>}
+        {pendingAction.intent==="studio-confirm"&&studioDraft&&
+          <div className="agent-consent-preview">
+            <strong>{studioPages.find(p=>p.id===studioDraft.page_id)?.name||"المهمة المقترحة"}</strong>
+            <p>{studioDraft.brief}</p>
+          </div>}
+        {pendingAction.intent==="site-approve"&&siteChange&&
+          <details className="agent-consent-preview">
+            <summary>{siteChange.title} · راجع التغييرات قبل الموافقة</summary>
+            <p>{siteChange.summary}</p>
+            {siteChange.edits.map((edit,i)=><div key={i}>
+              <small>{edit.path}</small><pre>قبل: {edit.search}</pre>
+              <pre>بعد: {edit.replace}</pre>
+            </div>)}
+          </details>}
+        {pendingAction.intent==="work-resume"&&pendingWork&&
+          <div className="agent-consent-preview">{pendingWork.steps.join(" · ")}</div>}
+        <div className="agent-consent-actions">
+          <button type="button" onClick={()=>setPendingAction(null)}>إلغاء</button>
+          <button type="button" className="agent-consent-approve" autoFocus
+            disabled={Boolean(busy)||
+              (pendingAction.intent==="memory-save"&&
+                (memorySubject.trim().length<3||memoryText.trim().length<4))||
+              (pendingAction.intent==="skill-create"&&
+                (newSkillTitle.trim().length<3||newSkillPhrase.trim().length<4||
+                  newSkillInstructions.trim().length<12))||
+              (pendingAction.intent==="studio-run"&&!studioMissionId&&
+                !(studioDraft?.status==="created"&&studioDraft.mission_id)&&
+                studioMissions.length!==1)}
+            onClick={()=>void approvePending()}>
+            {pendingAction.intent==="approve-memory"||pendingAction.intent==="approve-skill"?
+              "اعتماد وتفعيل":"موافق، أكمل"}
+          </button>
+        </div>
+      </section>
+    </div>}
   </div>;
 }
