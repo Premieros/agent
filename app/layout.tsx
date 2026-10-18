@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import WorkspaceShell from "@/components/workspace-shell";
 
 export const metadata: Metadata = {
   title: "Agent | مركز قيادة المبيعات الذكي",
@@ -14,7 +15,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
         <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
       </head>
-      <body>{children}</body>
+      <body><WorkspaceShell>{children}</WorkspaceShell></body>
     </html>
   );
 }
