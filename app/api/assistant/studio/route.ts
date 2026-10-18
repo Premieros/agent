@@ -130,7 +130,7 @@ export async function POST(req:NextRequest){
           brand_voice:brandVoice})
         .select("id,name,platform").single();
       if(createError||!page)throw createError||new Error("PAGE_CREATE_FAILED");
-      let messages=[];
+      let messages:unknown[]=[];
       try{
         messages=await saveExchange(s,threadId,
           "أضف صفحة التسويق "+name,
