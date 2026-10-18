@@ -208,6 +208,8 @@ export default function GeneralAssistant() {
         </section>
       : <div className="assistant-layout">
           <aside className={"assistant-sidebar "+(showSidebar?"expanded":"")}>
+            <button type="button" className="assistant-sidebar-close" aria-label="إغلاق القائمة الجانبية"
+              onClick={()=>setShowSidebar(false)}>إغلاق القائمة ×</button>
             <button className="assistant-new-chat" type="button" disabled={Boolean(busy)}
               onClick={()=>void createThread()}><Plus size={18}/> محادثة جديدة</button>
             <div className="assistant-side-nav" aria-label="أقسام AGENT">
