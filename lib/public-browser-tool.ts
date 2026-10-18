@@ -13,7 +13,11 @@ type Host=keyof typeof allowlisted;
 function safeURL(value:string):URL|null{
   try{
     const u=new URL(value);
-    if(u.protocol!=="https:" || u.username || u.password || u.port || u.search || u.hash) return null;
+    if(u.protocol!=="https:" || u.username || u.password || u.port || u.search) return null;
+    // HashRouter fragments are client-side only, not part of HTTP fetching.
+    // Permit the known Premier.OS login fragment; still fetch public HTML only.
+    if(u.hash && !(u.hostname==="premieros-sage.vercel.app" && u.hash==="#/login")) return null;
+    u.hash="";
     if(!Object.prototype.hasOwnProperty.call(allowlisted,u.hostname))return null;
     const check=allowlisted[u.hostname as Host] as (path:string)=>boolean;
     return check(u.pathname)?u:null;
