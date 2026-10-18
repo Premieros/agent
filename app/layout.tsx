@@ -4,8 +4,8 @@ import "./workspace-dark.css";
 import WorkspaceShell from "@/components/workspace-shell";
 
 export const metadata: Metadata = {
-  title: "Agent | مركز قيادة المبيعات الذكي",
-  description: "لوحة تجريبية لإدارة العملاء والمحادثات وتسليم فرص البيع للفريق البشري"
+  title: "AGENT | مساحة العمل",
+  description: "مساحة AGENT للمحادثات والعملاء والوكلاء والتسويق ببيانات مؤسستك الفعلية."
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {

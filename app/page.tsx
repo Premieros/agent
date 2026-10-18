@@ -1,5 +1,3 @@
-import SalesWorkspace from "@/components/sales-workspace";
+import AgentHome from "@/components/agent-home";
 
-export default function Home() {
-  return <SalesWorkspace />;
-}
+export default function Home(){return <AgentHome/>;}

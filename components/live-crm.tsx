@@ -35,6 +35,8 @@ export default function LiveCrm() {
   const [busy, setBusy] = useState(false);
   const [leads, setLeads] = useState<Lead[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
+  const [leadTotal,setLeadTotal]=useState<number|null>(null);
+  const [pendingTotal,setPendingTotal]=useState<number|null>(null);
   const [form, setForm] = useState(base);
   const [showForm, setShowForm] = useState(false);
   const [crmView,setCrmView]=useState<"leads"|"tasks"|"account">("leads");
@@ -52,8 +54,12 @@ export default function LiveCrm() {
   },[]);
 
   const load = useCallback(async (activeUser: User | null) => {
-    if (!db || !activeUser) { setMembership(null); setLeads([]); setTasks([]); setChecking(false); return; }
+    if (!db || !activeUser) {
+      setMembership(null);setLeads([]);setTasks([]);
+      setLeadTotal(null);setPendingTotal(null);setChecking(false);return;
+    }
     setChecking(true);
+    setLeadTotal(null);setPendingTotal(null);
     let membershipResult = await db.from("organization_members")
       .select("organization_id, role").eq("user_id", activeUser.id).limit(1);
     if (membershipResult.error && isExpiredAuthError(membershipResult.error)) {
@@ -79,12 +85,23 @@ export default function LiveCrm() {
     const member = (memberships?.[0] ?? null) as Member | null;
     setMembership(member);
     if (member) {
-      const [l, t] = await Promise.all([
-        db.from("leads").select("id,full_name,business_name,phone,business_type,source,stage,priority,created_at").eq("organization_id", member.organization_id).order("created_at", { ascending: false }).limit(100),
-        db.from("handoff_tasks").select("id,lead_id,handoff_type,status,summary").eq("organization_id", member.organization_id).order("created_at", { ascending: false }).limit(100)
+      const [l,t,p] = await Promise.all([
+        db.from("leads").select(
+          "id,full_name,business_name,phone,business_type,source,stage,priority,created_at",
+          {count:"exact"}).eq("organization_id",member.organization_id)
+          .order("created_at",{ascending:false}).limit(100),
+        db.from("handoff_tasks").select("id,lead_id,handoff_type,status,summary")
+          .eq("organization_id",member.organization_id)
+          .order("created_at",{ascending:false}).limit(100),
+        db.from("handoff_tasks").select("id",{count:"exact",head:true})
+          .eq("organization_id",member.organization_id).eq("status","pending")
       ]);
-      if (l.error || t.error) setError(l.error?.message || t.error?.message || "حدث خطأ في القراءة");
-      else { setLeads((l.data || []) as Lead[]); setTasks((t.data || []) as Task[]); }
+      if(l.error||t.error||p.error)
+        setError("تعذر تحميل بعض بيانات CRM؛ حاول تحديث الصفحة.");
+      setLeads(l.error?[]:(l.data||[]) as Lead[]);
+      setTasks(t.error?[]:(t.data||[]) as Task[]);
+      setLeadTotal(l.error?null:l.count??null);
+      setPendingTotal(p.error?null:p.count??null);
     }
     setChecking(false);
   }, [db]);
@@ -205,12 +222,12 @@ export default function LiveCrm() {
             <p className="crm-help-text">اختر كلمة مرور قوية من 12 حرفًا على الأقل. لا تشاركها مع أي شخص.</p>
           </form>}
         </section>}
-        {crmView==="leads" && <div className="crm-metrics"><div><span>العملاء المسجلون</span><strong>{leads.length}</strong></div><div><span>مهام المتابعة</span><strong>{tasks.filter(t=>t.status==="pending").length}</strong></div><div><span>صلاحيتك</span><strong className="crm-role">{membership.role}</strong></div></div>}
-        {crmView==="leads" && <section className="crm-card"><div className="crm-section-head"><div><h2><UsersRound size={19}/> العملاء المحتملون</h2><p>معلومات حقيقية محفوظة في قاعدة البيانات</p></div><button onClick={()=>setShowForm(v=>!v)}><Plus size={17}/> إضافة عميل</button></div>
+        {crmView==="leads" && <div className="crm-metrics"><div><span>العملاء المسجلون</span><strong>{leadTotal===null?"—":leadTotal.toLocaleString("ar-EG")}</strong></div><div><span>المتابعات المعلقة</span><strong>{pendingTotal===null?"—":pendingTotal.toLocaleString("ar-EG")}</strong></div><div><span>صلاحيتك</span><strong className="crm-role">{membership.role}</strong></div></div>}
+        {crmView==="leads" && <section className="crm-card"><div className="crm-section-head"><div><h2><UsersRound size={19}/> العملاء المحتملون</h2><p>بيانات حقيقية · يعرض الجدول آخر {leads.length} سجل{leadTotal!==null?" من إجمالي "+leadTotal.toLocaleString("ar-EG"):""}</p></div><button onClick={()=>setShowForm(v=>!v)}><Plus size={17}/> إضافة عميل</button></div>
         {showForm && <form className="crm-form" onSubmit={e=>{e.preventDefault();void createLead();}}><label>اسم العميل<input required maxLength={180} value={form.full_name} onChange={e=>setForm(v=>({...v,full_name:e.target.value}))}/></label><label>اسم النشاط<input maxLength={180} value={form.business_name} onChange={e=>setForm(v=>({...v,business_name:e.target.value}))}/></label><label>رقم التواصل<input maxLength={40} value={form.phone} onChange={e=>setForm(v=>({...v,phone:e.target.value}))}/></label><label>نوع النشاط<select value={form.business_type} onChange={e=>setForm(v=>({...v,business_type:e.target.value}))}>{types.map(t=><option key={t.value} value={t.value}>{t.label}</option>)}</select></label><button disabled={busy || !form.full_name.trim()}>حفظ العميل</button></form>}
         {leads.length===0?<div className="crm-empty">لسه مفيش عملاء مسجلين. أضف أول عميل من الزر بالأعلى.</div>:<div className="crm-table-wrap"><table className="crm-table"><thead><tr><th>العميل</th><th>النشاط</th><th>الهاتف</th><th>المرحلة</th><th>التسليم للموظف</th></tr></thead><tbody>{leads.map(lead=><tr key={lead.id}><td><strong>{lead.full_name}</strong><small>{lead.business_name || "—"}</small></td><td>{types.find(t=>t.value===lead.business_type)?.label || lead.business_type}</td><td dir="ltr">{lead.phone||"—"}</td><td>{stages[lead.stage]||lead.stage}</td><td><div className="crm-row-actions"><button disabled={busy} onClick={()=>void createHandoff(lead,"chat")}>شات</button><button disabled={busy} onClick={()=>void createHandoff(lead,"call")}>اتصال</button></div></td></tr>)}</tbody></table></div>}
         </section>}
-        {crmView==="tasks" && <section className="crm-card crm-tasks"><div className="crm-section-head"><div><h2>مهام تسليم العملاء</h2><p>مهام محفوظة فعليًا — الاتصال أو استكمال المحادثة</p></div></div>{tasks.length===0?<div className="crm-empty">مافيش مهام متابعة حتى الآن.</div>:tasks.map(t=><div className="crm-task" key={t.id}><span className="crm-task-kind">{t.handoff_type==="call"?"اتصال تليفوني":t.handoff_type==="chat"?"استكمال شات":"معاينة"}</span><span>{leads.find(l=>l.id===t.lead_id)?.full_name||"عميل"}</span><span>{t.summary}</span><small>{t.status==="pending"?"بانتظار الموظف":t.status}</small></div>)}</section>}
+        {crmView==="tasks" && <section className="crm-card crm-tasks"><div className="crm-section-head"><div><h2>مهام تسليم العملاء</h2><p>مهام محفوظة فعليًا · يعرض آخر {tasks.length} مهمة</p></div></div>{tasks.length===0?<div className="crm-empty">مافيش مهام متابعة حتى الآن.</div>:tasks.map(t=><div className="crm-task" key={t.id}><span className="crm-task-kind">{t.handoff_type==="call"?"اتصال تليفوني":t.handoff_type==="chat"?"استكمال شات":"معاينة"}</span><span>{leads.find(l=>l.id===t.lead_id)?.full_name||"عميل"}</span><span>{t.summary}</span><small>{t.status==="pending"?"بانتظار الموظف":t.status}</small></div>)}</section>}
       </>}
     </div>
   </div>;

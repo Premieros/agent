@@ -4,10 +4,9 @@ import {useEffect,useState,type ReactNode} from "react";
 import Link from "next/link";
 import {usePathname} from "next/navigation";
 import {
-  Menu,MessageSquareText,Bot,BrainCircuit,
+  Menu,MessageSquareText,Bot,BrainCircuit,ChevronDown,
   Megaphone,PanelsTopLeft,Palette,UsersRound,Inbox,PlugZap,LayoutDashboard,
-  Settings2,X,Plus,Code2,Globe,ClipboardList,
-  MessagesSquare,Share2,Boxes,BriefcaseBusiness,LockKeyhole
+  Settings2,X,Plus,ClipboardList,MessagesSquare,BriefcaseBusiness,LockKeyhole
 } from "lucide-react";
 
 type GroupId="assistant"|"agents"|"marketing"|"customers"|"inbox"|"system";
@@ -16,11 +15,7 @@ type NavGroup={id:GroupId;label:string;icon:typeof Bot;items:NavItem[]};
 
 const navigation:NavGroup[]=[
   {id:"assistant",label:"المساعد",icon:MessageSquareText,items:[
-    {href:"/assistant",label:"المحادثات الذكية",icon:MessagesSquare},
-    {href:"/assistant?skill=coding",label:"مساعد البرمجة",icon:Code2},
-    {href:"/assistant?skill=github",label:"فحص مشاريع GitHub",icon:Boxes},
-    {href:"/assistant?skill=pos_development",label:"تطوير أنظمة POS",icon:Bot},
-    {href:"/assistant?skill=browser",label:"قراءة المواقع",icon:Globe}
+    {href:"/assistant",label:"المحادثات الذكية",icon:MessagesSquare}
   ]},
   {id:"agents",label:"الوكلاء",icon:Bot,items:[
     {href:"/studio?section=agents",label:"مدير الوكلاء",icon:Bot},
@@ -36,15 +31,12 @@ const navigation:NavGroup[]=[
     {href:"/crm?view=tasks",label:"مهام المتابعة",icon:ClipboardList}
   ]},
   {id:"inbox",label:"المحادثات",icon:Inbox,items:[
-    {href:"/crm/inbox",label:"صندوق الوارد",icon:Inbox},
-    {href:"/crm/inbox?channel=manual",label:"المتابعات الداخلية",icon:MessagesSquare}
+    {href:"/crm/inbox",label:"صندوق الوارد",icon:Inbox}
   ]},
-  {id:"system",label:"الإدارة والنظام",icon:Settings2,items:[
+  {id:"system",label:"الإعدادات",icon:Settings2,items:[
     {href:"/studio?section=models",label:"النماذج ومفاتيح AI",icon:BrainCircuit},
     {href:"/assistant/integrations",label:"مركز الإضافات",icon:PlugZap},
-    {href:"/assistant/integrations?category=social",label:"فيسبوك وواتساب",icon:Share2},
-    {href:"/assistant/integrations?category=developer",label:"GitHub وأدوات التطوير",icon:Boxes},
-    {href:"/crm?view=account",label:"حسابي وتسجيل الدخول",icon:LockKeyhole}
+    {href:"/crm?view=account",label:"الحساب والصلاحيات",icon:LockKeyhole}
   ]}
 ];
 
@@ -68,18 +60,19 @@ function activeSelection(path:string,search:string){
 
 export default function WorkspaceShell({children}:{children:ReactNode}){
   const pathname=usePathname();
-  const isWorkspace=pathname==="/studio"||pathname==="/assistant"||
+  const isWorkspace=pathname==="/"||pathname==="/studio"||pathname==="/assistant"||
     pathname.startsWith("/assistant/")||pathname==="/crm"||pathname.startsWith("/crm/");
   const [mobileOpen,setMobileOpen]=useState(false);
-  const [activeHref,setActiveHref]=useState("/assistant");
+  const [activeHref,setActiveHref]=useState("/");
+  const [openGroup,setOpenGroup]=useState<GroupId|null>(null);
 
   useEffect(()=>{
     const sync=()=>{
       const current=activeSelection(pathname,window.location.search);
-      setActiveHref(current.href);
+      setActiveHref(pathname==="/"?"/":current.href);
+      setOpenGroup(pathname==="/"?null:current.group);
     };
-    sync();
-    setMobileOpen(false);
+    sync();setMobileOpen(false);
     window.addEventListener("popstate",sync);
     return()=>window.removeEventListener("popstate",sync);
   },[pathname]);
@@ -97,6 +90,8 @@ export default function WorkspaceShell({children}:{children:ReactNode}){
 
   function choose(item:NavItem){
     setActiveHref(item.href);setMobileOpen(false);
+    const group=navigation.find(g=>g.items.some(i=>i.href===item.href));
+    if(group)setOpenGroup(group.id);
     const u=new URL(item.href,"https://agent.local");
     const dispatch=(name:string,param:string,fallback:string)=>
       window.dispatchEvent(new CustomEvent(name,{detail:u.searchParams.get(param)||fallback}));
@@ -107,7 +102,8 @@ export default function WorkspaceShell({children}:{children:ReactNode}){
     else if(u.pathname==="/assistant")dispatch("agent:select-assistant-skill","skill","auto");
   }
 
-  const pageTitle=navigation.flatMap(g=>g.items).find(i=>i.href===activeHref)?.label||"المساعد الذكي";
+  const pageTitle=activeHref==="/"?"الرئيسية":
+    navigation.flatMap(g=>g.items).find(i=>i.href===activeHref)?.label||"مساحة العمل";
   return <div className="workspace-shell">
     {mobileOpen&&<button className="workspace-backdrop" type="button" aria-label="إغلاق القائمة"
       onClick={()=>setMobileOpen(false)}/>}
@@ -124,23 +120,35 @@ export default function WorkspaceShell({children}:{children:ReactNode}){
           setMobileOpen(false);
           if(pathname==="/assistant"){e.preventDefault();window.dispatchEvent(new Event("agent:new-chat"));}
         }}><Plus size={19}/><span>محادثة جديدة</span></Link>
-      <nav className="workspace-nav-list">
-        {navigation.map(group=><div key={group.id} className="workspace-nav-group">
-          <div className="workspace-group-heading"><group.icon size={15}/><span>{group.label}</span></div>
-          <div className="workspace-subnav">
-            {group.items.map(item=><Link key={item.href} href={item.href} title={item.label}
-              className={"workspace-nav-link"+(activeHref===item.href?" selected":"")}
-              aria-current={activeHref===item.href?"page":undefined}
-              onClick={()=>choose(item)}>
-              <item.icon size={17} strokeWidth={1.8}/><span>{item.label}</span>
-            </Link>)}
-            {group.id==="assistant"&&pathname==="/assistant"&&
-              <div id="workspace-sidebar-slot" className="workspace-sidebar-slot"/>}
-          </div>        </div>)}
+      <nav className="workspace-nav-list" aria-label="أقسام AGENT">
+        <Link href="/" className={"workspace-nav-link workspace-home-link"+(activeHref==="/"?" selected":"")}
+          aria-current={activeHref==="/"?"page":undefined}
+          onClick={()=>{setActiveHref("/");setOpenGroup(null);setMobileOpen(false);}}>
+          <LayoutDashboard size={18}/><span>الرئيسية</span>
+        </Link>
+        {navigation.map(group=>{
+          const expanded=openGroup===group.id;
+          return <div key={group.id} className="workspace-nav-group">
+            <button type="button" className={"workspace-group-toggle"+(expanded?" expanded":"")}
+              aria-expanded={expanded} aria-controls={"workspace-section-"+group.id}
+              onClick={()=>setOpenGroup(expanded?null:group.id)}>
+              <group.icon size={17}/><span>{group.label}</span>
+              <ChevronDown className="workspace-group-chevron" size={15}/>
+            </button>
+            <div className="workspace-subnav" id={"workspace-section-"+group.id} hidden={!expanded}>
+              {group.items.map(item=><Link key={item.href} href={item.href} title={item.label}
+                className={"workspace-nav-link"+(activeHref===item.href?" selected":"")}
+                aria-current={activeHref===item.href?"page":undefined}
+                onClick={()=>choose(item)}>
+                <item.icon size={16} strokeWidth={1.8}/><span>{item.label}</span>
+              </Link>)}
+              {group.id==="assistant"&&pathname==="/assistant"&&
+                <div id="workspace-sidebar-slot" className="workspace-sidebar-slot"/>}
+            </div>
+          </div>;
+        })}
       </nav>
-      <div className="workspace-navigation-footer">
-        <Link href="/" title="الصفحة الرئيسية"><LayoutDashboard size={18}/><span>الرئيسية</span></Link>
-      </div>
+      <div className="workspace-navigation-footer"><span>AGENT · مساحة العمل</span></div>
     </aside>
     <main className="workspace-main">
       <header className="workspace-topbar">
