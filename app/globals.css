@@ -1286,3 +1286,37 @@ td>b { font-weight: 700; color: #233944; }
 .workspace-shell .workspace-page .general-assistant-root .assistant-compose{background:#fcfbfa}
 .workspace-shell .workspace-page :is(.inbox-thread-entry,.crm-table tr,.studio-page-choice){border-color:#dce4f0}
 .workspace-shell .workspace-page :is(.crm-table thead,.studio-page-banner,.integration-capability){background:#f4f3f2}
+
+
+/* Developer connector: one selected public repository and private tool audit */
+.integration-project-panel{margin:16px 0 20px;background:#fcfbfa;border:1px solid #dce4f0;border-radius:13px;padding:18px}
+.integration-project-heading h2{margin:0 0 5px;color:#25354c;font-size:17px;font-weight:800;display:flex;gap:9px;align-items:center}
+.integration-project-heading h2 svg{color:#2563eb}
+.integration-project-heading p{margin:0 0 15px;font-size:13px;line-height:1.8;color:#657791}
+.integration-project-form>label{display:block;font-size:13px;font-weight:800;margin-bottom:7px;color:#354865}
+.integration-project-controls{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.integration-project-controls input{flex:1 1 310px;min-width:150px;border:1px solid #cedbec!important;border-radius:9px;padding:10px 12px;background:#fff;color:#25354c;font-size:14px}
+.integration-project-controls button{display:flex;gap:7px;align-items:center;justify-content:center;border:1px solid #cadaee;background:#f4f7fc;color:#3e5f8f;padding:10px 12px;border-radius:9px;font-size:12.5px;font-weight:800;white-space:nowrap}
+.integration-project-controls button.integration-project-save{background:#2563eb;color:#fff;border-color:#2563eb}
+.integration-project-controls button:disabled{opacity:.5}
+.integration-project-current,.integration-project-ok,.integration-project-error{display:flex;align-items:center;gap:8px;padding:9px 11px;border-radius:9px;font-size:12px;line-height:1.8;margin:12px 0 0;overflow-wrap:anywhere}
+.integration-project-current{background:#f0f5ff;border:1px solid #deebff;color:#365582}
+.integration-project-ok{background:#ecf8f0;color:#257453;border:1px solid #ceebd9}
+.integration-project-ok a{color:inherit;text-decoration:underline}
+.integration-project-error{background:#fff4f1;color:#a74435;border:1px solid #f2cdc5}
+.integration-project-note{font-size:11.5px;color:#8693a8;line-height:1.8;margin:10px 0}
+.integration-audit-head{display:flex;align-items:center;justify-content:space-between;border-top:1px solid #e3eaf3;padding-top:14px;margin-top:15px}
+.integration-audit-head h3{font-size:14px;font-weight:800;color:#314761;margin:0}
+.integration-audit-head button{background:#f3f7fc;border:1px solid #e2e9f5;border-radius:7px;padding:6px;color:#3866a3}
+.integration-audit-list{display:flex;flex-direction:column;margin-top:9px;gap:4px}
+.integration-audit-entry{display:flex;gap:12px;align-items:center;padding:8px 10px;background:#fff;border:1px solid #e8edf5;border-radius:8px;font-size:12px;color:#687993;min-width:0;flex-wrap:wrap}
+.integration-audit-entry strong{color:#aa6437;font-size:11.5px}
+.integration-audit-entry strong.ok{color:#228260}
+.integration-audit-entry>span:nth-of-type(2){overflow-wrap:anywhere;flex:1;min-width:90px}
+.integration-audit-entry small{font-size:10px;color:#8a97a9}
+@media(max-width:530px){
+ .integration-project-panel{padding:12px}
+ .integration-project-controls input{flex-basis:100%}
+ .integration-project-controls button{flex:1}
+ .integration-audit-entry{gap:6px}
+}
