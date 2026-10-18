@@ -788,3 +788,136 @@ td>b { font-weight: 700; color: #233944; }
 .assistant-source-list{display:flex;flex-wrap:wrap;gap:5px 10px;align-items:center;padding:8px 10px;margin:0 0 8px;border:1px solid #d9e9e3;border-radius:8px;background:#f5faf8;font:10px/1.7 "Cairo",Tahoma,sans-serif}
 .assistant-source-list strong{color:#26745e;flex-basis:100%}
 .assistant-source-list a{color:#276b80;text-decoration:underline;text-underline-offset:2px;overflow-wrap:anywhere}
+
+
+/* AGENT V2: viewport-fitting, readable, responsive workspace. */
+.general-assistant-root{height:100dvh;min-height:0;overflow:hidden}
+.general-assistant-root .crm-wrap{height:100%;max-width:none;padding:0 clamp(12px,2vw,30px) 12px;display:flex;flex-direction:column;min-height:0}
+.general-assistant-root .crm-header{padding:10px 0;min-height:53px;flex:0 0 auto}
+.general-assistant-root .crm-header .crm-actions a{font-size:13px;font-weight:700}
+.general-assistant-root .assistant-title{margin:9px 0 11px;gap:12px;flex:0 0 auto}
+.general-assistant-root .assistant-title h1{font-size:clamp(20px,2.1vw,25px);margin:2px 0}
+.general-assistant-root .assistant-title p{font-size:12px;line-height:1.55}
+.general-assistant-root .assistant-tag{font-size:11px}
+.general-assistant-root .assistant-layout{flex:1 1 auto;height:auto;min-height:0;max-height:none;grid-template-columns:clamp(236px,20vw,295px) minmax(0,1fr);gap:12px}
+.general-assistant-root .assistant-sidebar{min-height:0;padding:12px;visibility:visible}
+.general-assistant-root .assistant-sidebar-title{font-size:12px;margin:15px 5px 8px}
+.general-assistant-root .assistant-new-chat{font-size:13px}
+.assistant-side-nav{display:flex;flex-direction:column;gap:4px;border-bottom:1px solid #edf1ef;margin:11px 0 0;padding-bottom:10px}
+.assistant-side-nav a,.assistant-side-nav .assistant-nav-active{display:flex;align-items:center;gap:10px;text-decoration:none;color:#416777;border-radius:8px;padding:9px 11px;font-size:13px;font-weight:700}
+.assistant-side-nav a:hover{background:#f2f8f6;color:#147f65}
+.assistant-side-nav .assistant-nav-active{background:#eaf7f0;color:#128366}
+.general-assistant-root .assistant-thread>button:first-child{font-size:12px;padding:11px 8px}
+.general-assistant-root .assistant-sidebar-footer{font-size:11px}
+.general-assistant-root .assistant-toolbar{padding:9px 17px;min-height:58px}
+.general-assistant-root .assistant-toolbar-name strong{font-size:14px}
+.general-assistant-root .assistant-chat-scroll{padding:17px clamp(14px,3vw,40px) 24px;overscroll-behavior:contain}
+.general-assistant-root .assistant-bubble{max-width:1030px;margin-bottom:18px}
+.general-assistant-root .assistant-message-text{font-size:var(--agent-chat-font-size,15px);line-height:1.88}
+.general-assistant-root .assistant-message-heading strong{font-size:13px}
+.general-assistant-root .assistant-md h2{font-size:calc(var(--agent-chat-font-size,15px) + 3px)}
+.general-assistant-root .assistant-md h3{font-size:calc(var(--agent-chat-font-size,15px) + 1px)}
+.general-assistant-root .assistant-md h4{font-size:var(--agent-chat-font-size,15px)}
+.general-assistant-root .assistant-md-code pre{font-size:calc(var(--agent-chat-font-size,15px) - 1px)}
+.general-assistant-root .assistant-welcome{margin:10px auto 0}
+.general-assistant-root .assistant-welcome h2{font-size:19px}
+.general-assistant-root .assistant-welcome>p{font-size:13px}
+.general-assistant-root .assistant-starters span{font-size:12px}
+.general-assistant-root .assistant-starters strong{font-size:13px}
+.general-assistant-root .assistant-starters button{padding:11px 13px}
+.general-assistant-root .assistant-compose{padding:9px 16px 10px;flex:0 0 auto}
+.general-assistant-root .assistant-composer-box{padding:7px 9px}
+.general-assistant-root .assistant-composer-box textarea{font-size:14px;line-height:1.65;min-height:46px;max-height:118px}
+.general-assistant-root .assistant-compose-foot{margin-top:5px;font-size:11px}
+.general-assistant-root .assistant-limit-note{margin:3px 0 0;font-size:10px;line-height:1.55}
+.assistant-font-tools{display:flex;align-items:center;gap:3px;border:1px solid #e0eae6;padding:3px;border-radius:8px;background:#f6faf8;direction:ltr}
+.assistant-font-tools button{display:grid;place-items:center;height:27px;width:28px;border:none;background:transparent;color:#237c68;border-radius:5px}
+.assistant-font-tools button:hover{background:#e7f5ed}
+.assistant-font-tools span{min-width:20px;text-align:center;font:700 11px "Cairo",Tahoma,sans-serif;color:#56816e}
+.assistant-browser-note{display:flex;align-items:center;gap:7px;font-size:11px;color:#446f79;margin:0 0 7px;line-height:1.5}
+.assistant-browser-note a{color:#168276;overflow-wrap:anywhere}
+@media(max-width:850px){
+  .general-assistant-root .assistant-layout{grid-template-columns:minmax(0,1fr);height:auto;min-height:0}
+  .general-assistant-root .assistant-sidebar{display:none;position:absolute;inset:0 auto 0 0;right:0;left:auto;width:min(82vw,310px);height:100%;z-index:20;box-shadow:-14px 0 55px #102f3844}
+  .general-assistant-root .assistant-sidebar.expanded{display:flex}
+  .general-assistant-root .assistant-title{flex-direction:row;align-items:center}
+  .general-assistant-root .assistant-tag{display:none}
+  .general-assistant-root .assistant-title p{display:none}
+  .general-assistant-root .assistant-title h1{font-size:20px}
+  .general-assistant-root .assistant-menu-button{display:grid}
+}
+@media(max-width:580px){
+  .general-assistant-root .crm-wrap{padding:0 8px 8px}
+  .general-assistant-root .crm-header{min-height:46px}
+  .general-assistant-root .crm-header>div>span{display:none}
+  .general-assistant-root .crm-actions{gap:6px}
+  .general-assistant-root .crm-actions a{font-size:11px;padding:4px}
+  .general-assistant-root .crm-actions a:last-child{display:none}
+  .general-assistant-root .assistant-title{margin:4px 5px 7px}
+  .general-assistant-root .assistant-title .crm-overline{display:none}
+  .general-assistant-root .assistant-toolbar{padding:7px 8px;gap:6px}
+  .general-assistant-root .assistant-toolbar-name strong{font-size:12px}
+  .general-assistant-root .assistant-skill-select select{min-width:125px;max-width:164px;font-size:10px;padding:7px 16px 7px 22px}
+  .general-assistant-root .assistant-font-tools{gap:0}
+  .general-assistant-root .assistant-font-tools button{width:24px}
+  .general-assistant-root .assistant-font-tools span{display:none}
+  .general-assistant-root .assistant-chat-scroll{padding:12px 11px 18px}
+  .general-assistant-root .assistant-compose{padding:7px}
+  .general-assistant-root .assistant-limit-note{display:none}
+  .general-assistant-root .assistant-welcome .assistant-logo{width:43px;height:43px;border-radius:13px}
+  .general-assistant-root .assistant-welcome h2{font-size:17px}
+  .general-assistant-root .assistant-welcome>p{font-size:12px;margin-bottom:14px}
+  .general-assistant-root .assistant-starters{gap:6px}
+}
+/* Standalone integrations hub: deliberately independent of the chat scroll. */
+.agent-integrations-root .crm-wrap{max-width:1440px;padding-bottom:44px}
+.integrations-hero{display:flex;justify-content:space-between;align-items:center;gap:20px;margin:27px 0 18px}
+.integrations-hero h1{display:flex;align-items:center;gap:11px;margin:5px 0;color:#193947;font-size:27px}
+.integrations-hero h1 svg{color:#14856c}
+.integrations-hero p{font-size:13px;line-height:1.9;color:#70868e;margin:0;max-width:900px}
+.integrations-hero>button{border:1px solid #cee6db;background:white;color:#168064;padding:10px 14px;border-radius:9px;display:flex;gap:8px;align-items:center;white-space:nowrap}
+.integrations-security{display:flex;align-items:flex-start;gap:11px;padding:13px 15px;border:1px solid #cce5d8;border-radius:9px;background:#f0faf5;color:#376c5e;font-size:12px;line-height:1.8;margin-bottom:16px}
+.integrations-security svg{flex:0 0 auto;color:#17886f}
+.integrations-stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-bottom:21px}
+.integrations-stats>div{display:flex;flex-direction:column;gap:4px;align-items:center;background:#fff;border:1px solid #e3ebea;border-radius:11px;padding:12px}
+.integrations-stats strong{font-size:23px;color:#157f67}
+.integrations-stats span{font-size:12px;color:#7b8f97;text-align:center}
+.integrations-section{margin:21px 0}
+.integrations-section h2{margin:0 0 12px;font-size:17px;color:#294d58}
+.integrations-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:12px}
+.integration-card{display:flex;flex-direction:column;background:#fff;border:1px solid #e1e9e7;border-radius:11px;padding:18px;min-width:0;gap:10px}
+.integration-card-head{display:flex;gap:11px;align-items:center}
+.integration-icon{height:43px;width:43px;display:grid;place-items:center;border-radius:11px;background:#e9f8f1;color:#178366;flex:0 0 auto}
+.integration-card-name h3{font-size:16px;margin:0 0 3px;color:#244958}
+.integration-status{display:inline-flex;gap:5px;align-items:center;color:#956f32;font-size:11px}
+.integration-status.ready{color:#148367}
+.integration-card>p{font-size:13px;line-height:1.9;color:#65808a;margin:0}
+.integration-capability{display:flex;align-items:flex-start;gap:7px;background:#f6faf8;border-radius:7px;padding:8px 10px;color:#5e8180;font-size:12px;line-height:1.7}
+.integration-capability svg{flex:0 0 auto;margin-top:3px}
+.integration-actions{display:flex;gap:7px;flex-wrap:wrap;margin-top:auto}
+.integration-actions button,.integration-actions a{display:inline-flex;align-items:center;gap:7px;border:1px solid #cde6d8;padding:8px 11px;border-radius:7px;background:#effaf4;color:#197a60;font-size:12px;font-weight:700;text-decoration:none}
+.integration-actions a{border-color:#e0e9e7;background:#fff;color:#507681}
+.integration-models{display:flex;gap:6px;flex-wrap:wrap;color:#75939a;font-size:12px}
+.integration-models span{background:#f0f7f5;padding:3px 8px;border:1px solid #daebe4;border-radius:14px;color:#298368}
+.integration-details{padding:12px 13px;background:#f8fbfa;border:1px solid #e5efea;border-radius:8px;font-size:12px;line-height:1.8}
+.integration-details>strong{display:block;margin-bottom:5px;color:#285966}
+.integration-details>p{margin:6px 0;color:#6b848b}
+.integration-details>a{display:inline-flex;align-items:center;gap:6px;color:#157e6f}
+.integration-details .integration-warning{color:#935f28}
+.integration-key{display:flex;align-items:center;justify-content:space-between;gap:9px;background:white;border:1px solid #e4ebe9;border-radius:6px;padding:5px 8px;margin:6px 0;direction:ltr}
+.integration-key code{font-size:12px;color:#385c65;overflow-wrap:anywhere}
+.integration-key button{border:0;background:#edf8f3;color:#16866b;padding:6px;border-radius:6px}
+.integrations-footer{margin-top:24px;background:#eaf6f1;border:1px solid #d6eadd;padding:17px;border-radius:11px}
+.integrations-footer h2{margin:0 0 5px;font-size:17px}
+.integrations-footer p{font-size:12px;line-height:1.9}
+.integrations-footer>a{display:inline-flex;align-items:center;gap:7px;color:#117b64;font-weight:700;text-decoration:none}
+.integrations-loading{padding:50px;text-align:center}
+@media(max-width:650px){
+  .integrations-hero{align-items:flex-start;flex-direction:column;margin-top:17px}
+  .integrations-hero h1{font-size:23px}
+  .integrations-stats{gap:6px}
+  .integrations-stats>div{padding:9px 5px}
+  .integrations-stats span{font-size:10px}
+  .integrations-grid{grid-template-columns:minmax(0,1fr)}
+  .agent-integrations-root .crm-wrap{padding:0 11px 24px}
+}
