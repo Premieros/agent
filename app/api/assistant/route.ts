@@ -84,6 +84,20 @@ export async function POST(req:NextRequest) {
 
     const selected=validateSkill(body.skill??thread.skill);
     const resolvedSkill=pickSkill(prompt,selected);
+    // Tool authorization is checked on EVERY invocation, not inferred from
+    // the UI checkbox or the LLM response. Default preserves prior read-only
+    // behavior for existing users.
+    const {data:toolPrefs,error:toolPrefError}=await db.from("assistant_connector_settings")
+      .select("connector_id,enabled").eq("organization_id",organizationId)
+      .eq("user_id",userId);
+    if(toolPrefError)throw toolPrefError;
+    const permission=(connector:string)=>
+      toolPrefs?.find(p=>p.connector_id===connector)?.enabled!==false;
+    if(resolvedSkill==="browser"&&!permission("browser")){
+      return NextResponse.json({
+        error:"إضافة المتصفح موقوفة في مركز الإضافات. فعّلها قبل استخدام مهارة قراءة صفحات الويب."
+      },{status:403});
+    }
     const {data:rawHistory,error:historyError}=await db.from("assistant_messages")
       .select("role,content").eq("organization_id",organizationId).eq("thread_id",thread.id)
       .order("created_at",{ascending:false}).limit(12);
@@ -93,7 +107,7 @@ export async function POST(req:NextRequest) {
     ).join("\n\n");
     // Only the POS engineering skill may load these explicitly allowlisted,
     // public, read-only GitHub engineering documents.
-    const isProjectTask=resolvedSkill==="pos_development";
+    const isProjectTask=resolvedSkill==="pos_development" && permission("github");
     const isBrowserTask=resolvedSkill==="browser";
     const [projectContext,sourceInspection,browserPage]=await Promise.all([
       isProjectTask?getPosProjectContext():Promise.resolve(null),
@@ -125,6 +139,7 @@ export async function POST(req:NextRequest) {
         : isProjectTask
           ? "تعذر تحميل ملفات الكود الفعلية في هذه المحاولة؛ لا تدّعِ مراجعتها."
           : "",
+      !permission("github") && resolvedSkill==="pos_development" ? "أداة GitHub معطّلة من إعدادات المستخدم؛ لا تدّعِ قراءة الملفات." : "",
       browserPage
         ? (browserPage.fetched
           ? [
