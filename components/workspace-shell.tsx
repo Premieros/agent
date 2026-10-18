@@ -68,12 +68,22 @@ export default function WorkspaceShell({children}:{children:ReactNode}){
         <button type="button" className="workspace-close-mobile" aria-label="إغلاق القائمة" onClick={()=>setMobileOpen(false)}><X size={20}/></button>
       </div>
       <Link className="workspace-new-chat" href="/assistant?new=1" title="محادثة جديدة"
-        onClick={()=>setMobileOpen(false)}><Plus size={19}/><span>محادثة جديدة</span></Link>
+        onClick={e=>{
+          setMobileOpen(false);
+          if(pathname==="/assistant"){
+            e.preventDefault();
+            window.dispatchEvent(new Event("agent:new-chat"));
+          }
+        }}><Plus size={19}/><span>محادثة جديدة</span></Link>
       <nav className="workspace-nav-list" aria-label="أقسام AGENT">
         {navigation.map(group=><div className="workspace-nav-group" key={group.label}>
           <span className="workspace-group-label">{group.label}</span>
           {group.items.map(item=><Link href={item.href} key={item.href} title={item.label}
-            onClick={()=>{setMobileOpen(false);if(item.href.startsWith("/studio?"))setSection(new URL(item.href,"https://agent.local").searchParams.get("section")||"agents");}}
+            onClick={()=>{setMobileOpen(false);if(item.href.startsWith("/studio?")){
+              const nextSection=new URL(item.href,"https://agent.local").searchParams.get("section")||"agents";
+              setSection(nextSection);
+              window.dispatchEvent(new CustomEvent("agent:select-studio-section",{detail:nextSection}));
+            }}}
             className={"workspace-nav-link"+(matches(item)?" selected":"")} aria-current={matches(item)?"page":undefined}>
             <item.icon size={19} strokeWidth={1.85}/><span>{item.label}</span>{matches(item)&&<ChevronLeft size={13} className="workspace-nav-chevron"/>}
           </Link>)}
