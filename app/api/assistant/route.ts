@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { errorResponse, requireAgentSession } from "@/lib/agent-server";
 import { askAutoAgent, discoverAutoModels } from "@/lib/auto-ai";
 import { pickSkill, skillInstructions, validateSkill } from "@/lib/assistant-skills";
+import {agentSelfQuestion,answerAgentSelfQuestion} from "@/lib/agent-identity";
 import { getPosProjectContext } from "@/lib/pos-repo-context";
 import { inspectGitHubProject } from "@/lib/github-reader";
 import { inspectPublicPage } from "@/lib/public-browser-tool";
@@ -82,6 +83,29 @@ export async function POST(req:NextRequest) {
     if((count||0)>=6) return NextResponse.json({
       error:"استنى دقيقة قبل إرسال رسائل إضافية في نفس المحادثة حفاظًا على حصتك."
     },{status:429});
+
+    // App-native identity/memory answers: no model call, no sandbox, and
+    // never defer AGENT's identity to a replaceable provider.
+    const selfQuestion=agentSelfQuestion(prompt);
+    if(selfQuestion){
+      const content=await answerAgentSelfQuestion(session,selfQuestion);
+      const now=Date.now();
+      const {data:saved,error:saveError}=await db.from("assistant_messages").insert([
+        {organization_id:organizationId,thread_id:thread.id,role:"user",
+          content:prompt,skill:"general",created_at:new Date(now).toISOString()},
+        {organization_id:organizationId,thread_id:thread.id,role:"assistant",
+          content,model:"agent-core",skill:"general",created_at:new Date(now+2).toISOString()}
+      ]).select("id,role,content,model,skill,created_at");
+      if(saveError||!saved)throw saveError||new Error("SAVE_FAILED");
+      const title=thread.title==="محادثة جديدة"?prompt.slice(0,65):thread.title;
+      const {error:updateError}=await db.from("assistant_threads")
+        .update({title,updated_at:new Date().toISOString()})
+        .eq("id",thread.id).eq("organization_id",organizationId).eq("user_id",userId);
+      if(updateError)throw updateError;
+      return NextResponse.json({ok:true,threadId:thread.id,title,
+        messages:saved,skill:"general",model:"agent-core",attempts:0,
+        responseSource:"agent-core"}, {headers:{"Cache-Control":"no-store"}});
+    }
 
     const selected=validateSkill(body.skill??thread.skill);
     let resolvedSkill=pickSkill(prompt,selected);
