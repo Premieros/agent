@@ -1094,3 +1094,172 @@ td>b { font-weight: 700; color: #233944; }
   .workspace-page .general-assistant-root .assistant-composer-box{border-radius:14px}
   .workspace-page .general-assistant-root .assistant-starters{grid-template-columns:repeat(2,minmax(0,1fr))}
 }
+
+
+/* ================= Premier.OS screenshot-matched workspace theme =================
+   Light blue-grey canvas, white cards, fine blue-grey borders, royal-blue active
+   selection, 14px readable Cairo typography. Scope to AGENT workspace only.
+*/
+.workspace-shell{
+  --reference-blue:#2563eb;
+  --reference-blue-dark:#1d4ed8;
+  --reference-ink:#29354d;
+  --reference-muted:#64748b;
+  --reference-border:#dce4f0;
+  --reference-surface:#fff;
+  --reference-canvas:#f8fafc;
+  --workspace-sidebar:262px;
+  background:var(--reference-canvas);
+  color:var(--reference-ink);
+  font:500 14px/1.65 "Cairo",Tahoma,sans-serif;
+}
+.workspace-shell .workspace-navigation{
+  background:#fff;
+  border-left:1px solid var(--reference-border);
+  box-shadow:-2px 0 10px rgba(38,58,91,.035);
+  padding:10px 9px 10px;
+}
+.workspace-shell .workspace-main,.workspace-shell .workspace-page{background:var(--reference-canvas)}
+.workspace-shell .workspace-topbar{
+  background:#fff;
+  border-bottom:1px solid var(--reference-border);
+  height:59px;
+}
+.workspace-shell .workspace-current-title{color:#26344c;font-size:15px;font-weight:800}
+.workspace-shell .workspace-logo{font-weight:800;color:#1f2c45}
+.workspace-shell .workspace-brand-symbol{background:#2563eb;border-radius:10px}
+.workspace-shell .workspace-new-chat{
+  background:#f6f9ff;
+  border:1px solid #d7e4fa;
+  color:#2455c6;
+  border-radius:11px;
+  font-size:13.5px;
+  font-weight:800;
+  padding:10px 12px;
+  margin-bottom:12px;
+}
+.workspace-shell .workspace-new-chat:hover{background:#ebf2ff}
+.workspace-shell .workspace-nav-group{margin-bottom:6px}
+.workspace-shell .workspace-group-toggle{
+  display:flex;
+  align-items:center;
+  width:100%;
+  gap:11px;
+  min-height:44px;
+  padding:9px 12px;
+  margin:2px 0;
+  border:1px solid transparent;
+  border-radius:11px;
+  background:transparent;
+  color:#3b4b63;
+  text-align:right;
+  font:800 14px/1.55 "Cairo",Tahoma,sans-serif;
+  cursor:pointer;
+}
+.workspace-shell .workspace-group-toggle>span{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.workspace-shell .workspace-group-toggle>svg:first-child{color:#64748b;flex:0 0 auto}
+.workspace-shell .workspace-group-toggle:hover{background:#f2f5fb;border-color:#e7eefa}
+.workspace-shell .workspace-group-toggle.is-open{background:#f4f7fc;color:#263d6f}
+.workspace-shell .workspace-group-toggle.is-open>svg:first-child{color:#2563eb}
+.workspace-shell .workspace-group-chevron{margin-right:auto;flex:0 0 auto;color:#8b9ab0;transition:transform .18s}
+.workspace-shell .workspace-group-toggle.is-open .workspace-group-chevron{transform:rotate(180deg);color:#2563eb}
+.workspace-shell .workspace-subnav{padding:3px 12px 8px 0;margin:0 10px 5px 1px;border-right:1px solid #e0e8f6}
+.workspace-shell .workspace-subnav[hidden]{display:none!important}
+.workspace-shell .workspace-nav-link{
+  min-height:39px;
+  padding:8px 11px;
+  margin:3px 0;
+  border-radius:10px;
+  font:650 13.5px/1.55 "Cairo",Tahoma,sans-serif;
+  color:#51627b;
+}
+.workspace-shell .workspace-nav-link>svg{color:#8797ac}
+.workspace-shell .workspace-nav-link:hover{background:#f1f5fe;color:#2555b7}
+.workspace-shell .workspace-nav-link.selected{
+  background:#2563eb!important;
+  color:#fff!important;
+  font-weight:800;
+  box-shadow:0 3px 9px rgba(37,99,235,.16);
+}
+.workspace-shell .workspace-nav-link.selected>svg{color:#fff!important}
+.workspace-shell .workspace-navigation-footer{border-top:1px solid var(--reference-border)}
+.workspace-shell .workspace-navigation-footer>a{color:#52617b;font-size:13px}
+.workspace-shell .workspace-navigation-footer>a:hover{background:#eef3ff;color:#2563eb}
+.workspace-shell .workspace-security{color:#94a1b5;font-size:10.5px}
+.workspace-shell .workspace-status-dot{background:#3b82f6;box-shadow:0 0 0 3px #eff6ff}
+.workspace-shell .workspace-page > .crm-root{background:var(--reference-canvas);color:var(--reference-ink)}
+.workspace-shell .workspace-page > .crm-root > .crm-wrap{
+  max-width:1480px;
+  padding:17px clamp(14px,2.2vw,27px) 34px;
+}
+.workspace-shell .crm-title h1,.workspace-shell .studio-view-intro h2{color:#25354c!important;font-weight:800}
+.workspace-shell .studio-view-intro p,.workspace-shell .crm-title p{color:#7b8ba1!important}
+.workspace-shell .workspace-page :is(.crm-card,.studio-pages,.studio-center,.integration-card,.integrations-stats>div,
+  .studio-auto-routing,.studio-ai-settings,.studio-run-mode,.studio-metrics>div,
+  .studio-page-overview,.inbox-chat-panel,.inbox-threads-panel){
+  background:#fff;
+  border:1px solid #dce4f0;
+  border-radius:13px;
+  box-shadow:0 1px 3px rgba(26,43,79,.025);
+}
+.workspace-shell .workspace-page :is(.studio-metrics>div,.integrations-stats>div){padding:13px 15px}
+.workspace-shell .workspace-page :is(.studio-metrics span,.integrations-stats span){font-size:12px;color:#7c8aa3}
+.workspace-shell .workspace-page :is(.studio-metrics strong,.integrations-stats strong){font-weight:800;color:#253e73}
+.workspace-shell .workspace-page :is(.crm-card h2,.studio-center h2,.integrations-section h2){font-weight:800;color:#25354c}
+.workspace-shell .workspace-page :is(.studio-root,.agent-integrations-root,.live-inbox) :is(p,small,label,td,th){font-size:13px;line-height:1.8}
+.workspace-shell .workspace-page :is(input,select,textarea){
+  background:#fff;
+  border-color:#cdd9eb;
+  color:#30435c;
+  border-radius:9px;
+}
+.workspace-shell .workspace-page :is(input,select,textarea):focus-visible{
+  outline:2px solid #93b4ff;outline-offset:1px;
+}
+.workspace-shell .workspace-page :is(.studio-page-choice.current,.studio-mission-row.selected){background:#eff5ff;border-color:#bfd2ff}
+.workspace-shell .workspace-page .studio-page-choice.current strong{color:#2359d7}
+.workspace-shell .workspace-page :is(.studio-side-head button,.studio-section-head button,.studio-test-provider,
+ .inbox-create,.integration-actions button,.crm-section-head>button){
+  border-radius:9px;
+}
+.workspace-shell .workspace-page :is(.studio-test-provider,.inbox-create):not(:disabled){background:#2563eb;border-color:#2563eb;color:white}
+.workspace-shell .workspace-page .studio-tabs .active{color:#2563eb;border-color:#b5ccff;background:#eff5ff}
+.workspace-shell .workspace-page .studio-readiness{border:1px solid #dfe7f3;background:#f6f9fe;color:#536680;border-radius:11px}
+.workspace-shell .workspace-page .studio-auto-warning{background:#fff8e9}
+.workspace-shell .workspace-page .crm-login{max-width:520px;margin:24px auto}
+.workspace-shell .workspace-page .integrations-security{background:#eef5ff;color:#365a91;border-color:#d7e4fd}
+.workspace-shell .workspace-page .integration-icon{background:#edf4ff;color:#2563eb}
+.workspace-shell .workspace-page .integration-status.ready{color:#2563eb}
+.workspace-shell .workspace-page .integration-toggle input:checked{background:#2563eb;border-color:#2563eb}
+.workspace-shell .workspace-page .integrations-footer{background:#f0f5ff;border-color:#dce7fa}
+.workspace-shell .workspace-sidebar-slot{border-top:1px solid #e1e8f4}
+.workspace-shell .workspace-sidebar-slot .assistant-thread.active{background:#eaf2ff!important}
+.workspace-shell .workspace-sidebar-slot .assistant-thread.active>button:first-child{color:#245acb}
+.workspace-shell .workspace-page .general-assistant-root .assistant-panel,
+.workspace-shell .workspace-page .general-assistant-root>.crm-wrap{background:#fff}
+.workspace-shell .workspace-page .general-assistant-root .assistant-chat-scroll{background:#fff}
+.workspace-shell .workspace-page .general-assistant-root .assistant-compose{background:#fff}
+.workspace-shell .workspace-page .general-assistant-root .assistant-composer-box{background:#f8faff;border-color:#dbe4f5}
+.workspace-shell .workspace-page .general-assistant-root .assistant-composer-box:focus-within{border-color:#9abafd;box-shadow:0 0 0 3px #eaf1ff}
+.workspace-shell .workspace-page .general-assistant-root .assistant-composer-box>button{background:#2563eb}
+.workspace-shell .workspace-page .general-assistant-root .assistant-logo{background:linear-gradient(135deg,#2563eb,#598bff)}
+.workspace-shell .workspace-page .general-assistant-root .assistant-avatar{background:#edf3ff;color:#2862d8}
+.workspace-shell .workspace-page .general-assistant-root .assistant-skill-select select{background:#f5f8fe;border-color:#d8e5f7;color:#3459a0}
+.workspace-shell .workspace-page .general-assistant-root .assistant-font-tools{background:#f7faff;border-color:#dce5f6}
+.workspace-shell .workspace-page .general-assistant-root .assistant-font-tools button{color:#2563eb}
+.workspace-shell .workspace-page .general-assistant-root .assistant-message-text{font-size:var(--agent-chat-font-size,15px);line-height:1.9;color:#26364d}
+.workspace-shell .workspace-page .general-assistant-root .assistant-run-note{color:#2563eb}
+.workspace-shell.workspace-collapsed .workspace-group-toggle{justify-content:center;padding:10px 4px}
+.workspace-shell.workspace-collapsed .workspace-group-toggle>span,.workspace-shell.workspace-collapsed .workspace-group-chevron,.workspace-shell.workspace-collapsed .workspace-subnav{display:none!important}
+@media(max-width:780px){
+  .workspace-shell .workspace-navigation{background:#fff}
+  .workspace-shell .workspace-nav-link{min-height:42px}
+  .workspace-shell.workspace-collapsed .workspace-group-toggle>span{display:block}
+  .workspace-shell.workspace-collapsed .workspace-group-chevron{display:block}
+  .workspace-shell.workspace-collapsed .workspace-group-toggle{justify-content:flex-start;padding:9px 12px}
+  .workspace-shell.workspace-collapsed .workspace-subnav:not([hidden]){display:block!important}
+}
+.studio-page-overview{padding:20px;line-height:1.85}
+.studio-page-overview h3{font-size:16px;margin:0 0 8px}
+.studio-page-overview p{font-size:13px;color:#63748a;margin:0 0 12px}
+.studio-page-overview button{border:1px solid #c5d7fa;background:#eff5ff;color:#2358d4;padding:9px 13px;border-radius:9px;font-weight:700}
