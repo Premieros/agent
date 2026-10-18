@@ -33,6 +33,15 @@ export default function LiveInbox() {
   const [note, setNote] = useState("");
   const [leadId, setLeadId] = useState("");
   const [filter, setFilter] = useState("");
+  const [channelView,setChannelView]=useState("all");
+  useEffect(()=>{
+    const sync=()=>setChannelView(new URLSearchParams(window.location.search).get("channel")||"all");
+    const select=(event:Event)=>setChannelView((event as CustomEvent<string>).detail||"all");
+    sync();
+    window.addEventListener("popstate",sync);
+    window.addEventListener("agent:select-inbox-channel",select);
+    return()=>{window.removeEventListener("popstate",sync);window.removeEventListener("agent:select-inbox-channel",select);};
+  },[]);
   const [showNew, setShowNew] = useState(false);
 
   const loadWorkspace = useCallback(async (activeUser: User | null) => {
@@ -106,6 +115,7 @@ export default function LiveInbox() {
   const selectedLead = selectedThread ? leadById.get(selectedThread.lead_id) : null;
   const selectedTasks = tasks.filter(t => t.conversation_id === selectedId);
   const filteredThreads = threads.filter(t => {
+    if(channelView!=="all"&&t.channel!==channelView)return false;
     const lead = leadById.get(t.lead_id);
     const needle = filter.trim().toLocaleLowerCase();
     return !needle || [lead?.full_name, lead?.business_name, lead?.phone, channelLabels[t.channel]]
@@ -164,7 +174,7 @@ export default function LiveInbox() {
       <header className="crm-header"><div><strong>AGENT</strong><span> · مركز المحادثات</span></div>
         <div className="crm-actions"><Link href="/studio">مدير الوكلاء</Link><Link href="/crm"><ArrowRight size={17}/> إدارة العملاء</Link><Link href="/">الواجهة التجريبية</Link></div>
       </header>
-      <div className="crm-title"><div><span className="crm-overline">Team Inbox</span><h1>مركز المحادثات والمتابعة</h1><p>متابعة فعلية محفوظة على Supabase، مع فصل الملاحظات الداخلية عن الرسائل المرسلة للعملاء.</p></div><span className="crm-status"><ShieldCheck size={15}/> بيانات محمية</span></div>
+      <div className="crm-title"><div><span className="crm-overline">Team Inbox</span><h1>{channelView==="manual"?"المتابعات الداخلية":"صندوق الوارد"}</h1><p>متابعة فعلية محفوظة على Supabase، مع فصل الملاحظات الداخلية عن الرسائل المرسلة للعملاء.</p></div><span className="crm-status"><ShieldCheck size={15}/> بيانات محمية</span></div>
       <div className="inbox-safety"><CircleAlert size={18}/><span>واتساب وماسنجر لم يتم ربطهما بعد. أي ملاحظة تكتبها هنا <b>داخلية فقط</b> ولن تُرسل لأي عميل.</span></div>
       {error && <div className="crm-error" role="alert">{error}<button type="button" onClick={()=>setError("")}>إغلاق</button></div>}
       {notice && <div className="crm-success inbox-notice" role="status"><CheckCircle2 size={16}/>{notice}<button type="button" onClick={()=>setNotice("")}>×</button></div>}
