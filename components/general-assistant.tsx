@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 import { getSupabase } from "@/lib/supabase-browser";
 import { assistantSkills, type AssistantSkill } from "@/lib/assistant-skills";
+import AssistantMarkdown from "@/components/assistant-markdown";
 
 type Thread = { id:string; title:string; skill:AssistantSkill; updated_at:string; created_at:string };
 type ChatMessage = {id:string;role:"user"|"assistant";content:string;model?:string|null;skill?:string|null;created_at:string};
@@ -18,7 +19,7 @@ type AssistantResponse = {
 };
 const starters=[
   {label:"كتابة", icon:FileText, text:"اكتب لي منشور احترافي لصفحة Premier.OS عن فوائد أنظمة الكاشير للمطاعم، بدون أسعار غير مؤكدة."},
-  {label:"برمجة", icon:Code2, text:"ساعدني أراجع تصميم قاعدة بيانات نظام POS: الفروع والمخازن والمبيعات والمشتريات والعلاقات بينهم."},
+  {label:"تطوير POS", icon:Code2, text:"أنت مدير تطوير نظام Premier.OS الحالي. ابدأ بخطة لمراجعة علاقات الفروع والمخازن والمخزون والمبيعات والمشتريات والوصفات والتكاليف والحسابات. قل ما تحتاج رؤيته ولا تفترض مواصفات غير مؤكدة."},
   {label:"تخطيط", icon:Lightbulb, text:"حوّل فكرة إنشاء شركة برمجيات لخطة عملية من 30 يوم بخطوات وأولويات."},
   {label:"تعليم", icon:BookOpen, text:"اشرح لي مفهوم AI Agents والفرق بينهم وبين الشات العادي بأمثلة بسيطة."}
 ];
@@ -236,7 +237,7 @@ export default function GeneralAssistant() {
                   <div className="assistant-message-heading"><strong>{m.role==="assistant"?"AGENT":"أنت"}</strong>
                     {m.role==="assistant"&&<button type="button" title="نسخ الرد"
                       onClick={()=>void navigator.clipboard.writeText(m.content)}><Copy size={14}/></button>}</div>
-                  <div className="assistant-message-text" dir="auto">{m.content}</div>
+                  <div className="assistant-message-text" dir="auto">{m.role==="assistant"?<AssistantMarkdown content={m.content}/>:m.content}</div>
                   {m.role==="assistant"&&<small>{assistantSkills.find(s=>s.id===m.skill)?.title||m.skill||"مساعد عام"}{m.model?" · "+m.model:""}</small>}
                 </div>
               </article>)}
