@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import {createPortal} from "react-dom";
 import {
   ArrowRight, Bot, BookOpen, Check, ChevronDown, CircleAlert, Code2, Copy,
   FileText, Lightbulb, LoaderCircle, Menu, MessageCircle, Plus, Send, ShieldCheck,
@@ -43,11 +44,13 @@ export default function GeneralAssistant() {
   const [note,setNote]=useState("");
   const [sourceFiles,setSourceFiles]=useState<Array<{path:string;url:string;truncated:boolean}>>([]);
   const [showSidebar,setShowSidebar]=useState(false);
+  const [sidebarPortalTarget,setSidebarPortalTarget]=useState<HTMLElement|null>(null);
   const [fontSize,setFontSize]=useState(15);
   const [browserResult,setBrowserResult]=useState<{url:string;title:string;fetched:boolean;note:string}|null>(null);
   const endRef=useRef<HTMLDivElement|null>(null);
   const inputRef=useRef<HTMLTextAreaElement|null>(null);
   const active=threads.find(t=>t.id===threadId);
+  useEffect(()=>setSidebarPortalTarget(document.getElementById("workspace-sidebar-slot")),[]);
 
   const authHeaders=useCallback(async () => {
     if(!db)throw new Error("تعذر اتصال قاعدة البيانات.");
@@ -92,7 +95,7 @@ export default function GeneralAssistant() {
         const first=await loadThreads(true);
         if(cancelled)return;
         setAuthorized(true);
-        if(first)await openThread(first);
+        if(first && !new URLSearchParams(window.location.search).has("new"))await openThread(first);
       }catch(e){
         if(!cancelled) setError(e instanceof Error?e.message:"تعذر تسجيل الدخول.");
       }finally{if(!cancelled)setLoading(false);}
@@ -182,6 +185,30 @@ export default function GeneralAssistant() {
     }finally{setBusy("");}
   }
 
+  const sidebar=(
+          <aside className={"assistant-sidebar "+(showSidebar?"expanded":"")}>
+            <button className="assistant-new-chat" type="button" disabled={Boolean(busy)}
+              onClick={()=>void createThread()}><Plus size={18}/> محادثة جديدة</button>
+            <div className="assistant-sidebar-title">المحادثات المحفوظة</div>
+            {threads.length===0 && <p className="assistant-sidebar-empty">ابدأ محادثة جديدة، وهتظهر هنا تلقائيًا.</p>}
+            <div className="assistant-thread-list">
+              {threads.map(t=><div key={t.id} className={"assistant-thread "+(threadId===t.id?"active":"")}>
+                <button type="button" onClick={()=>void openThread(t.id)} disabled={Boolean(busy)}>
+                  <MessageCircle size={15}/><span title={t.title}>{t.title}</span>
+                </button>
+                <button type="button" className="assistant-remove" title="حذف المحادثة"
+                  disabled={Boolean(busy)} onClick={()=>void removeThread(t.id)}><Trash2 size={15}/></button>
+              </div>)}
+            </div>
+            <div className="assistant-sidebar-footer"><ShieldCheck size={14}/> المحادثات مخصصة لحسابك فقط داخل الشركة</div>
+          </aside>
+  );
+  useEffect(()=>{
+    const begin=()=>void createThread();
+    window.addEventListener("agent:new-chat",begin);
+    return()=>window.removeEventListener("agent:new-chat",begin);
+  });
+
   const sending=busy==="send";
   return <div className="crm-root general-assistant-root" style={{"--agent-chat-font-size":fontSize+"px"} as React.CSSProperties}>
     <div className="crm-wrap">
@@ -208,29 +235,7 @@ export default function GeneralAssistant() {
           <Link href="/crm">الذهاب لتسجيل الدخول</Link>
         </section>
       : <div className="assistant-layout">
-          <aside className={"assistant-sidebar "+(showSidebar?"expanded":"")}>
-            <button type="button" className="assistant-sidebar-close" aria-label="إغلاق القائمة الجانبية"
-              onClick={()=>setShowSidebar(false)}>إغلاق القائمة ×</button>
-            <button className="assistant-new-chat" type="button" disabled={Boolean(busy)}
-              onClick={()=>void createThread()}><Plus size={18}/> محادثة جديدة</button>
-            <div className="assistant-side-nav" aria-label="أقسام AGENT">
-              <span className="assistant-nav-active"><MessageCircle size={17}/> المحادثات</span>
-              <Link href="/assistant/integrations"><PlugZap size={17}/> الإضافات والاتصالات</Link>
-              <Link href="/studio"><Bot size={17}/> استوديو الوكلاء</Link>
-            </div>
-            <div className="assistant-sidebar-title">المحادثات المحفوظة</div>
-            {threads.length===0 && <p className="assistant-sidebar-empty">ابدأ محادثة جديدة، وهتظهر هنا تلقائيًا.</p>}
-            <div className="assistant-thread-list">
-              {threads.map(t=><div key={t.id} className={"assistant-thread "+(threadId===t.id?"active":"")}>
-                <button type="button" onClick={()=>void openThread(t.id)} disabled={Boolean(busy)}>
-                  <MessageCircle size={15}/><span title={t.title}>{t.title}</span>
-                </button>
-                <button type="button" className="assistant-remove" title="حذف المحادثة"
-                  disabled={Boolean(busy)} onClick={()=>void removeThread(t.id)}><Trash2 size={15}/></button>
-              </div>)}
-            </div>
-            <div className="assistant-sidebar-footer"><ShieldCheck size={14}/> المحادثات مخصصة لحسابك فقط داخل الشركة</div>
-          </aside>
+          {sidebarPortalTarget ? createPortal(sidebar,sidebarPortalTarget) : sidebar}
           <main className="assistant-panel">
             <div className="assistant-toolbar">
               <button type="button" className="assistant-menu-button" onClick={()=>setShowSidebar(v=>!v)}
