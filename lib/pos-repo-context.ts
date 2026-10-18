@@ -27,11 +27,12 @@ export async function getPosProjectContext():Promise<PosProjectContext>{
       if(!response.ok) return null;
       const text=await response.text();
       if(text.length>35000)return null;
-      return {
+      const document:DocumentResult={
         path:d.path,
         excerpt:d.tail?text.slice(-d.limit):text.slice(0,d.limit),
         url:"https://github.com/Premieros/.com/blob/main/"+d.path
-      } satisfies DocumentResult;
+      };
+      return document;
     }catch{return null;}
   }));
   const available=docs.filter((x):x is DocumentResult=>x!==null);
