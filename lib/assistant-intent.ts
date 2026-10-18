@@ -66,7 +66,7 @@ export function detectAgentIntent(text:string,lastAssistantModel?:string|null):A
 }
 export function describeAgentIntent(intent:AgentIntent){
   const text:Record<AgentIntent,{title:string;detail:string;cost:string}>={
-    chat:{title:"محادثة عادية",detail:"إجابة نصية تلقائية.",cost:""},
+    chat:{title:"محادثة عادية",detail:"إجابة نصية؛ البحث والقراءة عند الطلب يعملان تلقائيًا دون موافقة مسبقة.",cost:""},
     "learning-list":{title:"عرض الذاكرة والمهارات",detail:"فتح إدارة الذاكرة والمهارات عند الطلب فقط.",cost:"بدون AI"},
     "learning-hide":{title:"إخفاء الذاكرة والمهارات",detail:"إغلاق إدارة الذاكرة والمهارات.",cost:"بدون AI"},
     "studio-page-create":{title:"إضافة صفحة تسويق في AGENT",detail:"سيُحفظ ملف صفحة جديدة داخل قاعدة AGENT بعد مراجعة بياناته. هذا ليس ربطًا بحساب Meta ولا نشرًا خارجيًا.",cost:"بدون Sandbox أو استدعاء نموذج AI"},

@@ -30,6 +30,8 @@ jobs:
           node-version: "22"
       - name: Install dependencies
         run: npm install --no-audit --no-fund
+      - name: Test indexed research without network or credentials
+        run: npm run test:research
       - name: Build without external credentials
         run: npm run build
       - name: Check TypeScript
