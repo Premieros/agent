@@ -5,7 +5,7 @@ import Link from "next/link";
 import {
   ArrowRight, Bot, BookOpen, Check, ChevronDown, CircleAlert, Code2, Copy,
   FileText, Lightbulb, LoaderCircle, Menu, MessageCircle, Plus, Send, ShieldCheck,
-  Sparkles, Trash2, WandSparkles
+  Sparkles, Trash2, WandSparkles, PlugZap, Globe, Minus, PlusCircle
 } from "lucide-react";
 import { getSupabase } from "@/lib/supabase-browser";
 import { assistantSkills, type AssistantSkill } from "@/lib/assistant-skills";
@@ -18,6 +18,7 @@ type AssistantResponse = {
   title?:string; skill?:string; model?:string; attempts?:number; ok?:boolean;
   projectContext?:{loadedDocuments:number;missingDocuments:number;source:"github-public-readonly"}|null;
   sourceInspection?:{inspected:Array<{path:string;url:string;truncated:boolean}>;failed:string[]}|null;
+  browserResult?:{url:string;title:string;fetched:boolean;note:string}|null;
 };
 const starters=[
   {label:"كتابة", icon:FileText, text:"اكتب لي منشور احترافي لصفحة Premier.OS عن فوائد أنظمة الكاشير للمطاعم، بدون أسعار غير مؤكدة."},
@@ -41,6 +42,8 @@ export default function GeneralAssistant() {
   const [note,setNote]=useState("");
   const [sourceFiles,setSourceFiles]=useState<Array<{path:string;url:string;truncated:boolean}>>([]);
   const [showSidebar,setShowSidebar]=useState(false);
+  const [fontSize,setFontSize]=useState(15);
+  const [browserResult,setBrowserResult]=useState<{url:string;title:string;fetched:boolean;note:string}|null>(null);
   const endRef=useRef<HTMLDivElement|null>(null);
   const inputRef=useRef<HTMLTextAreaElement|null>(null);
   const active=threads.find(t=>t.id===threadId);
@@ -63,7 +66,7 @@ export default function GeneralAssistant() {
   },[authHeaders]);
 
   const openThread=useCallback(async (id:string) => {
-    setBusy("loading-thread");setError("");
+    setBusy("loading-thread");setError("");setBrowserResult(null);
     try {
       const res=await fetch("/api/assistant?threadId="+encodeURIComponent(id),{
         headers:await authHeaders(),cache:"no-store"
@@ -110,6 +113,7 @@ export default function GeneralAssistant() {
       if(!res.ok||!data.thread)throw new Error(data.error||"تعذر إنشاء المحادثة.");
       setThreadId(data.thread.id);setMessages([]);setThreads(current=>[data.thread!,...current]);
       setShowSidebar(false);
+      setBrowserResult(null);
       inputRef.current?.focus();
     }catch(e){setError(e instanceof Error?e.message:"تعذر الإنشاء.");}
     finally{setBusy("");}
@@ -128,7 +132,7 @@ export default function GeneralAssistant() {
       const remaining=threads.filter(t=>t.id!==id);
       setThreads(remaining);
       if(id===threadId){
-        setThreadId("");setMessages([]);setNote("");
+        setThreadId("");setMessages([]);setNote("");setBrowserResult(null);
       }
     }catch(e){setError(e instanceof Error?e.message:"تعذر الحذف.");}
     finally{setBusy("");}
@@ -168,6 +172,7 @@ export default function GeneralAssistant() {
         : "";
       setNote(`مهارة ${assistantSkills.find(s=>s.id===data.skill)?.title||data.skill} · ${data.model||"نموذج غير محدد"} · ${data.attempts||1} محاولة`+projectNote);
       setSourceFiles(data.sourceInspection?.inspected||[]);
+      setBrowserResult(data.browserResult||null);
       await loadThreads(false);
     }catch(e){
       setMessages(current=>current.filter(m=>!m.id.startsWith("pending-")));
@@ -177,19 +182,20 @@ export default function GeneralAssistant() {
   }
 
   const sending=busy==="send";
-  return <div className="crm-root general-assistant-root">
+  return <div className="crm-root general-assistant-root" style={{"--agent-chat-font-size":fontSize+"px"} as React.CSSProperties}>
     <div className="crm-wrap">
       <header className="crm-header">
         <div><strong>AGENT</strong><span> · المساعد متعدد المهارات</span></div>
         <nav className="crm-actions">
+          <Link href="/assistant/integrations"><PlugZap size={16}/> الإضافات</Link>
           <Link href="/studio"><ArrowRight size={16}/> استوديو التسويق</Link>
           <Link href="/crm">العملاء</Link>
         </nav>
       </header>
       <div className="assistant-title">
-        <div><span className="crm-overline">AGENT SKILLS • PRIVATE WORKSPACE</span>
-          <h1>مساعدك الذكي في أي مهمة نصية</h1>
-          <p>اكتب طلبك بشكل طبيعي، والمساعد يختار مهارته ويستخدم نماذج Gemini وGroq المتاحة ضمن حدود حسابك.</p>
+        <div><span className="crm-overline">AGENT • CHAT & TOOLS</span>
+          <h1>مساعدك الذكي</h1>
+          <p>تحدث معه، افحص كود GitHub، أو جرّب مهارة قراءة صفحات الويب. الأدوات الخارجية بصلاحيات محدودة.</p>
         </div>
         <div className="assistant-tag"><ShieldCheck size={15}/> محادثات خاصة • بدون إجراءات تلقائية</div>
       </div>
@@ -204,6 +210,11 @@ export default function GeneralAssistant() {
           <aside className={"assistant-sidebar "+(showSidebar?"expanded":"")}>
             <button className="assistant-new-chat" type="button" disabled={Boolean(busy)}
               onClick={()=>void createThread()}><Plus size={18}/> محادثة جديدة</button>
+            <div className="assistant-side-nav" aria-label="أقسام AGENT">
+              <span className="assistant-nav-active"><MessageCircle size={17}/> المحادثات</span>
+              <Link href="/assistant/integrations"><PlugZap size={17}/> الإضافات والاتصالات</Link>
+              <Link href="/studio"><Bot size={17}/> استوديو الوكلاء</Link>
+            </div>
             <div className="assistant-sidebar-title">المحادثات المحفوظة</div>
             {threads.length===0 && <p className="assistant-sidebar-empty">ابدأ محادثة جديدة، وهتظهر هنا تلقائيًا.</p>}
             <div className="assistant-thread-list">
@@ -222,6 +233,11 @@ export default function GeneralAssistant() {
               <button type="button" className="assistant-menu-button" onClick={()=>setShowSidebar(v=>!v)}
                 title="قائمة المحادثات"><Menu size={20}/></button>
               <div className="assistant-toolbar-name"><Bot size={18}/><strong>{active?.title||"محادثة جديدة"}</strong></div>
+              <div className="assistant-font-tools" aria-label="حجم خط المحادثة">
+                <button type="button" title="تصغير الخط" onClick={()=>setFontSize(x=>Math.max(14,x-1))} disabled={fontSize<=14}><Minus size={14}/></button>
+                <span aria-live="polite">{fontSize}</span>
+                <button type="button" title="تكبير الخط" onClick={()=>setFontSize(x=>Math.min(19,x+1))} disabled={fontSize>=19}><PlusCircle size={15}/></button>
+              </div>
               <label className="assistant-skill-select"><span>المهارة</span>
                 <select value={skill} disabled={Boolean(busy)}
                   onChange={e=>setSkill(e.target.value as AssistantSkill)}>
@@ -233,7 +249,7 @@ export default function GeneralAssistant() {
               {messages.length===0 && <div className="assistant-welcome">
                 <div className="assistant-logo"><WandSparkles size={32}/></div>
                 <h2>اطلب اللي محتاجه من AGENT</h2>
-                <p>كتابة، برمجة، شرح، تخطيط، تحليل، تسويق وترجمة. مهارة تطوير POS بتستند لوثائق عامة من مستودع Premier.OS عند توفرها.</p>
+                <p>اسأل أي سؤال، اختار مهارة، أو اختبر GitHub والمتصفح النصي. اضغط «الإضافات والاتصالات» لربط خدمات جديدة.</p>
                 <div className="assistant-starters">
                   {starters.map(item=><button type="button" key={item.label} onClick={()=>{setDraft(item.text);inputRef.current?.focus();}}>
                     <item.icon size={18}/><strong>{item.label}</strong><span>{item.text}</span>
@@ -255,6 +271,12 @@ export default function GeneralAssistant() {
             </div>
             <div className="assistant-compose">
               {note && <p className="assistant-run-note"><Check size={14}/>{note}</p>}
+              {browserResult && <div className="assistant-browser-note">
+                <Globe size={15}/>
+                {browserResult.fetched
+                  ? <a href={browserResult.url} target="_blank" rel="noopener noreferrer">صفحة تمت قراءتها: {browserResult.title||browserResult.url}</a>
+                  : <span>تعذرت قراءة الصفحة: {browserResult.note}</span>}
+              </div>}
               {sourceFiles.length>0 && <div className="assistant-source-list">
                 <strong>ملفات الكود اللي اتقرأت فعلًا (GitHub - قراءة فقط):</strong>
                 {sourceFiles.map(file=><a key={file.path} href={file.url} target="_blank" rel="noopener noreferrer">
@@ -262,7 +284,7 @@ export default function GeneralAssistant() {
                 </a>)}
               </div>}
               <div className="assistant-composer-box">
-                <textarea ref={inputRef} rows={3} maxLength={4500} value={draft}
+                <textarea ref={inputRef} rows={2} maxLength={4500} value={draft}
                   disabled={Boolean(busy)} placeholder="اكتب أي طلب هنا... مثال: اشرح لي، اعمل خطة، اكتب كود، صيغ رسالة..."
                   onChange={e=>setDraft(e.target.value)}
                   onKeyDown={e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();void sendMessage();}}}/>
@@ -274,7 +296,7 @@ export default function GeneralAssistant() {
                   السماح بحصص Gemini وGroq المشروطة
                 </label><span>{draft.length}/4500</span>
               </div>
-              <p className="assistant-limit-note">النماذج قد تخطئ، والحصة المجانية ليست مضمونة. البحث في الإنترنت والملفات وتشغيل البرامج والنشر الخارجي مش متاحين في الشات ده حاليًا.</p>
+              <p className="assistant-limit-note">القراءة من GitHub والصفحات العامة المحددة فقط؛ المتصفح التفاعلي والنشر والإرسال والتعديل الخارجي مش مفعّلين. النماذج قد تخطئ.</p>
             </div>
           </main>
         </div>}
