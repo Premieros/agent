@@ -35,7 +35,11 @@ export async function memoryContext(s:AgentSession,threadId:string,prompt:string
     .filter(m=>m.scope==="global"||m.thread_id===threadId)
     .map(m=>{
       const overlap=keywords(m.subject+" "+m.content).filter(w=>terms.has(w)).length;
-      const score=(m.scope==="thread"?3:0)+Math.min(overlap,9)*2+
+      // Preserve important global decisions/preferences even for short
+      // follow-ups such as "أكمل" that have no useful search keywords.
+      const pinned=m.scope==="global"&&
+        (m.category==="decision"||m.category==="preference")?1:0;
+      const score=(m.scope==="thread"?3:pinned)+Math.min(overlap,9)*2+
         (m.category==="decision"&&overlap>0?2:0);
       return {m,score,overlap};
     }).filter(v=>v.score>0)
