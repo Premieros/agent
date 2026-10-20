@@ -92,8 +92,8 @@ export function detectAgentIntent(text:string,lastAssistantModel?:string|null):A
 
   // Complete standalone application requests enter the review-first Work flow.
   // Never treat questions, marketing pages or changes to AGENT itself as a build grant.
-  const buildVerb=/(?:^(?:ابن|ابني|انشئ|اصنع|برمج|طور|اعمل|build|create|develop|make)\\s+|(?:ابن|انشئ|اصنع|برمج|build)\\s+لي\\s+)/iu.test(q);
-  const fullApplication=/(?:تطبيق|مشروع\\s+(?:برمجي|متكامل|كامل)|موقع\\s+ويب|web\\s*app|full[ -]?stack|complete\\s+app|website)/iu.test(q);
+  const buildVerb=/(?:^(?:ابن|ابني|انشئ|اصنع|برمج|طور|اعمل|build|create|develop|make)\s+|(?:ابن|انشئ|اصنع|برمج|build)\s+لي\s+)/iu.test(q);
+  const fullApplication=/(?:تطبيق|مشروع\s+(?:برمجي|متكامل|كامل)|موقع\s+ويب|web\s*app|full[ -]?stack|complete\s+app|website)/iu.test(q);
   if(!explaining&&buildVerb&&fullApplication)return "work";
   return "chat";
 }
