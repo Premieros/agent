@@ -2,7 +2,7 @@ name: AGENT build check
 
 on:
   push:
-    branches: [main, dev/isolated-project-download-20261020]
+    branches: [main, dev/isolated-project-download-20261020, dev/multifile-work-engine-20261020]
   pull_request:
     branches: [main]
   workflow_dispatch:
