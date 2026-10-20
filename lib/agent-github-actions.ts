@@ -65,6 +65,22 @@ export async function dispatchAgentExperiment(input:{requestId:string;code:strin
       code_b64:Buffer.from(input.code,"utf8").toString("base64")}
   });
 }
+/** Public-workflow handoff only: never dispatch private documents or credentials.
+ * This uses the existing actions:write GitHub App permission; no repository writes.
+ * The revised workflow must be on GitHub's default branch before it can run.
+ */
+export async function dispatchAgentProject(input:{requestId:string;files:{path:string;content:string}[]}){
+  if(!/^[0-9a-f-]{36}$/i.test(input.requestId)||!Array.isArray(input.files))
+    throw new Error("GITHUB_PROJECT_INVALID_INPUT");
+  const raw=Buffer.from(JSON.stringify({files:input.files}),"utf8");
+  const b64=raw.toString("base64");
+  if(raw.byteLength>40_000||b64.length>56_000)throw new Error("GITHUB_PROJECT_INPUT_TOO_LARGE");
+  const token=await installationToken();
+  await githubApi("/repos/"+AGENT_ACTIONS_REPO+"/actions/workflows/"+
+    AGENT_ACTIONS_WORKFLOW+"/dispatches",token,"POST",{
+    ref:"main",inputs:{request_id:input.requestId,project_b64:b64}
+  });
+}
 export async function fetchAgentExperiment(requestId:string,knownRunId?:number|null){
   if(!/^[0-9a-f-]{36}$/i.test(requestId))throw new Error("GITHUB_ACTIONS_INVALID_INPUT");
   const token=await installationToken();
