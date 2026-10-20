@@ -612,7 +612,10 @@ export default function GeneralAssistant() {
           ? ` · GitHub: ${data.projectContext.loadedDocuments} وثائق للقراءة فقط`
           : " · تعذر قراءة وثائق GitHub في هذه المحاولة"
         : "";
-      setNote(`مهارة ${data.customSkill||assistantSkills.find(s=>s.id===data.skill)?.title||data.skill} · ${data.model||"نموذج غير محدد"} · ${data.attempts||1} محاولة`+projectNote);
+      const toolNote=data.model==="agent-web-search"
+        ?"بحث فهارس مباشرة · دون نموذج AI"
+        :`${data.model||"نموذج غير محدد"} · ${data.attempts??1} محاولة`;
+      setNote(`مهارة ${data.customSkill||assistantSkills.find(s=>s.id===data.skill)?.title||data.skill} · ${toolNote}`+projectNote);
       setSourceFiles(data.sourceInspection?.inspected||[]);
       setSourceProject(data.sourceInspection?.repository||"");
       setBrowserResult(data.browserResult||null);
