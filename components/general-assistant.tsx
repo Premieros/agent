@@ -13,6 +13,7 @@ import { currentSession } from "@/lib/auth-session";
 import { assistantSkills, type AssistantSkill } from "@/lib/assistant-skills";
 import AssistantMarkdown from "@/components/assistant-markdown";
 import AgentProjectBuilder from "@/components/agent-project-builder";
+import {readAssistantApiJson} from "@/lib/assistant-api-response";
 import AssistantLearningPanel from "@/components/assistant-learning-panel";
 import AssistantWorkspacePanel,{type WorkspaceView} from "@/components/assistant-workspace-panel";
 import {detectAgentIntent,describeAgentIntent,extractMemory,requiresApproval,type AgentIntent} from "@/lib/assistant-intent";
@@ -845,7 +846,7 @@ export default function GeneralAssistant() {
           method:"POST",headers:await authHeaders(),
           body:JSON.stringify({action:"plan",threadId:id,task:message})
         });
-        const projectData=await projectResponse.json() as {ok?:boolean;error?:string;id?:string};
+        const projectData=await readAssistantApiJson<{ok?:boolean;error?:string;id?:string}>(projectResponse);
         if(!projectResponse.ok||!projectData.ok)throw new Error(
           projectData.error||"تعذر إنشاء ملفات التطبيق.");
         setMessages(current=>current.filter(m=>m.id!==optimistic.id));
