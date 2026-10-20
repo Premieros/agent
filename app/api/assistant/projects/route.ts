@@ -65,22 +65,23 @@ async function finishExperience(s:AgentSession,run:Build,succeeded:boolean){
   .eq("organization_id",s.organizationId).eq("user_id",s.userId)
   .eq("title",title).limit(1);
  if(existing.error||existing.data?.length)return;
- await s.db.from("assistant_custom_skills").insert({
+ const proposed=await s.db.from("assistant_custom_skills").insert({
   organization_id:s.organizationId,user_id:s.userId,title,
   description:"اقتراح من تنفيذين ناجحين مسجلين، لا يُفعّل تلقائيًا",
   instructions:"عند بناء تطبيق Node.js متعدد الملفات: افصل server عن public عن tests، اختبر باستخدام node --test، اعرض النتائج الفعلية، لا تدّعِ أن نجاح الاختبارات يكفي لإثبات الجودة، ولا تستخدم شبكة أو تبعيات أو مفاتيح دون إذن.",
   phrases:["ابن تطبيق","اختبر المشروع","أصلح اختبارات Node.js"],
   base_skill:"coding",status:"suggested",source:"automatic"
- }).catch(()=>{});
+ });
+ if(proposed.error)console.warn("AGENT suggested project skill unavailable");
 }
 async function sandboxTest(spec:ProjectSpec,onProgress:(text:string)=>Promise<void>){
- // Entire untrusted project runs ONLY in a non-persistent, network-denied microVM.
+ // Entire untrusted project runs ONLY in a stopped-after-use, network-denied microVM.
  // No AGENT checkout, host process execution, shell, credentials or npm install.
  let sandbox:Sandbox|null=null;
  let log="$ sandbox --network deny-all --persistent false\n";
  try{
   sandbox=await Sandbox.create({timeout:PER_ATTEMPT_MS,networkPolicy:"deny-all",
-    persistent:false,resources:{vcpus:1}});
+    resources:{vcpus:1}});
   const dirs=new Set<string>();
   for(const file of spec.files){
     const parts=file.path.split("/");
