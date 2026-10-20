@@ -27,7 +27,7 @@ export async function recordSandboxExperience(s:AgentSession,run:{
     kind:"sandbox_execution",reference_id:run.id,
     task_domain:taskDomain(run.task),model:run.model.slice(0,180),
     outcome:succeeded?"positive":"negative",
-    evidence:succeeded?(runner==="github"?"GitHub Actions exit=0; functionality not fully verified.":"Sandbox exit=0; functionality not fully verified."):
+    evidence:succeeded?(runner==="github"?"GitHub Actions exit=0; functionality not fully verified.":"Sandbox process exit=0; functional correctness unverified."):
       (runner==="github"?"GitHub Actions test failed; see runner log.":"Sandbox failed or unavailable; cause requires review."),
     updated_at:new Date().toISOString()
   };
