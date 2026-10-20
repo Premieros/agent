@@ -108,7 +108,7 @@ export default function GeneralAssistant() {
   const [sourceProject,setSourceProject]=useState("");
   const [showSidebar,setShowSidebar]=useState(false);
   const [sidebarPortalTarget,setSidebarPortalTarget]=useState<HTMLElement|null>(null);
-  const [fontSize,setFontSize]=useState(15);
+  const [fontSize,setFontSize]=useState(16);
   const [browserResult,setBrowserResult]=useState<{url:string;title:string;fetched:boolean;note:string}|null>(null);
   const [researchResult,setResearchResult]=useState<AssistantResponse["researchResult"]>(null);
   const [libraryDocuments,setLibraryDocuments]=useState<Array<{id:string;file_name:string}>>([]);
@@ -897,6 +897,10 @@ export default function GeneralAssistant() {
     await sendMessage(choice.text,true);
   }
 
+  const finishedWork=Boolean(pendingWork&&["completed","failed"].includes(pendingWork.status));
+  const latestEvidenceReply=messages.filter(m=>m.role==="assistant"&&
+    m.model==="agent-execution-evidence").at(-1)?.id;
+
   const workEvidence=pendingWork?describeWorkEvidence({
     status:pendingWork.status,attempted:pendingWork.sandbox_ran,
     succeeded:pendingWork.sandbox_succeeded,
@@ -989,7 +993,7 @@ export default function GeneralAssistant() {
               {messages.map(m=><article key={m.id} className={"assistant-bubble "+m.role}>
                 <div className="assistant-avatar">{m.role==="assistant"?<Sparkles size={17}/>:<span>أنت</span>}</div>
                 <div className="assistant-message-body">
-                  <div className="assistant-message-heading"><strong>{m.role==="assistant"?"AGENT":"أنت"}</strong>
+                  <div className="assistant-message-heading" aria-label={m.role==="assistant"?"إجراءات رد AGENT":"رسالة المستخدم"}><strong>{m.role==="assistant"?"AGENT":"أنت"}</strong>
                     {m.role==="assistant"&&<>
                       <button type="button" title="نسخ الرد"
                         onClick={()=>void navigator.clipboard.writeText(m.content)}><Copy size={14}/></button>
@@ -1018,6 +1022,31 @@ export default function GeneralAssistant() {
                       </button>
                     </>}</div>
                   <div className="assistant-message-text" dir="auto">{m.role==="assistant"?<AssistantMarkdown content={m.content}/>:m.content}</div>
+                  {finishedWork&&m.id===latestEvidenceReply&&pendingWork&&
+                    <div className="agent-inline-work-result" aria-label="خطوات متابعة تجربة AGENT">
+                      <div className="agent-inline-work-actions">
+                        {workEvidence?.failed&&
+                          <button type="button" disabled={Boolean(busy)}
+                            onClick={()=>void proposeWorkRepair(pendingWork)}>
+                            <Code2 size={15}/> حضّر إصلاحًا
+                          </button>}
+                        <button type="button" disabled={Boolean(busy)||artifactBusy}
+                          onClick={()=>void saveWorkArtifact(pendingWork.id)}>
+                          <Save size={15}/>
+                          {savedArtifacts.includes(pendingWork.id)?"تم الحفظ في المكتبة":"حفظ الكود والنتيجة"}
+                        </button>
+                      </div>
+                      <details className="agent-inline-work-details">
+                        <summary>عرض تفاصيل الاختبار والأوامر</summary>
+                        <pre dir="ltr">{pendingWork.execution_log||"لم تُسجّل مخرجات تشغيل."}</pre>
+                        {pendingWork.github_run_id&&
+                          <a target="_blank" rel="noopener noreferrer"
+                            href={"https://github.com/Premieros/agent/actions/runs/"+pendingWork.github_run_id}>
+                            فتح التشغيل على GitHub
+                          </a>}
+                      </details>
+                    </div>}
+
                   
                 </div>
               </article>)}
@@ -1025,7 +1054,7 @@ export default function GeneralAssistant() {
                 initialView={workspaceView} initialOpenLead={workspaceCreateLead}
                 authHeaders={authHeaders} onClose={()=>{setWorkspaceView(null);setWorkspaceCreateLead(false);}}
                 onPrompt={prompt=>void sendMessage(prompt)}/>}
-              {pendingWork&&<section className="assistant-work-steps agent-work-terminal" aria-label="ترمنال تجربة AGENT">
+              {pendingWork&&!finishedWork&&<section className="assistant-work-steps agent-work-terminal" aria-label="ترمنال تجربة AGENT">
                 <div className="agent-work-terminal-head">
                   <strong><Terminal size={15}/> {pendingWork.status==="planned"?"خطة برمجية بانتظار المراجعة": "تجربة "+(pendingWork.github_request_id?"GitHub Actions":"Sandbox")} · {pendingWork.status==="running"?"قيد التنفيذ":
                     pendingWork.status==="planned"?"بانتظار موافقتك":
@@ -1258,7 +1287,7 @@ export default function GeneralAssistant() {
                 </label>
                 <span>{draft.length}/4500</span>
               </div>
-              <p className="assistant-limit-note">AGENT يختار المهارة والأداة حسب الطلب. التغييرات، وتشغيل الوكلاء وSandbox، تحتاج موافقتك أولًا.</p>
+              <p className="assistant-limit-note">AGENT يستخدم الأدوات الموصولة عند الحاجة. التنفيذ والتغييرات الخارجية تحتاج موافقتك.</p>
             </div>
           </main>
         </div>}

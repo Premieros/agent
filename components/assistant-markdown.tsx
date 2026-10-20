@@ -56,9 +56,15 @@ export default function AssistantMarkdown({ content }: { content:string }) {
       const codeLines:string[]=[];
       while (i<lines.length && !/^\s*```/.test(lines[i])) codeLines.push(lines[i++]);
       if (i<lines.length) i++;
+      const code=codeLines.join("\n");
       nodes.push(<div key={nodes.length} className="assistant-md-code">
-        <div className="assistant-md-code-label">{language}</div>
-        <pre dir="ltr"><code>{codeLines.join("\n")}</code></pre>
+        <div className="assistant-md-code-head">
+          <span className="assistant-md-code-label">{language}</span>
+          <button type="button" className="assistant-md-code-copy"
+            aria-label="نسخ الكود" title="نسخ الكود"
+            onClick={()=>void navigator.clipboard.writeText(code)}>نسخ الكود</button>
+        </div>
+        <pre dir="ltr"><code>{code}</code></pre>
       </div>);
       continue;
     }

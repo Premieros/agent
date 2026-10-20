@@ -25,7 +25,7 @@ test("a real failing Node.js assertion is explained without claiming success",()
     status:"executed",attempted:true,succeeded:false,log,runner:"github"
   });
   assert.match(report,/فشل/);
-  assert.match(report,/هذا ليس نشرًا/);
+  assert.match(report,/لم يُنشر/);
   assert.doesNotMatch(report,/اكتمل التطبيق بنجاح|اختبرنا كل الحالات/);
 });
 

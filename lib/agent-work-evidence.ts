@@ -58,12 +58,11 @@ export function describeWorkEvidence(run:WorkEvidence){
 export function workEvidenceReport(run:WorkEvidence){
   const d=describeWorkEvidence(run);
   return [
-    "**النتيجة:** "+d.phase+".",
-    d.cause?"**ماذا حدث؟** "+d.cause:"",
-    d.next?"**الخطوة التالية:** "+d.next:"",
-    run.runner==="github"?
-      "تم تشغيل تجربة على GitHub Actions. هذا ليس نشرًا للتطبيق أو كتابة في المستودع.":
-      "التجربة داخل بيئة معزولة؛ لم يتم نشر التطبيق.",
-    "يمكن فتح «سجل الأوامر» للتفاصيل التقنية."
+    "**"+(d.failed?"الاختبار فشل":d.passed?"الاختبار نجح":"نتيجة التجربة")+"** — "+d.phase+".",
+    d.cause||"",
+    d.failed?
+      "يمكنك الضغط على **«حضّر إصلاحًا»** أسفل الرد؛ سيراجع AGENT الكود وسجل الخطأ ويعرض نسخة جديدة قبل أي إعادة اختبار.":
+      d.next||"",
+    "لم يُنشر التطبيق أو تُكتب ملفات إلى المستودع."
   ].filter(Boolean).join("\n\n");
 }

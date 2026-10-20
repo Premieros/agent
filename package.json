@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start",
     "typecheck": "tsc --noEmit",
-    "test:research": "node --experimental-strip-types --test tests/agent-web-search.test.mjs tests/assistant-intent.test.mjs tests/agent-library.test.mjs tests/assistant-chat-ux.test.mjs tests/agent-orchestrator.test.mjs tests/agent-experience.test.mjs tests/agent-work-terminal.test.mjs tests/agent-session-recovery.test.mjs tests/agent-github-actions.test.mjs tests/agent-work-evidence.test.mjs"
+    "test:research": "node --experimental-strip-types --test tests/agent-web-search.test.mjs tests/assistant-intent.test.mjs tests/agent-library.test.mjs tests/assistant-chat-ux.test.mjs tests/agent-orchestrator.test.mjs tests/agent-experience.test.mjs tests/agent-work-terminal.test.mjs tests/agent-session-recovery.test.mjs tests/agent-github-actions.test.mjs tests/agent-work-evidence.test.mjs tests/agent-chat-v4.test.mjs"
   },
   "dependencies": {
     "next": "^16.0.0",
