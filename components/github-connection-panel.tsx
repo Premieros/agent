@@ -69,7 +69,7 @@ export default function GithubConnectionPanel(){
   return <section className="integration-project-panel" aria-label="إدارة مستودع GitHub">
     <div className="integration-project-heading">
       <div><h2><Link2 size={19}/> مستودع GitHub للمساعد</h2>
-        <p>اختار أي مستودع <strong>عام</strong> للاختبار. AGENT يفحص فهرس الملفات ويقرأ مقتطفات عند طلبك، بدون كتابة أو Pull Requests.</p></div>
+        <p>اختَر مستودع GitHub <strong>عامًا</strong> لقراءة كوده. تشغيل الكود واختباره يتم في <strong>Vercel Sandbox</strong> المعزول، وليس داخل GitHub. هذا الاتصال لا يمنح AGENT صلاحية كتابة أو GitHub Actions أو الوصول إلى مستودع خاص.</p></div>
     </div>
     <div className="integration-project-form">
       <label htmlFor="agent-github-project">رابط المستودع أو owner/repo</label>

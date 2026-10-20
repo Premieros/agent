@@ -48,7 +48,7 @@ export async function GET(req:NextRequest){
       .eq("thread_id",threadId).eq("status","running")
       .lt("updated_at",new Date(Date.now()-3*60_000).toISOString());
     const {data,error}=await db.from("assistant_work_runs")
-      .select("id,status,steps,created_at,report,stage_note,sandbox_ran,sandbox_succeeded")
+      .select("id,status,steps,created_at,report,stage_note,sandbox_ran,sandbox_succeeded,execution_log")
       .eq("organization_id",organizationId).eq("user_id",userId)
       .eq("thread_id",threadId).order("created_at",{ascending:false}).limit(5);
     if(error)throw error;
@@ -189,7 +189,7 @@ export async function POST(req:NextRequest){
         .eq("id",thread.id).eq("organization_id",organizationId).eq("user_id",userId);
       return response({ok:true,runId:run.id,steps:plan.steps,title});
     }
-    if(!["execute","finalize"].includes(String(body.action))||
+    if(!["execute","finalize","save_artifact"].includes(String(body.action))||
       typeof body.runId!=="string"||!uuid.test(body.runId))
       return response({error:"طلب عمل غير صحيح."},400);
     const {data:run,error:runError}=await db.from("assistant_work_runs")
@@ -198,6 +198,50 @@ export async function POST(req:NextRequest){
       .eq("user_id",userId).maybeSingle();
     if(runError)throw runError;
     if(!run)return response({error:"مهمة العمل غير موجودة."},404);
+
+    if(body.action==="save_artifact"){
+      if(!["executed","completed","failed"].includes(run.status))
+        return response({error:"احفظ نتيجة التجربة بعد انتهاء تشغيلها."},409);
+      const savedName="AGENT-experiment-"+run.id.slice(0,8)+".md";
+      const existing=await db.from("assistant_library_items").select("id")
+        .eq("organization_id",organizationId).eq("user_id",userId)
+        .eq("file_name",savedName).limit(1).maybeSingle();
+      if(existing.error)throw existing.error;
+      if(existing.data)return response({ok:true,alreadySaved:true});
+      const markdown=[
+        "# تجربة برمجية من AGENT",
+        "## المطلوب",String(run.task).slice(0,4500),
+        "## خطة التنفيذ",...((Array.isArray(run.steps)?run.steps:[]) as string[]).map((s,i)=>
+          String(i+1)+". "+String(s).slice(0,150)),
+        "## كود التجربة (Node.js)",String.fromCharCode(96).repeat(3)+"javascript",
+        String(run.code||"// No executable code produced").slice(0,6000),
+        String.fromCharCode(96).repeat(3),
+        "## الترمنال (سجل فعلي)",String.fromCharCode(96).repeat(3)+"text",
+        String(run.execution_log||"لم يتم تسجيل أوامر").slice(0,7600),
+        String.fromCharCode(96).repeat(3),
+        "## حدود التجربة",
+        "تم التنفيذ، إن حدث، في Vercel Sandbox مع منع الشبكة؛ نجاح Exit Code لا يثبت جودة التطبيق.",
+        "لم تُجرَ أي كتابة إلى GitHub أو نشر للتطبيق."
+      ].join("\n\n");
+      const bytes=new TextEncoder().encode(markdown);
+      const path=organizationId+"/"+userId+"/"+crypto.randomUUID()+".md";
+      const storage=db.storage.from("agent-library");
+      const uploaded=await storage.upload(path,bytes,{
+        contentType:"text/markdown",cacheControl:"3600",upsert:false
+      });
+      if(uploaded.error)return response({error:"تعذر حفظ التجربة في التخزين الخاص."},502);
+      const artifact=await db.from("assistant_library_items").insert({
+        organization_id:organizationId,user_id:userId,thread_id:run.thread_id,
+        title:"تجربة AGENT "+run.id.slice(0,8),file_name:savedName,
+        storage_path:path,mime_type:"text/markdown",kind:"document",
+        size_bytes:bytes.length,source:"assistant"
+      }).select("id").single();
+      if(artifact.error){
+        await storage.remove([path]);
+        return response({error:"تعذر تسجيل الملف في المكتبة."},502);
+      }
+      return response({ok:true,item:artifact.data});
+    }
 
     if(body.action==="execute"){
       if(run.status!=="planned")return response({
@@ -212,29 +256,56 @@ export async function POST(req:NextRequest){
       if(claimError)throw claimError;
       if(!claimed)return response({error:"المهمة بدأت بالفعل."},409);
       const shouldRun=typeof run.code==="string"&&Boolean(run.code.trim());
-      let executionLog="";
+      let executionLog="$ AGENT / work experiment\n";
       let succeeded:boolean|null=null;
+      // Persist bounded stdout/command events so the owner can poll them from
+      // chat while execute is running; never expose model private reasoning.
+      const trace=async(note:string)=>{
+        await db.from("assistant_work_runs").update({
+          execution_log:executionLog.slice(0,7600),
+          stage_note:note,updated_at:new Date().toISOString()
+        }).eq("id",run.id).eq("status","running")
+          .eq("organization_id",organizationId).eq("user_id",userId);
+      };
       if(!shouldRun){
-        executionLog="لا توجد حسابات أو اختبارات برمجية مناسبة؛ سيتم تحليل الأدلة مباشرة دون تشغيل Sandbox.";
+        executionLog+="No executable program was planned; analysis only.\n";
+        await trace("هذه المهمة لا تحتاج تنفيذ كود.");
       }else{
         let sandbox:Sandbox|null=null;
         try{
-          // Ephemeral container. No secrets passed, outbound network blocked.
+          executionLog+="$ sandbox create --network deny-all\n";
+          await trace("إنشاء بيئة Sandbox منفصلة دون شبكة...");
           sandbox=await Sandbox.create({timeout:22_000,networkPolicy:"deny-all"});
           const payload=JSON.stringify({task:run.task,steps:run.steps,materials:run.materials});
           await sandbox.writeFiles([
             {path:"task.json",content:Buffer.from(payload,"utf-8")},
             {path:"work.js",content:Buffer.from(run.code,"utf-8")}
           ]);
-          const result=await sandbox.runCommand("node",["work.js"]);
-          const stdout=(await result.stdout()).slice(0,5800);
-          const stderr=(await result.stderr()).slice(0,1600);
-          executionLog=("exit="+result.exitCode+"\n"+stdout+
-            (stderr?"\nSTDERR: "+stderr:"")).slice(0,7600);
-          succeeded=result.exitCode===0;
+          executionLog+="wrote task.json, work.js (temporary only)\n";
+          executionLog+="$ node --check work.js\n";
+          await trace("فحص صياغة JavaScript قبل التشغيل...");
+          const check=await sandbox.runCommand("node",["--check","work.js"]);
+          const checkOut=(await check.stdout()).slice(0,950);
+          const checkErr=(await check.stderr()).slice(0,1100);
+          executionLog+=checkOut+(checkErr?"\n"+checkErr:"")+
+            "\n[syntax exit="+check.exitCode+"]\n";
+          await trace(check.exitCode===0?"اجتاز فحص الصياغة.":"فشل فحص الصياغة.");
+          if(check.exitCode!==0){
+            succeeded=false;
+          }else{
+            executionLog+="$ node work.js\n";
+            await trace("تشغيل كود التجربة داخل Sandbox...");
+            const result=await sandbox.runCommand("node",["work.js"]);
+            const stdout=(await result.stdout()).slice(0,4300);
+            const stderr=(await result.stderr()).slice(0,1200);
+            executionLog+=stdout+(stderr?"\nSTDERR: "+stderr:"")+
+              "\n[exit="+result.exitCode+"]\n";
+            succeeded=result.exitCode===0;
+            await trace(succeeded?"انتهى التشغيل بنجاح.":"فشل تشغيل التجربة.");
+          }
         }catch(e){
           succeeded=false;
-          executionLog="تعذر تشغيل برنامج التحليل المعزول على Vercel. لم تُنفّذ تعديلات خارجية.";
+          executionLog+="[sandbox error] تعذر تشغيل البيئة المعزولة. لم تُنفّذ تغييرات خارجية.\n";
           console.error("AGENT work sandbox unavailable",e instanceof Error?e.name:"Unknown");
         }finally{
           if(sandbox){try{await sandbox.stop();}catch{console.warn("Sandbox cleanup failed");}}
