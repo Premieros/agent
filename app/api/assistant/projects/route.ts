@@ -13,6 +13,14 @@ const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const TTL_MS=12*60_000;
 const headers={"Cache-Control":"private, no-store"};
 const response=(data:unknown,status=200)=>NextResponse.json(data,{status,headers});
+function projectApiError(e:unknown){
+ const err=e as {code?:string;message?:string}|null;
+ if(err&&(err.code==="42P01"||err.code==="PGRST205"||
+   err.message?.includes("assistant_project_builds"))){
+  return response({error:"إنشاء المشاريع غير متاح حاليًا: جدول المشاريع لم يُجهّز في قاعدة AGENT. لا تُكرر الطلب حتى يُطبّق ترحيل قاعدة البيانات الخاص بالمشاريع.",code:"PROJECT_MIGRATION_PENDING"},503);
+ }
+ const x=errorResponse(e);return response({error:x.message},x.status);
+}
 type Build={
  id:string;thread_id:string;task:string;title:string;steps:string[];
  files:ProjectFile[];status:string;approved_at:string|null;deadline_at:string|null;
@@ -122,7 +130,7 @@ export async function GET(req:NextRequest){
    run=await ownerRun(s,run.id);
   }
   return response({project:run?publicBuild(run):null});
- }catch(e){const x=errorResponse(e);return response({error:x.message},x.status);}
+ }catch(e){return projectApiError(e);}
 }
 
 export async function POST(req:NextRequest){
@@ -310,5 +318,5 @@ export async function POST(req:NextRequest){
    return response({ok:true,itemId:item.data.id});
   }
   return response({error:"إجراء غير معروف."},400);
- }catch(e){const x=errorResponse(e);return response({error:x.message},x.status);}
+ }catch(e){return projectApiError(e);}
 }
