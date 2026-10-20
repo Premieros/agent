@@ -20,15 +20,15 @@ export async function chooseExperiencedModels<T extends ModelOption>(
 /** Evidence is sandbox process exit, never a model's self-reported success. */
 export async function recordSandboxExperience(s:AgentSession,run:{
   id:string;task:string;model:string|null;sandbox_ran:boolean;
-},succeeded:boolean|null){
+},succeeded:boolean|null,runner:"sandbox"|"github"="sandbox"){
   if(!run.sandbox_ran||typeof succeeded!=="boolean"||!run.model?.trim())return;
   const row={
     organization_id:s.organizationId,user_id:s.userId,
     kind:"sandbox_execution",reference_id:run.id,
     task_domain:taskDomain(run.task),model:run.model.slice(0,180),
     outcome:succeeded?"positive":"negative",
-    evidence:succeeded?"Sandbox process exit=0; functional correctness unverified.":
-      "Sandbox failed or unavailable; cause requires review.",
+    evidence:succeeded?(runner==="github"?"GitHub Actions exit=0; functionality not fully verified.":"Sandbox exit=0; functionality not fully verified."):
+      (runner==="github"?"GitHub Actions test failed; see runner log.":"Sandbox failed or unavailable; cause requires review."),
     updated_at:new Date().toISOString()
   };
   const {error}=await s.db.from("assistant_experience_events").upsert(row,{
