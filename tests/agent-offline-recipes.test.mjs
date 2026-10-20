@@ -47,7 +47,7 @@ test("learned reuse only uses owner verified results and new tasks require publi
  assert.match(api,/\.eq\("task",body\.task\.trim\(\)\)/);
  assert.match(api,/\.eq\("status","completed"\)\.eq\("test_passed",true\)/);
  assert.match(api,/\.not\("approved_at","is",null\)/);
- assert.match(api,/const autoStart=Boolean\(builtIn\)&&githubActionsConfigured\(\)/);
+ assert.match(api,/const autoStart=\(Boolean\(builtIn\)\|\|previouslyApproved\)&&githubActionsConfigured\(\)/);
  assert.match(api,/model_calls:modelCalls/);
  assert.match(api,/if\(!spec\)/);
  assert.match(api,/chosenModel="recipe:verified-reuse"/);
