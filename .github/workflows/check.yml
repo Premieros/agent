@@ -32,6 +32,32 @@ jobs:
         run: npm install --no-audit --no-fund
       - name: Test indexed research without network or credentials
         run: npm run test:research
+      - name: Verify trusted multi-file app in the same no-network Docker boundary
+        shell: bash
+        run: |
+          set -euo pipefail
+          root="$RUNNER_TEMP/agent-multi-smoke"
+          mkdir -p "$root"
+          export AGENT_SMOKE_ROOT="$root"
+          node --experimental-strip-types --input-type=module <<'JS'
+          import {builtInProjectRecipe} from "./lib/agent-project-recipes.ts";
+          import {parseProjectSpec} from "./lib/agent-project-engine.ts";
+          import {mkdirSync,writeFileSync} from "node:fs";
+          import {join,dirname} from "node:path";
+          const spec=parseProjectSpec(JSON.stringify(builtInProjectRecipe("ابن تطبيق إدارة مهام")));
+          for(const file of spec.files){
+            const target=join(process.env.AGENT_SMOKE_ROOT,file.path);
+            mkdirSync(dirname(target),{recursive:true,mode:0o755});
+            writeFileSync(target,file.content,{mode:0o644});
+          }
+          JS
+          chmod -R a+rX "$root"
+          timeout 45s docker run --rm \
+            --network none --read-only --cap-drop ALL --security-opt no-new-privileges \
+            --pids-limit 64 --memory 256m --cpus 1 --user 65534:65534 \
+            --tmpfs /tmp:rw,noexec,nosuid,size=16m \
+            --mount "type=bind,src=$root,dst=/workspace,readonly" \
+            node:22-alpine sh -ec 'cd /workspace; node --check server.js; node --test'
       - name: Build without external credentials
         run: npm run build
       - name: Check TypeScript
