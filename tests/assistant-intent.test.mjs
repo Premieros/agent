@@ -60,3 +60,13 @@ test("explanations and studio tasks don't dispatch code implicitly",()=>{
   assert.equal(detectAgentIntent("أنشئ مهمة تسويق للصفحة"),"studio-prepare");
   assert.equal(detectAgentIntent("شغّل الوكلاء"),"studio-run");
 });
+
+test("standalone Arabic and English app builds route to the multi-file work engine",()=>{
+ for(const task of [
+  "ابن تطبيق إدارة مخزون",
+  "أنشئ تطبيق ويب لإدارة المخزون",
+  "ابني تطبيق إدارة مهام",
+  "Build a complete app for tracking stock"
+ ])assert.equal(detectAgentIntent(task),"work",task);
+ assert.equal(detectAgentIntent("كيف أنشئ تطبيق إدارة مخزون؟"),"chat");
+});
