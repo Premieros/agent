@@ -1,100 +1,106 @@
-# AGENT independent multi-file application builder (development branch)
+# AGENT project runner — incremental autonomy, zero-model reuse, GitHub Actions
 
-Status: **development implementation only**. No main merge, database migration execution,
-Vercel deployment, additional GitHub permissions, or paid service activation took place.
+Status: **development branch only**. No merge, deployment, permission escalation,
+Supabase migration application or external billing configuration has occurred.
 
-## Scope and actual gaps addressed
+## Autonomy and permissions
 
-The original `/api/assistant/work` route builds one `work.js`, runs one bounded
-Node command, and delivers `program.js`. A failure needs a new manual repair
-proposal. The new `/api/assistant/projects` workflow adds a separate full-project
-path rather than changing the legacy experiment.
+The agent should **not** ask for approval on every planning, test, repair or
+artifact step. A familiar, public-safe, audited recipe (`build a todo app` /
+`ابن تطبيق إدارة مهام`) is prepared **without any model or AI API call** and,
+if the existing GitHub Actions App is configured, automatically enters the
+bounded test loop.
 
-A user request to create a complete application opens a review-first flow:
+For other tasks, AGENT first checks for a **previously successful, owner-scoped,
+exact task**. When found, it reuses the full validated source manifest without
+calling a model. A new task uses an explicitly identified OpenRouter `:free`
+model; failures may use one further free-model repair attempt.
 
-1. Generate a small multi-file application with an explicitly identified
-   OpenRouter `:free` model (not conditional free-tier providers).
-2. Validate relative paths, byte sizes, safe extensions, presence of real
-   source and `*.test.mjs`/`*.test.js` files; refuse `package.json`
-   supplied by the model.
-3. Display every file, a concise plan, and the resource limits to the owner.
-   **No execution yet.**
-4. On the owner's separate approval, persist an immutable deadline and
-   attempt cap, then allow the chat client to invoke one step at a time.
-5. Execute syntax checks and `node --test` inside Vercel Sandbox, with
-   `networkPolicy:"deny-all"`, one vCPU, 18 seconds/session and `stop()`
-   in `finally`; never check out or mount AGENT's own source.
-6. If real tests fail and budget remains, request a complete revised file
-   manifest from a `:free` model and rerun the tests automatically.
-   At most **two test attempts**, **one repair call**, **two total model
-   calls** (initial generation + optional repair), **three minutes total
-   after approval**. The model's success claim is not test evidence.
-7. Present bounded observed stdout/stderr and commands, record a success/failure
-   signal where actual execution evidence exists, and offer an owner-scoped
-   ZIP download. Save the same ZIP to the private `agent-library` bucket
-   on explicit user action. Positive repeated executions can only **suggest**
-   a coding skill and never activate it.
+Approval is required **once per new project** only when its generated source
+must be sent to a **public GitHub Actions workflow**, because its inputs/logs
+may be visible. The source is displayed before that approval. Once approved,
+no repeated consent is requested for test/repair/retest. No consent is
+needed for read-only evaluation or trusted built-in generic code.
 
-## Non-spending gate (important)
+GitHub Actions usage eligibility and free allocation are account-specific.
+The standard public-repository runner is intended for no-cost usage, but this
+implementation cannot independently guarantee that GitHub will never apply
+billing, usage limits or policy changes. It never purchases capacity.
 
-A Vercel Sandbox can incur usage charges depending on plan and quota.
-Because this project must **not spend money**, the multi-file workflow
-refuses to approve or execute a Sandbox run unless the system operator has
-independently verified an available free allocation and explicitly configured
-`AGENT_FREE_SANDBOX_VERIFIED=1` in the AGENT environment.
+## GitHub job boundary
 
-This branch **does not** configure that variable. It cannot prove what
-the account's actual remaining free allowance is, and the 18-second cap
-is a duration cap, **not a dollar-denominated billing cap**. If no free
-allocation can be verified, leave execution disabled; users may review and
-download only completed experiments from prior runs.
+Uses the *existing* GitHub App installation scoped to
+`Premieros/agent`, with **actions:write only**. No repo contents write,
+no push, no PR, no deploy, no new credential or integration.
 
-The legacy single-file Work flow retains its existing runner behavior.
-No new external service is provisioned and no credential is copied into
-generated projects. Only an explicit, separately scoped operation should
-ever enable a runner.
+The `.github/workflows/agent-experiment.yml` workflow was extended to accept
+a bounded JSON project manifest (up to 40 KB decoded), retaining its old
+single-file experiment mode. Runner:
 
-## Database and deployment separation
+- `permissions: {}` and **no actions/checkout**.
+- Host only validates and writes files into `RUNNER_TEMP`; user/generated
+  source executes inside `node:22-alpine` with
+  `--network none --read-only --cap-drop ALL --user 65534:65534`,
+  `--security-opt no-new-privileges`, CPU/memory/pid caps, and fixed
+  `node --check` / `node --test` commands.
+- Per job hard limit 4 minutes; code execution maximum 45 seconds.
+- At most two test dispatches and one LLM repair per project; deadline after
+  starting is 12 minutes, including GitHub queue time.
+- GitHub dispatch request IDs are stored **before** the API call, avoiding a
+  blind resend if the request times out or the browser disconnects.
+- Authenticated GET polls GitHub, recovers completed result using the
+  reported workflow timestamp, verifies exit logs, records progress
+  and decides whether a single repair is allowed.
 
-The migration `supabase/migrations/20261020_agent_project_builds.sql` is
-staged in GitHub **only**, not applied. It adds an owner-scoped table with
-RLS and a ZIP MIME allowance to the already-private AGENT library bucket.
-Do not apply it to Premier.OS or another Supabase project.
+No user or application secrets may be sent in the workflow, and obvious
+private-key and token patterns are rejected. Pattern detection is not a
+guarantee against disclosure: generated source may still contain personal
+information. Only public-safe predefined recipes may auto-dispatch.
 
-Until that migration has been separately reviewed and applied to AGENT's own
-database, API calls involving projects will fail with a missing-table error.
-The implementation branch is not merged to main and is not promoted to
-production. Existing work modes and migrations remain unchanged.
+## Learning without AI requests
 
-## Important current limitations
+1. Verified successful projects are saved as evidence scoped to the owner.
+2. A future **identical request** can reuse those files without model API
+   calls; the files are validated again before execution.
+3. The audited built-in task-board recipe needs **zero model calls**.
+4. Verified outcomes feed model preference signals when applicable, while
+   repeated evidence can create **suggested** skills, not activate new
+   privileges or arbitrary external tools.
+5. These are deterministic skills and project templates, not new weights
+   in an AI model. A novel requirement may still need an AI model or
+   an explicit new implementation.
 
-- Applications currently target Node.js built-ins with HTML/CSS/JS; no npm
-  installation, framework dependency, Docker image, external credentials,
-  internet, managed database or third-party service.
-- Projects are intentionally capped at 22 source files, 24 KB each and
-  115 KB of total source to bound ZIP, model output and review costs.
-  The model is asked for fewer files to fit free-model output limits.
-- The end-to-end step chain is advanced by an authenticated **open chat**.
-  On a browser close or network outage it pauses; reopening the conversation
-  resumes a ready/repairing state. A timed-out in-flight test is marked
-  failed and is **never silently rerun**. This is not yet an always-on
-  durable background worker.
-- Existing build checks verify TypeScript, Next.js build, path safety,
-  ZIP structures and a trusted end-to-end Node fixture. They do **not**
-  establish live Vercel Sandbox availability, remaining free quota or
-  successful generation from every connected model.
-- No GitHub Actions public dispatch is used for multi-file projects because
-  it would expose user-generated files or results on a public repository.
-- No auto merge, PR, GitHub push, Vercel deployment, or auto-save occurs.
+Storage is the existing private AGENT Library; owner can download a ZIP and
+save it privately. No auto-upload to public repositories.
 
-## Verification
+## Deployment gap (important)
 
-`npm run test:research`, `npm run build`, and `npm run typecheck`
-are run by `.github/workflows/check.yml` on the dedicated development
-branch. Check the actual GitHub Actions run before promoting any change.
+This change is only in
+`dev/multifile-work-engine-20261020`. GitHub only dispatches a revised
+workflow once the revised workflow is on the **default branch**.
+No change to `main` was authorized, so live multi-file workflow_dispatch
+cannot yet be validated from the production AGENT code.
 
-## Suggested next gate
+The staged Supabase migration adds the project table, owner RLS,
+GitHub request/run identifiers, zero-model accounting and ZIP MIME support.
+It has not been applied to AGENT's database, and must never be applied to
+Premier.OS.
 
-Review the migration and production-free-tier evidence, then test one harmless
-standalone task end-to-end in an isolated preview with explicit consent.
-Only after this passes should a reviewer consider a PR against main.
+A GitHub Actions check on the dev branch tests Next.js build, TypeScript,
+security boundaries and a trusted six-file local runtime fixture.
+This does not prove production end-to-end dispatch/retest until a reviewed
+rollout is explicitly authorized.
+
+## Limits
+
+- The first audited offline recipe builds a **Node.js task manager**.
+  Other projects may reuse an exact previously tested version.
+- New app creation is still restricted to Node.js built-ins, static UI,
+  and bounded JSON files; no arbitrary dependencies or install commands.
+- The chat UI advances repairs when it is open; an in-progress GitHub job
+  continues even after a tab closes, and its result can be reconciled upon
+  reconnect. Fully autonomous cloud scheduling for subsequent repair steps
+  is a future improvement.
+- GitHub APIs, Supabase APIs and web infrastructure are still required
+  to coordinate hosted execution; **zero model API calls** does not mean
+  zero infrastructure API requests or universal understanding without AI.
