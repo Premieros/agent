@@ -8,6 +8,7 @@ import {asksForConversionFigures,extractCampaignConversion,needsCampaignConversi
 import {memoryContext} from "@/lib/assistant-learning";
 import {chooseExperiencedModels,recordSandboxExperience} from "@/lib/agent-experience";
 import {taskDomain} from "@/lib/agent-adaptive-routing";
+import {githubActionsConfigured,dispatchAgentExperiment,fetchAgentExperiment} from "@/lib/agent-github-actions";
 
 export const runtime="nodejs";
 export const maxDuration=60;
@@ -46,9 +47,49 @@ export async function GET(req:NextRequest){
       updated_at:new Date().toISOString()
     }).eq("organization_id",organizationId).eq("user_id",userId)
       .eq("thread_id",threadId).eq("status","running")
+      .is("github_request_id",null)
       .lt("updated_at",new Date(Date.now()-3*60_000).toISOString());
+    // A GitHub Actions execution is asynchronous; poll and persist the result
+    // on the user's authenticated GET. Do not rerun code or read another user.
+    const {data:githubRunning,error:githubError}=await db.from("assistant_work_runs")
+      .select("id,task,model,github_request_id,github_run_id,status")
+      .eq("organization_id",organizationId).eq("user_id",userId)
+      .eq("thread_id",threadId).eq("status","running")
+      .not("github_request_id","is",null).limit(1).maybeSingle();
+    if(githubError)throw githubError;
+    if(githubRunning?.github_request_id&&githubActionsConfigured()){
+      try{
+        const trace=await fetchAgentExperiment(githubRunning.github_request_id,
+          typeof githubRunning.github_run_id==="number"?githubRunning.github_run_id:null);
+        if(trace.found){
+          const complete=trace.status==="completed";
+          const ran=complete&&trace.log.includes("[exit=");
+          const succeeded=ran&&trace.conclusion==="success";
+          const {error:updateError}=await db.from("assistant_work_runs").update({
+            ...(complete?{status:"executed",sandbox_ran:ran,
+              sandbox_succeeded:ran?succeeded:null}:{}),
+            github_run_id:trace.runId,
+            execution_log:trace.log,
+            stage_note:complete?
+              (succeeded?"انتهى الاختبار على GitHub Actions بنجاح.":"انتهى GitHub Actions؛ راجع سجل الأخطاء."):
+              "GitHub Actions: "+trace.status,
+            updated_at:new Date().toISOString()
+          }).eq("id",githubRunning.id).eq("status","running")
+            .eq("organization_id",organizationId).eq("user_id",userId);
+          if(updateError)throw updateError;
+          if(complete&&ran){
+            await recordSandboxExperience(session,{
+              id:githubRunning.id,task:String(githubRunning.task),
+              model:githubRunning.model,sandbox_ran:true
+            },succeeded).catch(()=>console.warn("AGENT Actions outcome record unavailable"));
+          }
+        }
+      }catch(e){
+        console.warn("AGENT GitHub workflow polling unavailable",e instanceof Error?e.message:"Unknown");
+      }
+    }
     const {data,error}=await db.from("assistant_work_runs")
-      .select("id,status,steps,created_at,report,stage_note,sandbox_ran,sandbox_succeeded,execution_log")
+      .select("id,status,steps,created_at,report,stage_note,sandbox_ran,sandbox_succeeded,execution_log,github_request_id,github_run_id")
       .eq("organization_id",organizationId).eq("user_id",userId)
       .eq("thread_id",threadId).order("created_at",{ascending:false}).limit(5);
     if(error)throw error;
@@ -62,7 +103,7 @@ export async function POST(req:NextRequest){
     const {db,userId,organizationId}=session;
     const body=await req.json() as {
       action?:unknown;threadId?:unknown;task?:unknown;runId?:unknown;
-      allowConditionalFreeTier?:unknown
+      allowConditionalFreeTier?:unknown;runner?:unknown
     };
     if(body.action==="plan"){
       if(typeof body.threadId!=="string"||!uuid.test(body.threadId)||
@@ -193,7 +234,7 @@ export async function POST(req:NextRequest){
       typeof body.runId!=="string"||!uuid.test(body.runId))
       return response({error:"طلب عمل غير صحيح."},400);
     const {data:run,error:runError}=await db.from("assistant_work_runs")
-      .select("id,thread_id,task,steps,code,materials,status,model,execution_log,sandbox_ran,sandbox_succeeded")
+      .select("id,thread_id,task,steps,code,materials,status,model,execution_log,sandbox_ran,sandbox_succeeded,github_request_id,github_run_id")
       .eq("id",body.runId).eq("organization_id",organizationId)
       .eq("user_id",userId).maybeSingle();
     if(runError)throw runError;
@@ -220,7 +261,10 @@ export async function POST(req:NextRequest){
         String(run.execution_log||"لم يتم تسجيل أوامر").slice(0,7600),
         String.fromCharCode(96).repeat(3),
         "## حدود التجربة",
-        "تم التنفيذ، إن حدث، في Vercel Sandbox مع منع الشبكة؛ نجاح Exit Code لا يثبت جودة التطبيق.",
+        run.github_request_id?
+          "نُفذت التجربة، إن حدث، على GitHub Actions داخل حاوية بدون شبكة؛ سجلات المستودع العام قد تكون مرئية للجميع.":
+          "نُفذت التجربة، إن حدث، في Vercel Sandbox مع منع الشبكة.",
+        "نجاح Exit Code لا يثبت جودة التطبيق.",
         "لم تُجرَ أي كتابة إلى GitHub أو نشر للتطبيق."
       ].join("\n\n");
       const bytes=new TextEncoder().encode(markdown);
@@ -244,6 +288,21 @@ export async function POST(req:NextRequest){
     }
 
     if(body.action==="execute"){
+      const shouldRun=typeof run.code==="string"&&Boolean(run.code.trim());
+      const useGitHub=shouldRun&&body.runner!=="sandbox";
+      if(useGitHub){
+        const setting=await db.from("assistant_connector_settings")
+          .select("enabled").eq("organization_id",organizationId)
+          .eq("user_id",userId).eq("connector_id","github").maybeSingle();
+        if(setting.error)throw setting.error;
+        if(setting.data?.enabled===false)return response({
+          error:"GitHub معطّل في الربط وإعداداته؛ فعّله أولًا لتنفيذ التجربة."
+        },403);
+      }
+      if(useGitHub&&!githubActionsConfigured())return response({
+        error:"GitHub Actions غير مفعل بعد. اربط GitHub App على مستودع Premieros/agent ثم اضبط مفاتيحه في إعدادات Vercel. يمكنك اختيار Sandbox يدويًا بدلًا منه.",
+        code:"GITHUB_ACTIONS_NOT_CONFIGURED"
+      },409);
       if(run.status!=="planned")return response({
         error:"المهمة بدأت بالفعل. راجع حالتها واستكمل منها بدل إعادة تنفيذها."
       },409);
@@ -255,7 +314,30 @@ export async function POST(req:NextRequest){
         .select("id").maybeSingle();
       if(claimError)throw claimError;
       if(!claimed)return response({error:"المهمة بدأت بالفعل."},409);
-      const shouldRun=typeof run.code==="string"&&Boolean(run.code.trim());
+      if(useGitHub){
+        const requestId=crypto.randomUUID();
+        const marker="$ github actions dispatch: "+requestId+"\n"+
+          "$ workflow agent-experiment.yml (public demo code only)\n";
+        const updated=await db.from("assistant_work_runs").update({
+          github_request_id:requestId,execution_log:marker,
+          stage_note:"إرسال كود التجربة إلى GitHub Actions...",
+          updated_at:new Date().toISOString()
+        }).eq("id",run.id).eq("status","running")
+          .eq("organization_id",organizationId).eq("user_id",userId);
+        if(updated.error)throw updated.error;
+        try{
+          await dispatchAgentExperiment({requestId,code:run.code as string});
+        }catch(e){
+          await db.from("assistant_work_runs").update({
+            status:"planned",github_request_id:null,github_run_id:null,
+            stage_note:"تعذر إرسال التجربة إلى GitHub Actions. راجع التفويض وأعد المحاولة.",
+            updated_at:new Date().toISOString()
+          }).eq("id",run.id).eq("status","running")
+            .eq("organization_id",organizationId).eq("user_id",userId);
+          return response({error:e instanceof Error?e.message:"تعذر تشغيل GitHub Actions."},502);
+        }
+        return response({ok:true,status:"github_running",runId:run.id});
+      }
       let executionLog="$ AGENT / work experiment\n";
       let succeeded:boolean|null=null;
       // Persist bounded stdout/command events so the owner can poll them from

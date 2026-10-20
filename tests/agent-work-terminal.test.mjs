@@ -18,11 +18,11 @@ test("terminal is pollable only by thread owner",()=>{
  const api=read("app/api/assistant/work/route.ts");
  assert.match(api,/requireAgentSession\(req\)/);
  assert.match(api,/\.eq\("organization_id",organizationId\)\.eq\("user_id",userId\)/);
- assert.match(api,/execution_log"\)/);
+ assert.match(api,/execution_log,github_request_id,github_run_id"\)/);
  const chat=read("components/general-assistant.tsx");
  assert.match(chat,/agent-work-stdout/);
  assert.match(chat,/pendingWork\.execution_log/);
- assert.match(chat,/setInterval\(\(\)=>\{void loadWorkState\(threadId\);\},1400\)/);
+ assert.match(chat,/setInterval\(\(\)=>\{void loadWorkState\(threadId\);\},4300\)/);
  assert.match(chat,/setPendingWork\(\{\.\.\.run,status:"running"/);
  assert.match(chat,/ليس التفكير الداخلي/);
 });
@@ -48,7 +48,7 @@ test("GitHub connection clearly documents public read-only scope",()=>{
  assert.match(api,/mode:"public-read-only"/);
  assert.doesNotMatch(api,/create_pull_request|GITHUB_TOKEN|OAuth/);
  const ui=read("components/github-connection-panel.tsx");
- assert.match(ui,/قراءة كوده/);
+ assert.match(ui,/قراءة كود المستودعات العامة/);
  assert.match(ui,/Vercel Sandbox/);
- assert.match(ui,/لا يمنح AGENT صلاحية كتابة/);
+ assert.match(ui,/لا يتيح ربط القراءة وحده تشغيل Workflows أو تعديل المستودعات/);
 });

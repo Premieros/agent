@@ -1,0 +1,80 @@
+name: AGENT isolated experiment
+
+run-name: AGENT experiment ${{ inputs.request_id }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      request_id:
+        description: "Non-secret AGENT request identifier"
+        required: true
+        type: string
+      code_b64:
+        description: "Approved demo JavaScript, base64; no private data/secrets"
+        required: true
+        type: string
+
+# No workflow repository permissions. Never checkout source or use secrets.
+permissions: {}
+
+concurrency:
+  group: agent-experiment-${{ inputs.request_id }}
+  cancel-in-progress: false
+
+jobs:
+  experiment:
+    name: Run isolated Node experiment
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - name: Prepare approved JavaScript without logging input
+        shell: bash
+        env:
+          AGENT_REQUEST_ID: ${{ inputs.request_id }}
+          AGENT_CODE_B64: ${{ inputs.code_b64 }}
+        run: |
+          python3 - <<'PY'
+          import base64, binascii, json, os, pathlib, re
+          identifier=os.environ.get("AGENT_REQUEST_ID","")
+          if not re.fullmatch(r"[0-9a-fA-F-]{36}",identifier):
+              raise ValueError("Invalid experiment ID")
+          encoded=os.environ.get("AGENT_CODE_B64","")
+          if len(encoded)>9000: raise ValueError("Experiment too large")
+          try: code=base64.b64decode(encoded,validate=True)
+          except binascii.Error as exc: raise ValueError("Invalid encoded program") from exc
+          if not (1<=len(code)<=6000): raise ValueError("Invalid program size")
+          root=pathlib.Path(os.environ["RUNNER_TEMP"])/"agent-experiment"
+          root.mkdir(mode=0o755,exist_ok=True)
+          (root/"work.js").write_bytes(code)
+          (root/"task.json").write_text(json.dumps({
+              "task":"AGENT user-approved synthetic experiment",
+              "steps":[],"materials":""
+          }),encoding="utf-8")
+          os.chmod(root,0o755)
+          os.chmod(root/"work.js",0o644)
+          os.chmod(root/"task.json",0o644)
+          print("Approved JavaScript prepared; no source checkout, no secrets.")
+          PY
+      - name: Execute without network or GitHub credentials
+        shell: bash
+        run: |
+          set -uo pipefail
+          root="$RUNNER_TEMP/agent-experiment"
+          echo '$ docker run --network none --read-only --user 65534:65534 node:22-alpine'
+          echo '$ node --check /workspace/work.js && node /workspace/work.js'
+          set +e
+          timeout --signal=TERM 45s docker run --rm \
+            --network none --read-only --cap-drop ALL \
+            --security-opt no-new-privileges --pids-limit 64 \
+            --memory 256m --cpus 1 --user 65534:65534 \
+            --tmpfs /tmp:rw,noexec,nosuid,size=16m \
+            --mount "type=bind,src=$root,dst=/workspace,readonly" \
+            node:22-alpine sh -c 'node --check /workspace/work.js && node /workspace/work.js' \
+            > "$RUNNER_TEMP/agent-output.txt" 2>&1
+          exit_code=$?
+          set -e
+          echo "== Standard output and errors (max 12KB) =="
+          head -c 12000 "$RUNNER_TEMP/agent-output.txt"
+          echo
+          echo "[exit=$exit_code]"
+          if [ "$exit_code" -ne 0 ]; then exit 1; fi

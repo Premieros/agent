@@ -20,7 +20,7 @@ type Thread = { id:string; title:string; skill:AssistantSkill; updated_at:string
 type ChatMessage = {id:string;role:"user"|"assistant";content:string;model?:string|null;skill?:string|null;created_at:string};
 type WorkRun={id:string;status:"planned"|"running"|"executed"|"reporting"|"completed"|"failed";
   steps:string[];stage_note:string;sandbox_ran:boolean;sandbox_succeeded:boolean|null;
-  execution_log?:string;report?:string};
+  execution_log?:string;report?:string;github_request_id?:string|null;github_run_id?:number|null};
 type StudioPage={id:string;name:string;platform:string;connection_status:string};
 type StudioMission={id:string;page_id:string;objective:string;brief:string;status:string;created_at:string};
 type StudioDraft={id:string;page_id:string;objective:string;brief:string;
@@ -93,6 +93,7 @@ export default function GeneralAssistant() {
   const [workSteps,setWorkSteps]=useState<string[]>([]);
   const [pendingWork,setPendingWork]=useState<WorkRun|null>(null);
   const [terminalVisible,setTerminalVisible]=useState(true);
+  const [workRunner,setWorkRunner]=useState<"github"|"sandbox">("github");
   const [artifactBusy,setArtifactBusy]=useState(false);
   const [savedArtifacts,setSavedArtifacts]=useState<string[]>([]);
   const [busy,setBusy]=useState("");
@@ -575,19 +576,26 @@ export default function GeneralAssistant() {
   }
 
   async function finishWork(initial:WorkRun,id:string){
+    if(initial.status==="planned"&&workRunner==="github"&&
+      !window.confirm("سيرسل AGENT كود التجربة إلى GitHub Actions على مستودع عام، وقد تكون سجلاته علنية. لا تستخدم أسرارًا أو بيانات عملاء. تشغيل تجربة Node.js دون تعديل GitHub أو نشرها؟"))return;
     setBusy("work");setError("");setTerminalVisible(true);
     let run=initial;
     try{
       if(run.status==="planned"){
         setWorkProgress("تنفيذ خطة العمل...");
-        setPendingWork({...run,status:"running",stage_note:"إنشاء بيئة الاختبار المعزولة..."});
+        setPendingWork({...run,status:"running",stage_note:workRunner==="github"?"إرسال التجربة إلى GitHub Actions...":"إنشاء بيئة Sandbox..."});
         const resp=await apiFetch("/api/assistant/work",{
           method:"POST",headers:await authHeaders(),
-          body:JSON.stringify({action:"execute",runId:run.id})
+          body:JSON.stringify({action:"execute",runId:run.id,runner:workRunner})
         });
-        const result=await resp.json() as {error?:string;status?:WorkRun["status"];
+        const result=await resp.json() as {error?:string;status?:WorkRun["status"]|"github_running";
           sandboxAttempted?:boolean;sandboxSucceeded?:boolean|null};
         if(!resp.ok)throw new Error(result.error||"تعذر تشغيل المهمة.");
+        if(result.status==="github_running"){
+          await loadWorkState(id);
+          setWorkProgress("تم إرسال تجربة GitHub Actions؛ سيظهر السجل أثناء التنفيذ.");
+          return;
+        }
         run={...run,status:"executed",
           sandbox_ran:Boolean(result.sandboxAttempted),
           sandbox_succeeded:result.sandboxSucceeded??null,
@@ -632,7 +640,7 @@ export default function GeneralAssistant() {
 
   useEffect(()=>{
     if(!threadId||!pendingWork||!["running","reporting"].includes(pendingWork.status))return;
-    const timer=setInterval(()=>{void loadWorkState(threadId);},1400);
+    const timer=setInterval(()=>{void loadWorkState(threadId);},4300);
     return()=>clearInterval(timer);
   },[threadId,pendingWork?.id,pendingWork?.status]);
 
@@ -960,7 +968,7 @@ export default function GeneralAssistant() {
                 onPrompt={prompt=>void sendMessage(prompt)}/>}
               {pendingWork&&<section className="assistant-work-steps agent-work-terminal" aria-label="ترمنال تجربة AGENT">
                 <div className="agent-work-terminal-head">
-                  <strong><Terminal size={15}/> تجربة Sandbox · {pendingWork.status==="running"?"قيد التنفيذ":
+                  <strong><Terminal size={15}/> تجربة {pendingWork.github_request_id?"GitHub Actions":"Sandbox"} · {pendingWork.status==="running"?"قيد التنفيذ":
                     pendingWork.status==="planned"?"بانتظار موافقتك":
                     pendingWork.status==="reporting"?"تحليل النتيجة": "سجل التجربة"}</strong>
                   <button type="button" aria-expanded={terminalVisible}
@@ -979,9 +987,20 @@ export default function GeneralAssistant() {
                       pendingWork.status==="running"?"$ starting isolated sandbox...":
                       "$ no command output recorded")}
                   </pre>
-                  <small>يُعرض هنا سجل الأوامر ونتائجها الحقيقية، وليس التفكير الداخلي للنموذج. GitHub للقراءة فقط؛ لا دفع كود ولا نشر.</small>
+                  <small>الترمنال يعرض سجل الأوامر والنتائج المسجلة، وليس التفكير الداخلي للنموذج. تجارب GitHub Actions في مستودع عام وقد تظهر سجلاتها للآخرين؛ لا ترسل أسرارًا أو بيانات خاصة. لا دفع كود ولا نشر.</small>
                 </>}
                 <div className="agent-work-controls">
+                  {pendingWork.status==="planned"&&<label className="agent-work-runner-select">
+                    بيئة التنفيذ
+                    <select value={workRunner} onChange={e=>setWorkRunner(e.target.value as "github"|"sandbox")}>
+                      <option value="github">GitHub Actions (الأولوية، يحتاج GitHub App)</option>
+                      <option value="sandbox">Vercel Sandbox (بديل بموافقتك)</option>
+                    </select>
+                  </label>}
+                  {pendingWork.github_run_id&&<a target="_blank" rel="noopener noreferrer"
+                    href={"https://github.com/Premieros/agent/actions/runs/"+pendingWork.github_run_id}>
+                    عرض سجل GitHub الكامل
+                  </a>}
                   {["planned","executed"].includes(pendingWork.status)&&
                     <button type="button" disabled={Boolean(busy)}
                       onClick={()=>requestApproval("work-resume","استكمال مهمة عمل محفوظة")}>استكمال</button>}
