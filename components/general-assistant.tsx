@@ -737,7 +737,11 @@ export default function GeneralAssistant() {
       setNote("تم فتح بيانات AGENT الفعلية داخل المحادثة، دون استدعاء نموذج AI.");
       return;
     }
-    if(!approved&&requiresApproval(intent)){requestApproval(intent,message);return;}
+    // Work planning is read-only: approvals belong to the actual public-code
+    // dispatch, not to the user asking the agent to plan/build locally.
+    if(!approved&&intent!=="work"&&requiresApproval(intent)){
+      requestApproval(intent,message);return;
+    }
     setWorkspaceView(null);setWorkspaceCreateLead(false);
     setBusy("send");setError("");setNote("");setWorkSteps([]);setWorkProgress("");
     try {
