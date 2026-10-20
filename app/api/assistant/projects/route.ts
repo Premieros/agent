@@ -20,7 +20,7 @@ type Build={
  updated_at:string;
 };
 function specFrom(run:Build):ProjectSpec{
- return {title:run.title,steps:run.steps,files:run.files};
+ return parseProjectSpec(JSON.stringify({title:run.title,steps:run.steps,files:run.files}));
 }
 function publicBuild(run:Build){
  return {id:run.id,thread_id:run.thread_id,task:run.task,title:run.title,
@@ -74,11 +74,11 @@ async function finishExperience(s:AgentSession,run:Build,succeeded:boolean){
  });
  if(proposed.error)console.warn("AGENT suggested project skill unavailable");
 }
-async function sandboxTest(spec:ProjectSpec,onProgress:(text:string)=>Promise<void>){
+async function sandboxTest(spec:ProjectSpec,onProgress:(text:string,command?:string)=>Promise<void>){
  // Entire untrusted project runs ONLY in a stopped-after-use, network-denied microVM.
  // No AGENT checkout, host process execution, shell, credentials or npm install.
  let sandbox:Sandbox|null=null;
- let log="$ sandbox --network deny-all --persistent false\n";
+ let log="$ sandbox --network deny-all --stop-after-run\n";
  try{
   sandbox=await Sandbox.create({timeout:PER_ATTEMPT_MS,networkPolicy:"deny-all",
     resources:{vcpus:1}});
@@ -95,10 +95,12 @@ async function sandboxTest(spec:ProjectSpec,onProgress:(text:string)=>Promise<vo
   for(const file of check){
     const r=await sandbox.runCommand({cmd:"node",args:["--check",file.path],cwd:"/vercel/sandbox"});
     const out=(await r.stdout()).slice(0,500),err=(await r.stderr()).slice(0,850);
-    log+="$ node --check "+file.path+"\n"+out+err+"[exit="+r.exitCode+"]\n";
+    const command="$ node --check "+file.path+"\\n"+out+err+"[exit="+r.exitCode+"]\\n";
+    log+=command;
+    await onProgress("فحص صياغة "+file.path+"...",command);
     if(r.exitCode!==0)return {passed:false,log:log.slice(0,14000)};
   }
-  await onProgress("فحص الصياغة ناجح؛ تشغيل اختبارات المشروع...");
+  await onProgress("فحص الصياغة ناجح؛ تشغيل اختبارات المشروع...","$ node --test\n");
   const r=await sandbox.runCommand({cmd:"node",args:["--test"],cwd:"/vercel/sandbox"});
   log+="$ node --test\n"+(await r.stdout()).slice(0,8500)+
     (await r.stderr()).slice(0,2600)+"\n[exit="+r.exitCode+"]\n";
@@ -243,20 +245,21 @@ export async function POST(req:NextRequest){
     attempts,stage_note:"الاختبار "+attempts+"/"+run.max_attempts+" داخل Sandbox مستقل..."});
    if(!claimed)return response({error:"بدأ الاختبار بالفعل."},409);
    let events="";
-   const result=await sandboxTest(specFrom(run),async stage=>{
-    events+=stage+"\n";
-    await note(s,run,{stage_note:stage,execution_log:events.slice(0,14000)},"testing");
+   const result=await sandboxTest(specFrom(run),async (stage,command)=>{
+    events+=stage+"\\n"+(command||"");
+    await note(s,run,{stage_note:stage,
+     execution_log:(run.execution_log+"\\n"+events).slice(-14000)},"testing");
    });
    const log=[run.execution_log,"\n## Attempt "+attempts+"\n",events,result.log].join("\n").slice(-14000);
    const expired=Date.now()>=deadline;
-   const status=result.passed?"completed":
+   const status=!expired&&result.passed?"completed":
      (result.unavailable||expired||attempts>=run.max_attempts?"failed":"repairing");
    await note(s,run,{status,execution_log:log,test_passed:result.passed,
      stage_note:result.passed?"اجتاز المشروع اختبارات Node.js المحددة.":
        status==="repairing"?"فشلت الاختبارات؛ سيحلل AGENT الأخطاء ويُصلح الملفات مرة واحدة.":
        "انتهى التنفيذ دون اختبار ناجح؛ لا إعادة تلقائية خارج الحدود."},"testing");
    if(status==="completed"||status==="failed"){
-    await finishExperience(s,{...run,attempts},result.passed);
+    if(!result.unavailable)await finishExperience(s,{...run,attempts},!expired&&result.passed);
    }
    return response({ok:true,status,attempts,testPassed:result.passed});
   }
