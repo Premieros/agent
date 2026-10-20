@@ -9,6 +9,8 @@ import { inspectPublicPage } from "@/lib/public-browser-tool";
 import {searchPublicWeb,researchContext,researchCitations,directResearchAnswer} from "@/lib/agent-web-search";
 import {planAgentTurn,agentToolSummary} from "@/lib/agent-turn-planner";
 import {readAgentWorkspaceFacts} from "@/lib/agent-workspace-reader";
+import {chooseExperiencedModels} from "@/lib/agent-experience";
+import {taskDomain} from "@/lib/agent-adaptive-routing";
 import {activeSkills,memoryContext,proposeFromConversation,selectCustomSkill} from "@/lib/assistant-learning";
 
 export const runtime = "nodejs";
@@ -287,7 +289,8 @@ export async function POST(req:NextRequest) {
         model:"agent-web-search",tried:0};
     }else{
       try{
-        const candidates=await discoverAutoModels(body.allowConditionalFreeTier===true);
+        const discovered=await discoverAutoModels(body.allowConditionalFreeTier===true);
+        const candidates=await chooseExperiencedModels(session,discovered,taskDomain(prompt,resolvedSkill));
         if(!candidates.length)throw new Error("AUTO_NO_FREE_MODELS");
         result=await askAutoAgent(candidates,"المساعد العام",
           skillInstructions(resolvedSkill)+extraSkill+"\n"+plan.responseInstructions+
@@ -304,6 +307,14 @@ export async function POST(req:NextRequest) {
             sourceInspection.files.slice(0,5).map(f=>"- ["+f.path+"]("+f.url+")").join("\n")+
             "\n\nأعد المحاولة عندما يتوفر نموذج للتحليل؛ لم تُنفّذ تغييرات.",
             model:"agent-github-read",tried:0};
+        }else if(error instanceof Error&&
+          (error.message==="AUTO_NO_FREE_MODELS"||error.message==="AUTO_ALL_FAILED")){
+          result={text:"**نموذج الرد غير متاح الآن.**\n\n"+
+            "لم أخترع إجابة ولم أستخدم نموذجًا مدفوعًا. "+
+            "اربط نموذج OpenRouter مجانيًا، أو فعّل مرشحي Gemini/Groq "+
+            "بعد التأكد من شروط حسابك وحصته، ثم أعد السؤال. "+
+            "القراءة والبحث المباشر يظلان متاحين عند توفر أدواتهما ومصادرهما.",
+            model:"agent-availability",tried:0};
         }else throw error;
       }
     }

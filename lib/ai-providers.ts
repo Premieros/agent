@@ -200,10 +200,10 @@ export async function askSelectedAgent(
           systemInstruction: { parts: [{ text: sys }] },
           contents: [{ role: "user", parts: [{ text: context }] }],
           generationConfig: {
-            maxOutputTokens: Math.min(4096, Math.max(850, tokenLimit + 350)),
-            ...( config.model.startsWith("gemini-2.5-flash")
-              ? { thinkingConfig: { thinkingBudget: 0 } }
-              : {} )
+            // Respect each connected model's native reasoning/default capability.
+            // The caller's selected free/conditional tier still controls whether
+            // this provider may be used; do not forcibly disable model thinking.
+            maxOutputTokens: Math.min(4096, Math.max(850, tokenLimit + 350))
           }
         })
       }

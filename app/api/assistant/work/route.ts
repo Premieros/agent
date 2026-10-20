@@ -6,6 +6,8 @@ import {inspectGitHubProject} from "@/lib/github-reader";
 import {inspectPublicPage} from "@/lib/public-browser-tool";
 import {asksForConversionFigures,extractCampaignConversion,needsCampaignConversion} from "@/lib/work-metrics";
 import {memoryContext} from "@/lib/assistant-learning";
+import {chooseExperiencedModels,recordSandboxExperience} from "@/lib/agent-experience";
+import {taskDomain} from "@/lib/agent-adaptive-routing";
 
 export const runtime="nodejs";
 export const maxDuration=60;
@@ -148,7 +150,9 @@ export async function POST(req:NextRequest){
       ].filter(Boolean).join("\n\n").slice(0,12500);
       // AGENT's approved memory comes from Supabase, not the selected LLM.
       const durableMemory=await memoryContext(session,thread.id,task);
-      const candidates=await discoverAutoModels(body.allowConditionalFreeTier===true);
+      const candidates=await chooseExperiencedModels(session,
+        await discoverAutoModels(body.allowConditionalFreeTier===true),
+        taskDomain(task));
       const planned=await askAutoAgent(candidates,"AGENT Work Planner",[
         "أنت مُخطط مهام عمل. أعد JSON صالحًا فقط: ",
         '{"steps":["خطوة 1","خطوة 2","خطوة 3"],"code":"..."}',
@@ -245,6 +249,9 @@ export async function POST(req:NextRequest){
       }).eq("id",run.id).eq("status","running")
         .eq("organization_id",organizationId).eq("user_id",userId);
       if(updateError)throw updateError;
+      await recordSandboxExperience(session,{
+        id:run.id,task:String(run.task),model:String(run.model||""),sandbox_ran:shouldRun
+      },succeeded).catch(()=>console.warn("AGENT execution experience unavailable"));
       return response({ok:true,status:"executed",runId:run.id,steps:run.steps,
         sandboxAttempted:shouldRun,sandboxSucceeded:succeeded,
         networkAccess:false,externalWrites:false});
