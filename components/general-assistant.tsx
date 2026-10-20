@@ -20,7 +20,7 @@ type Thread = { id:string; title:string; skill:AssistantSkill; updated_at:string
 type ChatMessage = {id:string;role:"user"|"assistant";content:string;model?:string|null;skill?:string|null;created_at:string};
 type WorkRun={id:string;status:"planned"|"running"|"executed"|"reporting"|"completed"|"failed";
   steps:string[];stage_note:string;sandbox_ran:boolean;sandbox_succeeded:boolean|null;
-  execution_log?:string;report?:string;github_request_id?:string|null;github_run_id?:number|null};
+  code?:string|null;execution_log?:string;report?:string;github_request_id?:string|null;github_run_id?:number|null};
 type StudioPage={id:string;name:string;platform:string;connection_status:string};
 type StudioMission={id:string;page_id:string;objective:string;brief:string;status:string;created_at:string};
 type StudioDraft={id:string;page_id:string;objective:string;brief:string;
@@ -780,6 +780,7 @@ export default function GeneralAssistant() {
         const planData=await planRes.json() as {
           ok?:boolean;error?:string;runId?:string;steps?:string[];
           title?:string;answered?:boolean;messages?:ChatMessage[];note?:string;
+          codePreview?:string|null;runnable?:boolean;
         };
         if(!planRes.ok)throw new Error(planData.error||"تعذر إعداد خطة العمل.");
         if(planData.answered&&planData.messages?.length){
@@ -794,10 +795,11 @@ export default function GeneralAssistant() {
         }
         if(!planData.runId)throw new Error("تعذر إعداد خطة العمل.");
         const work:WorkRun={id:planData.runId,status:"planned",steps:planData.steps||[],
-          stage_note:"الخطة محفوظة وجاهزة للتنفيذ.",sandbox_ran:false,sandbox_succeeded:null};
+          code:planData.codePreview||null,
+          stage_note:"الخطة والكود جاهزان للمراجعة. اختر البيئة ووافق قبل إرسال أي كود.",sandbox_ran:false,sandbox_succeeded:null};
         setPendingWork(work);setWorkSteps(work.steps);
         setMessages(current=>current.filter(m=>m.id!==optimistic.id));
-        await finishWork(work,id);
+        setNote("راجع الخطة والكود المعروضين أولًا، ثم اختر GitHub Actions واضغط «مراجعة وتشغيل». لم يبدأ أي تشغيل بعد.");
         return;
       }
       setActiveArea(null);
@@ -860,7 +862,7 @@ export default function GeneralAssistant() {
     pendingAction.intent==="site-approve"?
       {title:"فتح طلب مراجعة الموقع",detail:"Pull Request في Premieros/agent للمراجعة فقط؛ لا دمج أو نشر تلقائي.",cost:"يتطلب تصريح GitHub محدودًا"}:
     pendingAction.intent==="work-resume"?
-      {title:"استكمال وضع العمل",detail:"قد ينفذ Sandbox خطة محفوظة ضمن حصتك.",cost:"قد يستهلك حصة Sandbox"}:
+      {title:"مراجعة وتشغيل تجربة العمل",detail:"راجع الكود المعروض قبل التشغيل. في GitHub Actions قد تكون سجلات المستودع العام علنية؛ لا تستخدم أسرارًا أو بيانات عملاء.",cost:"اختيار GitHub Actions أو Sandbox قد يستهلك حصة الاستخدام"}:
     pendingAction.intent==="approve-memory"?
       {title:"اعتماد ذاكرة مقترحة",detail:"سيستخدم AGENT المعلومة ضمن سياق المحادثات ذات الصلة.",cost:"بدون استدعاء نموذج AI"}:
     pendingAction.intent==="approve-skill"?
@@ -943,6 +945,15 @@ export default function GeneralAssistant() {
                     {m.role==="assistant"&&<>
                       <button type="button" title="نسخ الرد"
                         onClick={()=>void navigator.clipboard.writeText(m.content)}><Copy size={14}/></button>
+                      {messages.filter(v=>v.role==="assistant").at(-1)?.id===m.id&&
+                        /```(?:javascript|js|node)?\s*[\s\S]+?```/i.test(m.content)&&
+                        <button type="button" title="اختبر الكود في وضع العمل بعد المراجعة"
+                          aria-label="اختبر الكود في GitHub Actions" disabled={Boolean(busy)}
+                          onClick={()=>void sendMessage(
+                            "باستخدام وضع العمل، اختبر كود Node.js الذي كتبته في ردك السابق في GitHub Actions. "+
+                            "أعد تجهيز البرنامج مع اختبارات إضافة وعرض وحذف المهام ونتائج PASS/FAIL. "+
+                            "اعرض الخطة والكود للمراجعة قبل التشغيل، ولا تستخدم بيانات حقيقية أو أسرار."
+                          )}><Terminal size={14}/></button>}
                       <button type="button" title="حفظ النتيجة في المكتبة" disabled={Boolean(busy)}
                         onClick={()=>void saveMessageToLibrary(m)}><BookOpen size={14}/></button>
                       <button type="button" title="هذه الإجابة مفيدة" aria-label="الإجابة مفيدة"
@@ -968,7 +979,7 @@ export default function GeneralAssistant() {
                 onPrompt={prompt=>void sendMessage(prompt)}/>}
               {pendingWork&&<section className="assistant-work-steps agent-work-terminal" aria-label="ترمنال تجربة AGENT">
                 <div className="agent-work-terminal-head">
-                  <strong><Terminal size={15}/> تجربة {pendingWork.github_request_id?"GitHub Actions":"Sandbox"} · {pendingWork.status==="running"?"قيد التنفيذ":
+                  <strong><Terminal size={15}/> {pendingWork.status==="planned"?"خطة برمجية بانتظار المراجعة": "تجربة "+(pendingWork.github_request_id?"GitHub Actions":"Sandbox")} · {pendingWork.status==="running"?"قيد التنفيذ":
                     pendingWork.status==="planned"?"بانتظار موافقتك":
                     pendingWork.status==="reporting"?"تحليل النتيجة": "سجل التجربة"}</strong>
                   <button type="button" aria-expanded={terminalVisible}
@@ -981,6 +992,13 @@ export default function GeneralAssistant() {
                   <div className="agent-work-plan" aria-label="ملخص خطة العمل">
                     {pendingWork.steps?.map((step,i)=><span key={i}>{i+1}. {step}</span>)}
                   </div>
+                  {pendingWork.status==="planned"&&<details className="agent-work-code-review" open>
+                    <summary>مراجعة كود Node.js قبل التشغيل</summary>
+                    <pre dir="ltr" aria-label="الكود الذي سيُختبر">
+                      {pendingWork.code||"لا يوجد كود برمجي لهذه المهمة."}
+                    </pre>
+                    <small>هذا الكود لم يُشغّل بعد. لا توافق على إرسال بيانات خاصة أو مفاتيح إلى GitHub Actions.</small>
+                  </details>}
                   <pre className="agent-work-stdout" dir="ltr" aria-label="أوامر ومخرجات التنفيذ الفعلية">
                     {pendingWork.execution_log||(
                       pendingWork.status==="planned"?"$ awaiting your approval":
@@ -1003,7 +1021,7 @@ export default function GeneralAssistant() {
                   </a>}
                   {["planned","executed"].includes(pendingWork.status)&&
                     <button type="button" disabled={Boolean(busy)}
-                      onClick={()=>requestApproval("work-resume","استكمال مهمة عمل محفوظة")}>استكمال</button>}
+                      onClick={()=>requestApproval("work-resume",pendingWork.status==="planned"?"تشغيل كود التجربة الذي راجعته":"استكمال مهمة عمل محفوظة")}>{pendingWork.status==="planned"?"مراجعة وتشغيل":"استكمال"}</button>}
                   {["running","reporting"].includes(pendingWork.status)&&
                     <button type="button" onClick={()=>void loadWorkState(threadId)}>تحديث</button>}
                   {["executed","completed","failed"].includes(pendingWork.status)&&

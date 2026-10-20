@@ -64,6 +64,19 @@ export function detectAgentIntent(text:string,lastAssistantModel?:string|null):A
     /^(?:افحص|راجع|تعديل|عدل|عدّل|حسن|ظبط)\s+(?:الصفحه|القائمه|الموقع|التصميم)/iu.test(q))
     return /^(?:عدل|عدّل|حسن|ظبط|تعديل)/iu.test(q)?"site-draft":"site-diagnose";
 
+  // Explicit coding execution takes precedence over similar words in
+  // marketing tasks ("إدارة المهام" is a CLI app, not a studio mission).
+  // Regular questions about Work/GitHub Actions remain ordinary chat.
+  const explaining=/^(?:كيف|ازاي|لماذا|ما\s+(?:هو|هي)|ماهي|ايه|اشرح|وضح|علمني|what\s+is|how\s+(?:do|to))(?=\s|$|[؟?!])/iu.test(q);
+  const workMode=/(?:وضع\s+(?:ال)?عمل|sandbox|ساندبوكس|بيئه\s+معزوله|github\s+actions|جيت\s*هب\s+اكشنز)/iu;
+  const explicitWork=/(?:باستخدام|داخل|في|عبر|على)\s+(?:وضع\s+(?:ال)?عمل|sandbox|ساندبوكس|بيئه\s+معزوله|github\s+actions|جيت\s*هب\s+اكشنز)/iu.test(q)||
+    /(?:شغل|فعل|نفذ|استخدم|طبق|ابدا|اختبر|جرب)\s+.{0,45}(?:وضع\s+(?:ال)?عمل|sandbox|ساندبوكس|بيئه\s+معزوله|github\s+actions|جيت\s*هب\s+اكشنز)/iu.test(q);
+  const execution=/\b(?:run|execute|test)\s+(?:the\s+)?(?:code|script|tests)\b/i.test(text)||
+    /(?:شغل|نفذ|اختبر|جرب)\s+.{0,55}(?:الكود|البرنامج|سكريبت|الاختبارات)/iu.test(q);
+  if(!explaining&&(explicitWork||execution&&
+    (workMode.test(q)||/(?:الكود|البرنامج|سكريبت|الاختبارات)/iu.test(q))))
+    return "work";
+
   const missionTerms=/(?:مهمه|مهام|الوكلاء|وكلاء|فريق\s+التسويق|الصفحات\s+المسجله|الصفحه\s+المسجله|مدير\s+الوكلاء|marketing\s+task|agent\s+mission)/iu.test(q);
   const taskCreate=/(?:انشئ|اضف|اعمل|سجل|جهز|حضر|create|add|new)\s+.{0,45}(?:مهمه|مهام|تكليف|mission|task)|(?:مهمه\s+جديده|تكليف\s+جديد)/iu.test(q);
   const taskRun=/(?:شغل|تشغيل|وزع|نفذ|ابد[أا]|run|start)\s+.{0,45}(?:الوكلاء|المهمه|المهام|agents|mission)/iu.test(q)||
@@ -77,12 +90,6 @@ export function detectAgentIntent(text:string,lastAssistantModel?:string|null):A
   if(taskSummary)return "studio-summary";
   if(taskOverview)return "studio-overview";
 
-  // Work is opt-in per request. Do not turn ordinary coding/explanations into
-  // Sandbox executions, which could burn a limited free quota.
-  const workExplicit=/(?:شغل|فعل|نفذ|استخدم|طبق|ابدا)\s+.{0,20}(?:وضع\s+عمل|sandbox|ساندبوكس|بيئه\s+معزوله)|(?:باستخدام|داخل|في)\s+(?:وضع\s+عمل|sandbox|ساندبوكس|بيئه\s+معزوله)/iu.test(q);
-  const execution=/\b(?:run|execute|test)\s+(?:the\s+)?(?:code|script|tests)\b/i.test(text)||
-    /(?:شغل|نفذ|اختبر|جرب)\s+.{0,48}(?:الكود|البرنامج|سكريبت|الاختبارات)/iu.test(q);
-  if(workExplicit||execution)return "work";
   return "chat";
 }
 export function describeAgentIntent(intent:AgentIntent){
@@ -105,7 +112,7 @@ export function describeAgentIntent(intent:AgentIntent){
     "studio-run":{title:"تشغيل الوكلاء",detail:"ينشئ مسودات داخلية لمهمة موجودة، دون نشر أو إنفاق إعلاني.",cost:"يستخدم حصة نموذج AI (الوضع الاقتصادي)"},
     "site-diagnose":{title:"فحص موقع AGENT",detail:"قراءة حالة الموقع وGitHub وقاعدة بيانات AGENT المصرح بها.",cost:"بدون Sandbox"},
     "site-draft":{title:"تجهيز مقترح تعديل الموقع",detail:"ينشئ مسودة مراجعة داخل AGENT، ولا يغيّر GitHub أو ينشر تلقائيًا.",cost:"قد يستهلك حصة نموذج AI"},
-    work:{title:"تفعيل وضع عمل لهذه المهمة",detail:"يحلل المهمة وقد يستخدم Sandbox معزولًا للاختبارات؛ لا يغير مستودعات أو ينشر.",cost:"قد يستهلك حصة Vercel Sandbox ونموذج AI"}
+    work:{title:"تحضير تجربة برمجية",detail:"سينشئ AGENT خطة وكودًا للمراجعة أولًا. لن يُرسل إلى GitHub Actions أو Sandbox إلا بعد موافقتك على الكود والبيئة.",cost:"التخطيط يستخدم النموذج المتاح؛ التنفيذ قد يستهلك حصة GitHub Actions أو Sandbox حسب اختيارك"}
   };
   return text[intent];
 }
