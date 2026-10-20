@@ -35,6 +35,7 @@ type SiteChange={id:string;title:string;summary:string;task:string;
 type AssistantResponse = {
   error?:string; threads?:Thread[]; thread?:Thread; messages?:ChatMessage[];
   title?:string; skill?:string; customSkill?:string|null; model?:string; attempts?:number; ok?:boolean;
+  toolSummary?:string[];
   projectContext?:{loadedDocuments:number;missingDocuments:number;source:"github-public-readonly"}|null;
   sourceInspection?:{
     repository:string;branch:string;indexed:number;truncatedTree:boolean;
@@ -691,15 +692,9 @@ export default function GeneralAssistant() {
       if(!res.ok||!data.messages?.length)throw new Error(data.error||"لم يصل رد من المساعد.");
       setMessages(current=>[...current.filter(m=>m.id!==optimistic.id),...(data.messages||[])]);
       if(data.title)setThreads(current=>current.map(t=>t.id===id?{...t,title:data.title!}:t));
-      const projectNote=data.projectContext
-        ? data.projectContext.loadedDocuments>0
-          ? ` · GitHub: ${data.projectContext.loadedDocuments} وثائق للقراءة فقط`
-          : " · تعذر قراءة وثائق GitHub في هذه المحاولة"
-        : "";
-      const toolNote=data.model==="agent-web-search"
-        ?"بحث فهارس مباشرة · دون نموذج AI"
-        :`${data.model||"نموذج غير محدد"} · ${data.attempts??1} محاولة`;
-      setNote(`مهارة ${data.customSkill||assistantSkills.find(s=>s.id===data.skill)?.title||data.skill} · ${toolNote}`+projectNote);
+      // A useful answer comes first. Only surface real read activity,
+      // never provider plumbing or a repetitive "skill/model/attempts" banner.
+      setNote((data.toolSummary||[]).join(" · "));
       setSourceFiles(data.sourceInspection?.inspected||[]);
       setSourceProject(data.sourceInspection?.repository||"");
       setBrowserResult(data.browserResult||null);
@@ -825,7 +820,7 @@ export default function GeneralAssistant() {
                         onClick={()=>void saveMessageToLibrary(m)}><BookOpen size={14}/></button>
                     </>}</div>
                   <div className="assistant-message-text" dir="auto">{m.role==="assistant"?<AssistantMarkdown content={m.content}/>:m.content}</div>
-                  {m.role==="assistant"&&<small>{assistantSkills.find(s=>s.id===m.skill)?.title||m.skill||"مساعد عام"}{m.model?" · "+m.model:""}</small>}
+                  
                 </div>
               </article>)}
               {workspaceView&&<AssistantWorkspacePanel
@@ -931,6 +926,24 @@ export default function GeneralAssistant() {
                 </div>
                 <AssistantLearningPanel threadId={threadId} refreshKey={messages.length} initialOpen/>
               </div>}
+              {note && <p className="assistant-run-note"><Check size={14}/>{note}</p>}
+              {browserResult && <details className="assistant-research-results">
+                <summary><Globe size={14}/> صفحة عامة {browserResult.fetched?"تمت قراءتها":"لم تُقرأ"} <ChevronDown size={14}/></summary>
+                <div className="assistant-research-body">
+                  {browserResult.fetched
+                    ? <a href={browserResult.url} target="_blank" rel="noopener noreferrer">{browserResult.title||browserResult.url}</a>
+                    : <span>{browserResult.note}</span>}
+                </div>
+              </details>}
+              {sourceFiles.length>0 && <details className="assistant-research-results">
+                <summary><Code2 size={14}/> ملفات GitHub المقروءة ({sourceFiles.length}) <ChevronDown size={14}/></summary>
+                <div className="assistant-research-body">
+                  <p>المستودع: {sourceProject||"GitHub"} · قراءة فقط</p>
+                  {sourceFiles.map(file=><div key={file.path}><a href={file.url}
+                    target="_blank" rel="noopener noreferrer">{file.path}</a>
+                    {file.truncated?" · مقتطف":""}</div>)}
+                </div>
+              </details>}
               {researchResult&&<details className="assistant-research-results">
                 <summary>
                   <span><Globe size={15}/> مصادر البحث ({researchResult.sources.length}) · {new Date(researchResult.searchedAt).toLocaleDateString("ar-EG")}</span>
@@ -948,23 +961,10 @@ export default function GeneralAssistant() {
                   {researchResult.warnings.length>0&&<p className="assistant-research-warnings">{researchResult.warnings.join(" · ")}</p>}
                 </div>
               </details>}
-              {sending && <div className="assistant-thinking"><LoaderCircle size={16} className="crm-spin"/> AGENT بيحضّر الرد...</div>}
+              {sending && <div className="assistant-thinking"><LoaderCircle size={16} className="crm-spin"/> AGENT يراجع الطلب ويجهز الرد...</div>}
               <div ref={endRef}/>
             </div>
             <div className="assistant-compose">
-              {note && <p className="assistant-run-note"><Check size={14}/>{note}</p>}
-              {browserResult && <div className="assistant-browser-note">
-                <Globe size={15}/>
-                {browserResult.fetched
-                  ? <a href={browserResult.url} target="_blank" rel="noopener noreferrer">صفحة تمت قراءتها: {browserResult.title||browserResult.url}</a>
-                  : <span>تعذرت قراءة الصفحة: {browserResult.note}</span>}
-              </div>}
-              {sourceFiles.length>0 && <div className="assistant-source-list">
-                <strong>ملفات الكود المقروءة من {sourceProject||"GitHub"} — قراءة فقط:</strong>
-                {sourceFiles.map(file=><a key={file.path} href={file.url} target="_blank" rel="noopener noreferrer">
-                  {file.path}{file.truncated?" · مقتطف":""}
-                </a>)}
-              </div>}
               {showLibraryPicker&&<div className="assistant-library-picker">
                 <label>اختر ملفًا نصيًا من المكتبة لتحليله في الرسالة التالية
                   <select value={selectedLibraryFile} onChange={e=>setSelectedLibraryFile(e.target.value)}>
