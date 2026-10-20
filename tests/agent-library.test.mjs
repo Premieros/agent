@@ -44,3 +44,22 @@ test("chat provides explicit save to library and keeps backend permissions",()=>
   assert.match(chat,/action:"save_message"/);
   assert.match(chat,/مكتبة/);
 });
+
+test("selected library documents are read only after checking same-user ownership",()=>{
+  const api=read("app/api/assistant/route.ts");
+  assert.match(api,/libraryItemId/);
+  assert.match(api,/eq\("organization_id",organizationId\)/);
+  assert.match(api,/eq\("user_id",userId\)/);
+  assert.match(api,/UNTRUSTED_LIBRARY_DOCUMENT/);
+  assert.match(api,/file\.data\.size_bytes>100000/);
+  assert.match(api,/storage\.from\("agent-library"\)\.download/);
+  const chat=read("components/general-assistant.tsx");
+  assert.match(chat,/libraryItemId:selectedLibraryFile/);
+  assert.match(chat,/openLibraryDocuments/);
+});
+test("connections have one edit surface, with in-chat status reading only",()=>{
+  const panel=read("components/assistant-workspace-panel.tsx");
+  assert.doesNotMatch(panel,/toggleConnector\(/);
+  assert.match(panel,/href="\/assistant\/integrations"/);
+  assert.match(panel,/حالة الربط للقراءة فقط/);
+});

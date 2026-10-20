@@ -1495,3 +1495,39 @@
     grid-template-columns:repeat(auto-fill,minmax(min(100%,190px),1fr));
   }
 }
+
+
+/* Analyze authorized text artifacts from the user's private library. */
+.workspace-shell .workspace-page .general-assistant-root .assistant-composer-box>.assistant-pick-library{
+  flex:0 0 34px!important;width:34px!important;height:34px!important;
+  border-radius:9px!important;border:1px solid #476578!important;
+  color:#c9d9f9!important;background:#30425d!important;
+  box-shadow:none!important;
+}
+.workspace-shell .workspace-page .general-assistant-root .assistant-composer-box>.assistant-pick-library:hover{
+  background:#3b536e!important;
+}
+.workspace-shell .workspace-page .general-assistant-root .assistant-library-picker{
+  max-width:860px;margin:7px auto 9px;padding:11px 13px;
+  background:#203342;border:1px solid #426577;border-radius:11px;
+  color:#e5f2fa;font-size:11px;
+}
+.workspace-shell .workspace-page .general-assistant-root .assistant-library-picker label{
+  display:flex;flex-direction:column;gap:5px;
+}
+.workspace-shell .workspace-page .general-assistant-root .assistant-library-picker select{
+  width:100%;padding:6px 9px;border-radius:8px;background:#263d51!important;
+  color:#fff!important;border:1px solid #587587!important;
+}
+.workspace-shell .workspace-page .general-assistant-root .assistant-library-picker small{
+  display:block;margin-top:6px;color:#acc8d5!important;line-height:1.6;
+}
+.workspace-shell .workspace-page .general-assistant-root .assistant-library-picker button,
+.workspace-shell .workspace-page .general-assistant-root .assistant-library-selected button{
+  background:transparent;border:0;color:#a5d8e5;font-size:11px;
+  text-decoration:underline;padding:4px 0;cursor:pointer;
+}
+.workspace-shell .workspace-page .general-assistant-root .assistant-library-selected{
+  max-width:860px;margin:4px auto;display:flex;align-items:center;
+  gap:10px;flex-wrap:wrap;color:#b4ebdc!important;font-size:11px;
+}
