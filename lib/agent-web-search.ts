@@ -48,7 +48,7 @@ function decodeHtml(value:string){
 function plain(value:string,max=350){
   const stripped=value.replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g,"$1")
     .replace(/<[^>]*>/g," ");
-  return decodeHtml(decodeHtml(stripped))
+  return decodeHtml(decodeHtml(stripped)).replace(new RegExp("\\x3c[^\\x3e]*\\x3e","g")," ")
     .replace(/[\u0000-\u001f\u007f\u200b-\u200f\u202a-\u202e]/g," ")
     .replace(/\s+/g," ").trim().slice(0,max);
 }
@@ -75,9 +75,12 @@ export function parseResearchRss(xml:string,provider:"news"|"web"):ResearchSourc
       const parsed=when?new Date(plain(when,70)):null;
       const publishedAt=parsed&&!Number.isNaN(parsed.getTime())
         ?parsed.toISOString():null;
+      const description=tag(item,"description");
+      const excerpt=provider==="news"&&/href\s*=/i.test(description)
+        ?"":plain(description,275);
       return [{
         title,url:url.toString().replace(/\(/g,"%28").replace(/\)/g,"%29"),
-        excerpt:plain(tag(item,"description"),275),provider,
+        excerpt,provider,
         publisher:plain(tag(item,"source"),70)||host,
         publishedAt,trusted:Boolean(p&&trusted(host))
       }];
@@ -199,7 +202,10 @@ export async function searchPublicWeb(prompt:string,fetcher:typeof fetch=fetch):
   const ranked=all.flatMap(s=>{
     const score=relevance(s,query);
     const when=s.publishedAt?new Date(s.publishedAt).getTime():null;
-    if(score<0||(current&&s.provider==="wikipedia")||
+    const evergreen=current&&/(?:wikipedia|wikimedia|encyclopedia|britannica|movie|film|review|فيلم|سينما)/i
+      .test(s.title+" "+s.publisher);
+    const offTopicNews=current&&ai&&!aiAnchor.test(normalized(s.title));
+    if(score<0||evergreen||offTopicNews||(current&&!s.publishedAt)||
       (current&&when!==null&&(when<maxAge||when>Date.now()+86400000))){
       discarded++;return [];
     }
@@ -234,7 +240,7 @@ export function researchContext(r:ResearchResult){
   ].join("\n\n").slice(0,14000);
 }
 function escapeMarkdown(input:string){
-  return input.replace(/[\[\]\\]/g,"").replace(/\s+/g," ").trim();
+  return input.replace(/[\[\]\\*_`#]/g," ").replace(/\s+/g," ").trim();
 }
 export function researchCitations(r:ResearchResult){
   if(!r.sources.length)return "لم تتوفر مصادر مرتبطة بالسؤال لتأكيد معلومات حديثة.";
@@ -248,10 +254,12 @@ export function researchCitations(r:ResearchResult){
 }
 export function directResearchAnswer(r:ResearchResult){
   if(!r.sources.length)return researchCitations(r);
-  return "هذه نتائج مرتبطة بموضوع البحث من فهارس عامة، دون استخدام نموذج مدفوع. "+
-    "هي عناوين ومقتطفات غير متحقق منها على مستوى المقالات، وليست ملخصًا مؤكدًا لآخر الأخبار:\n\n"+
-    r.sources.slice(0,4).map(s=>
-      "**"+escapeMarkdown(s.title)+"** — "+escapeMarkdown(s.excerpt.slice(0,225))+
-      (s.publishedAt?" ("+s.publishedAt.slice(0,10)+")":" (غير مؤرخ)")
-    ).join("\n\n")+"\n\n"+researchCitations(r);
+  return "بحثت في الفهارس العامة، وهذه عناوين ومصادر غير متحقق منها على مستوى المقالات. "+
+    "التواريخ المعروضة هي تواريخ نشر النتائج:\n\n"+
+    r.sources.slice(0,5).map((s,i)=>
+      (i+1)+". ["+escapeMarkdown(s.title.slice(0,120))+"]("+s.url+") — "+
+      escapeMarkdown(s.publisher.slice(0,55)) +
+      (s.publishedAt?" · "+s.publishedAt.slice(0,10):" · غير مؤرخ")+
+      (s.excerpt?"\n   "+escapeMarkdown(s.excerpt.slice(0,185)):"")
+    ).join("\n\n");
 }

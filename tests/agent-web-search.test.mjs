@@ -103,3 +103,47 @@ test("no suitable sources is not disguised as real research",async()=>{
   assert.match(researchCitations(result),/لم تتوفر مصادر/);
   assert.doesNotMatch(directResearchAnswer(result),/undefined/);
 });
+
+test("encoded News RSS anchor is never surfaced as a literal link in the answer",async()=>{
+  const encoded="&lt;a href=&quot;https://news.google.com/rss/articles/"+
+    "LONGARTICLEIDENTIFIER123456789012345678901234567890&quot; target=&quot;_blank&quot;&gt;"+
+    "AI policy announcement&lt;/a&gt;&amp;#x20;";
+  const xml=rss([item("AI policy announcement",
+    "https://news.google.com/rss/articles/legitimate-ai-policy",encoded,
+    activeDate,'<source url="https://www.bbc.com/news">BBC</source>')]);
+  const news=parseResearchRss(xml,"news");
+  assert.equal(news.length,1);
+  assert.equal(news[0].excerpt,"");
+  const fetcher=async url=>new Response(String(url).includes("news.google.com")?xml:rss([]),{status:200});
+  const r=await searchPublicWeb("ابحث عن آخر تطورات الذكاء الاصطناعي",fetcher);
+  assert.equal(r.sources.length,1);
+  const answer=directResearchAnswer(r);
+  assert.doesNotMatch(answer,/href\s*=|target\s*=|LONGARTICLEIDENTIFIER/);
+  assert.equal((answer.match(/legitimate-ai-policy/g)||[]).length,1);
+  assert.match(answer,/202[0-9]-[0-9]{2}-[0-9]{2}/);
+});
+
+test("current AI news rejects encyclopedias, film reviews, and undated hits",async()=>{
+  const xml=rss([
+    item("Artificial intelligence - Wikipedia","https://en.wikipedia.org/wiki/Artificial_intelligence",
+      "Artificial intelligence is the ability of systems",activeDate),
+    item("Artificial is a hugely entertaining movie about AI","https://time.com/film-ai",
+      "A movie about artificial intelligence",activeDate),
+    item("AI takes over finance sector","https://example.com/ai-finance",
+      "Artificial intelligence adoption with no date"),
+    item("Regulators announce new AI model safety framework","https://www.bbc.com/news/ai-safety",
+      "Artificial intelligence policy changed today",activeDate)
+  ]);
+  const fetcher=async url=>new Response(String(url).includes("bing.com")?xml:rss([]),{status:200});
+  const r=await searchPublicWeb("ابحث عن آخر تطورات الذكاء الاصطناعي",fetcher);
+  assert.deepEqual(r.sources.map(s=>s.title),["Regulators announce new AI model safety framework"]);
+});
+
+test("decoded markup in ordinary RSS snippet is stripped without losing text",()=>{
+  const encoded="&amp;lt;span&amp;gt;AI guidelines&amp;lt;/span&amp;gt; &amp;lt;a href=&quot;https://example.com/x&quot;&amp;gt;More&amp;lt;/a&amp;gt;";
+  const parsed=parseResearchRss(rss([item("AI Guidelines",
+    "https://www.bbc.com/news/ai",encoded,activeDate)]),"web");
+  assert.equal(parsed.length,1);
+  assert.doesNotMatch(parsed[0].excerpt,/href\s*=|span|https:\/\//);
+  assert.match(parsed[0].excerpt,/AI guidelines/);
+});
