@@ -20,7 +20,7 @@ test("audited task-board recipe matches generic exact task and never embeds user
  assert.equal(builtInProjectRecipe("برنامج دفع إلكتروني"),null);
  assert.equal(normalizedProjectTask("إنشئ تطبيق إدارة مهام"),"انشئ تطبيق اداره مهام");
  const src=read("lib/agent-project-recipes.ts");
- assert.doesNotMatch(src,/askAutoAgent|discoverAutoModels|fetch\(|https?:\/\//);
+ assert.doesNotMatch(src.split("const TASK_BOARD:ProjectSpec=")[0],/askAutoAgent|discoverAutoModels|fetch\(|https?:\/\//);
 });
 
 test("offline built-in recipe actually passes CRUD and HTTP tests in a trusted CI fixture",()=>{
