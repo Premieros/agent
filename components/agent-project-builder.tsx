@@ -7,6 +7,7 @@ type ProjectBuild={
  id:string;title:string;task:string;steps:string[];files:ProjectFile[];
  status:"planned"|"ready"|"testing"|"repairing"|"completed"|"failed";
  approved_at:string|null;max_attempts:number;attempts:number;model_calls:number;
+ github_run_id:number|null;
  stage_note:string;execution_log:string;test_passed:boolean|null;saved_artifact_id:string|null;
 };
 type Props={
