@@ -13,7 +13,8 @@ import { currentSession } from "@/lib/auth-session";
 import { assistantSkills, type AssistantSkill } from "@/lib/assistant-skills";
 import AssistantMarkdown from "@/components/assistant-markdown";
 import AssistantLearningPanel from "@/components/assistant-learning-panel";
-import {detectAgentIntent,describeAgentIntent,extractMemory,type AgentIntent} from "@/lib/assistant-intent";
+import AssistantWorkspacePanel,{type WorkspaceView} from "@/components/assistant-workspace-panel";
+import {detectAgentIntent,describeAgentIntent,extractMemory,requiresApproval,type AgentIntent} from "@/lib/assistant-intent";
 
 type Thread = { id:string; title:string; skill:AssistantSkill; updated_at:string; created_at:string };
 type ChatMessage = {id:string;role:"user"|"assistant";content:string;model?:string|null;skill?:string|null;created_at:string};
@@ -45,6 +46,10 @@ type AssistantResponse = {
       publishedAt:string|null;trusted:boolean}>}|null;
 };
 const starters=[
+  {label:"مساحة العمل",icon:Bot,text:"اعرض مساحة العمل"},
+  {label:"العملاء",icon:MessageCircle,text:"اعرض العملاء"},
+  {label:"متابعات الفريق",icon:Check,text:"اعرض المتابعات"},
+  {label:"الإضافات",icon:PlugZap,text:"اعرض الإضافات"},
   {label:"كتابة", icon:FileText, text:"اكتب لي منشور احترافي لصفحة Premier.OS عن فوائد أنظمة الكاشير للمطاعم، بدون أسعار غير مؤكدة."},
   {label:"تطوير POS", icon:Code2, text:"أنت مدير تطوير نظام Premier.OS الحالي. ابدأ بخطة لمراجعة علاقات الفروع والمخازن والمخزون والمبيعات والمشتريات والوصفات والتكاليف والحسابات. قل ما تحتاج رؤيته ولا تفترض مواصفات غير مؤكدة."},
   {label:"تخطيط", icon:Lightbulb, text:"حوّل فكرة إنشاء شركة برمجيات لخطة عملية من 30 يوم بخطوات وأولويات."},
@@ -62,6 +67,8 @@ export default function GeneralAssistant() {
   const [activeArea,setActiveArea]=useState<"studio"|"site"|null>(null);
   const [pendingAction,setPendingAction]=useState<AgentApproval|null>(null);
   const [showLearning,setShowLearning]=useState(false);
+  const [workspaceView,setWorkspaceView]=useState<WorkspaceView|null>(null);
+  const [workspaceCreateLead,setWorkspaceCreateLead]=useState(false);
   const [pageName,setPageName]=useState("");
   const [pagePlatform,setPagePlatform]=useState<"facebook"|"instagram">("facebook");
   const [pageContext,setPageContext]=useState("");
@@ -132,6 +139,7 @@ export default function GeneralAssistant() {
 
   const openThread=useCallback(async (id:string) => {
     setBusy("loading-thread");setError("");setBrowserResult(null);setResearchResult(null);
+    setWorkspaceView(null);setWorkspaceCreateLead(false);
     try {
       const res=await fetch("/api/assistant?threadId="+encodeURIComponent(id),{
         headers:await authHeaders(),cache:"no-store"
@@ -175,13 +183,14 @@ export default function GeneralAssistant() {
     return()=>{cancelled=true;};
   },[loadThreads,openThread]);
 
-  useEffect(()=>{endRef.current?.scrollIntoView({behavior:"smooth",block:"end"});},[messages.length,busy]);
+  useEffect(()=>{endRef.current?.scrollIntoView({behavior:"smooth",block:"end"});},[messages.length,busy,workspaceView,activeArea,showLearning]);
 
   async function createThread(){
     if(busy)return;
     setBusy("create");setError("");setNote("");setWorkSteps([]);setWorkProgress("");setPendingWork(null);
     setSiteChange(null);setStudioDraft(null);setStudioMissions([]);setStudioPages([]);
     setStudioPageId("");setStudioMissionId("");setPendingAction(null);setActiveArea(null);setShowLearning(false);
+    setWorkspaceView(null);setWorkspaceCreateLead(false);
     try {
       const res=await fetch("/api/assistant",{
         method:"POST",headers:await authHeaders(),
@@ -213,6 +222,7 @@ export default function GeneralAssistant() {
       if(id===threadId){
         setThreadId("");setMessages([]);setNote("");setBrowserResult(null);setResearchResult(null);setPendingWork(null);
         setPendingAction(null);setActiveArea(null);setShowLearning(false);
+        setWorkspaceView(null);setWorkspaceCreateLead(false);
       }
     }catch(e){setError(e instanceof Error?e.message:"تعذر الحذف.");}
     finally{setBusy("");}
@@ -474,7 +484,21 @@ export default function GeneralAssistant() {
     if(intent==="learning-hide"){
       setShowLearning(false);setDraft("");setNote("تم إغلاق عرض الذاكرة والمهارات.");return;
     }
-    if(!approved&&intent!=="chat"){requestApproval(intent,message);return;}
+    const workspaceCommands:Partial<Record<AgentIntent,WorkspaceView>>={
+      "workspace-overview":"overview","customers-overview":"customers",
+      "followups-overview":"followups","inbox-overview":"inbox",
+      "integrations-overview":"integrations","workspace-lead-create":"customers"
+    };
+    const requestedWorkspace=workspaceCommands[intent];
+    if(requestedWorkspace){
+      setWorkspaceView(requestedWorkspace);
+      setWorkspaceCreateLead(intent==="workspace-lead-create");
+      setActiveArea(null);setShowLearning(false);setDraft("");setError("");
+      setNote("تم فتح بيانات AGENT الفعلية داخل المحادثة، دون استدعاء نموذج AI.");
+      return;
+    }
+    if(!approved&&requiresApproval(intent)){requestApproval(intent,message);return;}
+    setWorkspaceView(null);setWorkspaceCreateLead(false);
     setBusy("send");setError("");setNote("");setWorkSteps([]);setWorkProgress("");
     try {
       let id=threadId;
@@ -754,48 +778,25 @@ export default function GeneralAssistant() {
                   {m.role==="assistant"&&<small>{assistantSkills.find(s=>s.id===m.skill)?.title||m.skill||"مساعد عام"}{m.model?" · "+m.model:""}</small>}
                 </div>
               </article>)}
-              {researchResult&&<details className="assistant-research-results">
-                <summary>
-                  <span><Globe size={15}/> مصادر البحث ({researchResult.sources.length}) · {new Date(researchResult.searchedAt).toLocaleDateString("ar-EG")}</span>
-                  <span className="assistant-research-hint">عرض النتائج والمصادر <ChevronDown size={14}/></span>
-                </summary>
-                <div className="assistant-research-body">
-                  <p>هذه مقتطفات فهرسة مرتبطة بالسؤال، وليست تحققًا مستقلًا من المقالات. لا تحفظ معلوماتها كحقائق دون مراجعتها.</p>
-                  {researchResult.sources.map((source,i)=><section key={source.url} className="assistant-research-item">
-                    <a href={source.url} dir="auto" target="_blank" rel="noopener noreferrer">
-                      {i+1}. {source.title}</a>
-                    <small>{source.publisher}{source.publishedAt?" · "+source.publishedAt.slice(0,10):" · غير مؤرخ"}
-                      {source.trusted?" · موقع معروف (ليس تحققًا من المحتوى)":" · يحتاج تحققًا إضافيًا"}</small>
-                    {source.excerpt&&<p dir="auto">{source.excerpt.slice(0,225)}</p>}
-                  </section>)}
-                  {researchResult.warnings.length>0&&<p className="assistant-research-warnings">{researchResult.warnings.join(" · ")}</p>}
-                </div>
-              </details>}
-              {sending && <div className="assistant-thinking"><LoaderCircle size={16} className="crm-spin"/> AGENT بيحضّر الرد...</div>}
-              <div ref={endRef}/>
-            </div>
-            <div className="assistant-compose">
-              {note && <p className="assistant-run-note"><Check size={14}/>{note}</p>}
-              {browserResult && <div className="assistant-browser-note">
-                <Globe size={15}/>
-                {browserResult.fetched
-                  ? <a href={browserResult.url} target="_blank" rel="noopener noreferrer">صفحة تمت قراءتها: {browserResult.title||browserResult.url}</a>
-                  : <span>تعذرت قراءة الصفحة: {browserResult.note}</span>}
-              </div>}
-              {sourceFiles.length>0 && <div className="assistant-source-list">
-                <strong>ملفات الكود المقروءة من {sourceProject||"GitHub"} — قراءة فقط:</strong>
-                {sourceFiles.map(file=><a key={file.path} href={file.url} target="_blank" rel="noopener noreferrer">
-                  {file.path}{file.truncated?" · مقتطف":""}
-                </a>)}
-              </div>}
-              <div className="assistant-composer-box">
-                <textarea ref={inputRef} rows={2} maxLength={4500} value={draft}
-                  disabled={Boolean(busy)} placeholder="اكتب أي طلب هنا... مثال: اشرح لي، اعمل خطة، اكتب كود، صيغ رسالة..."
-                  onChange={e=>setDraft(e.target.value)}
-                  onKeyDown={e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();void sendMessage();}}}/>
-                <button type="button" aria-label="إرسال الرسالة" disabled={Boolean(busy)||!draft.trim()}
-                  onClick={()=>void sendMessage()}><Send size={18}/></button>
+              <div className="assistant-chat-shortcuts" role="group" aria-label="أوامر AGENT المباشرة">
+                {[
+                  {text:"مساحة العمل",command:"اعرض مساحة العمل"},
+                  {text:"العملاء",command:"اعرض العملاء"},
+                  {text:"المتابعات",command:"اعرض المتابعات"},
+                  {text:"الوارد",command:"اعرض صندوق الوارد"},
+                  {text:"الإضافات",command:"اعرض الإضافات"},
+                  {text:"الوكلاء والتسويق",command:"اعرض صفحات ومهام AGENT"},
+                  {text:"الموقع",command:"افحص حالة موقع AGENT"},
+                  {text:"الذاكرة",command:"اعرض الذاكرة والمهارات"}
+                ].map(item=><button type="button" key={item.command}
+                  disabled={Boolean(busy)} onClick={()=>void sendMessage(item.command)}>
+                  {item.text}
+                </button>)}
               </div>
+              {workspaceView&&<AssistantWorkspacePanel
+                initialView={workspaceView} initialOpenLead={workspaceCreateLead}
+                authHeaders={authHeaders} onClose={()=>{setWorkspaceView(null);setWorkspaceCreateLead(false);}}
+                onPrompt={prompt=>void sendMessage(prompt)}/>}
               {pendingWork&&<div className="assistant-work-steps" role="status">
                 <strong>{workProgress||pendingWork?.stage_note}</strong>
                 <span>{workSteps.map((step,i)=>(i+1)+". "+step).join(" · ")}</span>
@@ -887,6 +888,48 @@ export default function GeneralAssistant() {
                 </div>
                 <AssistantLearningPanel threadId={threadId} refreshKey={messages.length} initialOpen/>
               </div>}
+              {researchResult&&<details className="assistant-research-results">
+                <summary>
+                  <span><Globe size={15}/> مصادر البحث ({researchResult.sources.length}) · {new Date(researchResult.searchedAt).toLocaleDateString("ar-EG")}</span>
+                  <span className="assistant-research-hint">عرض النتائج والمصادر <ChevronDown size={14}/></span>
+                </summary>
+                <div className="assistant-research-body">
+                  <p>هذه مقتطفات فهرسة مرتبطة بالسؤال، وليست تحققًا مستقلًا من المقالات. لا تحفظ معلوماتها كحقائق دون مراجعتها.</p>
+                  {researchResult.sources.map((source,i)=><section key={source.url} className="assistant-research-item">
+                    <a href={source.url} dir="auto" target="_blank" rel="noopener noreferrer">
+                      {i+1}. {source.title}</a>
+                    <small>{source.publisher}{source.publishedAt?" · "+source.publishedAt.slice(0,10):" · غير مؤرخ"}
+                      {source.trusted?" · موقع معروف (ليس تحققًا من المحتوى)":" · يحتاج تحققًا إضافيًا"}</small>
+                    {source.excerpt&&<p dir="auto">{source.excerpt.slice(0,225)}</p>}
+                  </section>)}
+                  {researchResult.warnings.length>0&&<p className="assistant-research-warnings">{researchResult.warnings.join(" · ")}</p>}
+                </div>
+              </details>}
+              {sending && <div className="assistant-thinking"><LoaderCircle size={16} className="crm-spin"/> AGENT بيحضّر الرد...</div>}
+              <div ref={endRef}/>
+            </div>
+            <div className="assistant-compose">
+              {note && <p className="assistant-run-note"><Check size={14}/>{note}</p>}
+              {browserResult && <div className="assistant-browser-note">
+                <Globe size={15}/>
+                {browserResult.fetched
+                  ? <a href={browserResult.url} target="_blank" rel="noopener noreferrer">صفحة تمت قراءتها: {browserResult.title||browserResult.url}</a>
+                  : <span>تعذرت قراءة الصفحة: {browserResult.note}</span>}
+              </div>}
+              {sourceFiles.length>0 && <div className="assistant-source-list">
+                <strong>ملفات الكود المقروءة من {sourceProject||"GitHub"} — قراءة فقط:</strong>
+                {sourceFiles.map(file=><a key={file.path} href={file.url} target="_blank" rel="noopener noreferrer">
+                  {file.path}{file.truncated?" · مقتطف":""}
+                </a>)}
+              </div>}
+              <div className="assistant-composer-box">
+                <textarea ref={inputRef} rows={2} maxLength={4500} value={draft}
+                  disabled={Boolean(busy)} placeholder="اكتب أي طلب هنا... مثال: اشرح لي، اعمل خطة، اكتب كود، صيغ رسالة..."
+                  onChange={e=>setDraft(e.target.value)}
+                  onKeyDown={e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();void sendMessage();}}}/>
+                <button type="button" aria-label="إرسال الرسالة" disabled={Boolean(busy)||!draft.trim()}
+                  onClick={()=>void sendMessage()}><Send size={18}/></button>
+              </div>
               <div className="assistant-compose-foot">
                 <label><input type="checkbox" checked={allowConditional}
                   onChange={e=>setAllowConditional(e.target.checked)}/>
