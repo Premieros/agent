@@ -55,7 +55,7 @@ async function note(s:AgentSession,run:Build,fields:Record<string,unknown>,onlyS
 }
 async function finishExperience(s:AgentSession,run:Build,succeeded:boolean){
  await recordSandboxExperience(s,{id:run.id,task:run.task,model:run.model,
-   sandbox_ran:true},succeeded).catch(()=>console.warn("AGENT project experience not recorded"));
+   sandbox_ran:true},succeeded,"github").catch(()=>console.warn("AGENT project experience not recorded"));
  if(!succeeded)return;
  // Two independent verified completions can suggest a skill, never activate one.
  const done=await s.db.from("assistant_project_builds").select("id")
