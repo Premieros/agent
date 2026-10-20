@@ -98,6 +98,7 @@ export default function GeneralAssistant() {
   const [busy,setBusy]=useState("");
   const [loading,setLoading]=useState(true);
   const [authorized,setAuthorized]=useState(false);
+  const [sessionExpired,setSessionExpired]=useState(false);
   const [error,setError]=useState("");
   const [note,setNote]=useState("");
   const [sourceFiles,setSourceFiles]=useState<Array<{path:string;url:string;truncated:boolean}>>([]);
@@ -133,15 +134,49 @@ export default function GeneralAssistant() {
   const authHeaders=useCallback(async () => {
     if(!db)throw new Error("تعذر اتصال قاعدة البيانات.");
     const session=await currentSession(db);
-    if(!session?.access_token)throw new Error("انتهت جلسة AGENT. افتح صفحة تسجيل الدخول ثم ارجع للمحادثة.");
+    if(!session?.access_token){setSessionExpired(true);throw new Error("انتهت الجلسة. سجّل الدخول أو حاول إعادة الاتصال.");}
     return {Authorization:`Bearer ${session.access_token}`,"Content-Type":"application/json"};
+  },[db]);
+
+  // One safe refresh/retry on an authenticated 401. The server still verifies
+  // the JWT and membership; a revoked session always requires signing in.
+  const apiFetch=useCallback(async (url:string,init?:RequestInit):Promise<Response>=>{
+    const headers=new Headers(init?.headers);
+    if(init?.body instanceof FormData)headers.delete("Content-Type");
+    const opts={...init,headers,cache:init?.cache||"no-store"} satisfies RequestInit;
+    let result=await fetch(url,opts);
+    if(result.status!==401)return result;
+    if(!db){setSessionExpired(true);return result;}
+    const refreshed=await db.auth.refreshSession();
+    if(!refreshed.error&&refreshed.data.session?.access_token){
+      headers.set("Authorization","Bearer "+refreshed.data.session.access_token);
+      result=await fetch(url,{...opts,headers});
+      if(result.status!==401){setSessionExpired(false);return result;}
+    }
+    setSessionExpired(true);
+    return result;
+  },[db]);
+
+  useEffect(()=>{
+    if(!db)return;
+    const {data:{subscription}}=db.auth.onAuthStateChange((event)=>{
+      if(event==="SIGNED_OUT"){
+        setSessionExpired(true);setAuthorized(false);
+        setThreads([]);setThreadId("");setMessages([]);setFeedback({});
+        setActiveArea(null);setShowStudioControls(false);
+        setPendingWork(null);setPendingAction(null);setWorkspaceView(null);
+      }else if(event==="SIGNED_IN"){
+        setSessionExpired(false);
+      }
+    });
+    return()=>subscription.unsubscribe();
   },[db]);
 
   const loadThreads=useCallback(async (pickFirst:boolean) => {
     const headers=await authHeaders();
-    const res=await fetch("/api/assistant",{headers,cache:"no-store"});
+    const res=await apiFetch("/api/assistant",{headers,cache:"no-store"});
     const data=await res.json() as AssistantResponse;
-    if(!res.ok)throw new Error(data.error||"تعذر تحميل المحادثات.");
+    if(!res.ok){if(res.status===401)setSessionExpired(true);throw new Error(data.error||"تعذر تحميل المحادثات.");}
     setThreads(data.threads||[]);
     if(pickFirst && data.threads?.length) return data.threads[0].id;
     return "";
@@ -153,11 +188,11 @@ export default function GeneralAssistant() {
     setShowStudioControls(false);
     setWorkspaceView(null);setWorkspaceCreateLead(false);
     try {
-      const res=await fetch("/api/assistant?threadId="+encodeURIComponent(id),{
+      const res=await apiFetch("/api/assistant?threadId="+encodeURIComponent(id),{
         headers:await authHeaders(),cache:"no-store"
       });
       const data=await res.json() as AssistantResponse;
-      if(!res.ok)throw new Error(data.error||"تعذر فتح المحادثة.");
+      if(!res.ok){if(res.status===401)setSessionExpired(true);throw new Error(data.error||"تعذر فتح المحادثة.");}
       setThreadId(id);
       setMessages(data.messages||[]);
       void loadFeedback(id);
@@ -188,6 +223,7 @@ export default function GeneralAssistant() {
         const first=await loadThreads(true);
         if(cancelled)return;
         setAuthorized(true);
+        setSessionExpired(false);
         if(first && !new URLSearchParams(window.location.search).has("new"))await openThread(first);
       }catch(e){
         if(!cancelled) setError(e instanceof Error?e.message:"تعذر تسجيل الدخول.");
@@ -199,9 +235,23 @@ export default function GeneralAssistant() {
   useEffect(()=>{endRef.current?.scrollIntoView({behavior:"smooth",block:"end"});},[messages.length,busy,workspaceView,activeArea,showLearning]);
 
 
+  async function retrySession(){
+    if(busy)return;
+    setLoading(true);setError("");
+    try{
+      const first=await loadThreads(true);
+      setSessionExpired(false);setAuthorized(true);
+      if(threadId)await openThread(threadId);
+      else if(first&&!new URLSearchParams(window.location.search).has("new"))await openThread(first);
+    }catch(e){
+      setSessionExpired(true);
+      setError(e instanceof Error?e.message:"تعذّر استعادة الجلسة. سجّل دخولك مجددًا.");
+    }finally{setLoading(false);}
+  }
+
   async function loadFeedback(id:string){
     try{
-      const res=await fetch("/api/assistant/experience?threadId="+encodeURIComponent(id),{
+      const res=await apiFetch("/api/assistant/experience?threadId="+encodeURIComponent(id),{
         headers:await authHeaders(),cache:"no-store"
       });
       if(res.ok){
@@ -214,7 +264,7 @@ export default function GeneralAssistant() {
     if(ratingBusy||busy||messageId.startsWith("pending-"))return;
     setRatingBusy(messageId);
     try{
-      const res=await fetch("/api/assistant/experience",{
+      const res=await apiFetch("/api/assistant/experience",{
         method:"POST",headers:await authHeaders(),
         body:JSON.stringify({messageId,outcome})
       });
@@ -229,7 +279,7 @@ export default function GeneralAssistant() {
     if(busy||!threadId||message.role!=="assistant")return;
     setBusy("library-save");setError("");setNote("");
     try{
-      const response=await fetch("/api/assistant/library",{
+      const response=await apiFetch("/api/assistant/library",{
         method:"POST",headers:await authHeaders(),
         body:JSON.stringify({action:"save_message",threadId,messageId:message.id})
       });
@@ -242,7 +292,7 @@ export default function GeneralAssistant() {
   async function openLibraryDocuments(){
     setShowLibraryPicker(v=>!v);setError("");
     try{
-      const response=await fetch("/api/assistant/library",{
+      const response=await apiFetch("/api/assistant/library",{
         headers:await authHeaders(),cache:"no-store"
       });
       const value=await response.json() as {error?:string;items?:Array<{
@@ -260,7 +310,7 @@ export default function GeneralAssistant() {
       if(file.size>8*1024*1024)throw new Error("الحد الأقصى للملف 8 ميجابايت.");
       const form=new FormData();form.set("file",file);
       if(threadId)form.set("threadId",threadId);
-      const response=await fetch("/api/assistant/library",{
+      const response=await apiFetch("/api/assistant/library",{
         method:"POST",headers:await authHeaders(),body:form
       });
       const data=await response.json() as {ok?:boolean;error?:string};
@@ -271,19 +321,21 @@ export default function GeneralAssistant() {
   }
   async function createThread(){
     if(busy)return;
-    setBusy("create");setError("");setNote("");setWorkSteps([]);setWorkProgress("");setPendingWork(null);
-    setSelectedLibraryFile("");setShowLibraryPicker(false);
-    setSiteChange(null);setStudioDraft(null);setStudioMissions([]);setStudioPages([]);
-    setShowStudioControls(false);
-    setStudioPageId("");setStudioMissionId("");setPendingAction(null);setActiveArea(null);setShowLearning(false);
-    setWorkspaceView(null);setWorkspaceCreateLead(false);
+    if(sessionExpired){setError("جدّد جلسة AGENT قبل إنشاء محادثة جديدة.");return;}
+    setBusy("create");setError("");
     try {
-      const res=await fetch("/api/assistant",{
+      const res=await apiFetch("/api/assistant",{
         method:"POST",headers:await authHeaders(),
         body:JSON.stringify({action:"create",skill:"auto"})
       });
       const data=await res.json() as AssistantResponse;
       if(!res.ok||!data.thread)throw new Error(data.error||"تعذر إنشاء المحادثة.");
+      setNote("");setWorkSteps([]);setWorkProgress("");setPendingWork(null);
+      setSelectedLibraryFile("");setShowLibraryPicker(false);
+      setSiteChange(null);setStudioDraft(null);setStudioMissions([]);setStudioPages([]);
+      setShowStudioControls(false);
+      setStudioPageId("");setStudioMissionId("");setPendingAction(null);setActiveArea(null);setShowLearning(false);
+      setWorkspaceView(null);setWorkspaceCreateLead(false);
       setThreadId(data.thread.id);setMessages([]);setFeedback({});setThreads(current=>[data.thread!,...current]);
       setShowSidebar(false);
       window.dispatchEvent(new Event("agent:close-navigation"));
@@ -297,7 +349,7 @@ export default function GeneralAssistant() {
     if(busy||!window.confirm("حذف المحادثة ورسائلها نهائيًا؟"))return;
     setBusy("delete");setError("");
     try {
-      const res=await fetch("/api/assistant",{
+      const res=await apiFetch("/api/assistant",{
         method:"POST",headers:await authHeaders(),
         body:JSON.stringify({action:"delete",threadId:id})
       });
@@ -318,7 +370,7 @@ export default function GeneralAssistant() {
 
   async function loadWorkState(id:string){
     try{
-      const res=await fetch("/api/assistant/work?threadId="+encodeURIComponent(id),{
+      const res=await apiFetch("/api/assistant/work?threadId="+encodeURIComponent(id),{
         headers:await authHeaders(),cache:"no-store"
       });
       if(!res.ok)return;
@@ -337,7 +389,7 @@ export default function GeneralAssistant() {
   async function loadStudioState(id:string){
     if(!id)return;
     try{
-      const res=await fetch("/api/assistant/studio?threadId="+encodeURIComponent(id),{
+      const res=await apiFetch("/api/assistant/studio?threadId="+encodeURIComponent(id),{
         headers:await authHeaders(),cache:"no-store"
       });
       if(!res.ok)return;
@@ -353,7 +405,7 @@ export default function GeneralAssistant() {
 
   async function studioRequest(id:string,action:"overview"|"prepare"|"confirm"|"summary"|"create_page",
     extra:Record<string,unknown>={}):Promise<StudioResponse>{
-    const res=await fetch("/api/assistant/studio",{
+    const res=await apiFetch("/api/assistant/studio",{
       method:"POST",headers:await authHeaders(),
       body:JSON.stringify({action,threadId:id,...extra})
     });
@@ -371,7 +423,7 @@ export default function GeneralAssistant() {
 
   async function suggestLearningApproval(id:string){
     try{
-      const res=await fetch("/api/assistant/learning?threadId="+encodeURIComponent(id),{
+      const res=await apiFetch("/api/assistant/learning?threadId="+encodeURIComponent(id),{
         headers:await authHeaders(),cache:"no-store"
       });
       if(!res.ok)return;
@@ -394,7 +446,7 @@ export default function GeneralAssistant() {
   }
 
   async function postLearning(action:string,payload:Record<string,unknown>,id:string){
-    const res=await fetch("/api/assistant/learning",{
+    const res=await apiFetch("/api/assistant/learning",{
       method:"POST",headers:await authHeaders(),
       body:JSON.stringify({action,threadId:id,...payload})
     });
@@ -457,7 +509,7 @@ export default function GeneralAssistant() {
     }
     setBusy("studio-run");setError("");setNote("جارٍ توزيع العمل على الوكلاء...");
     try{
-      const res=await fetch("/api/agents/run",{
+      const res=await apiFetch("/api/agents/run",{
         method:"POST",headers:await authHeaders(),
         body:JSON.stringify({missionId:id,mode:"economy",routing:"auto",
           allowConditionalFreeTier:allowConditional})
@@ -478,7 +530,7 @@ export default function GeneralAssistant() {
   async function loadSiteState(id:string){
     if(!id)return;
     try{
-      const res=await fetch("/api/assistant/site?threadId="+encodeURIComponent(id),{
+      const res=await apiFetch("/api/assistant/site?threadId="+encodeURIComponent(id),{
         headers:await authHeaders(),cache:"no-store"
       });
       if(!res.ok)return;
@@ -494,7 +546,7 @@ export default function GeneralAssistant() {
     if(!confirmed){requestApproval("site-approve","فتح طلب مراجعة التعديل على GitHub");return;}
     setBusy("site-approve");setError("");
     try{
-      const res=await fetch("/api/assistant/site",{
+      const res=await apiFetch("/api/assistant/site",{
         method:"POST",headers:await authHeaders(),
         body:JSON.stringify({action:"approve",changeId:siteChange.id})
       });
@@ -510,7 +562,7 @@ export default function GeneralAssistant() {
     if(artifactBusy||!threadId)return;
     setArtifactBusy(true);setError("");
     try{
-      const res=await fetch("/api/assistant/work",{
+      const res=await apiFetch("/api/assistant/work",{
         method:"POST",headers:await authHeaders(),
         body:JSON.stringify({action:"save_artifact",runId})
       });
@@ -529,7 +581,7 @@ export default function GeneralAssistant() {
       if(run.status==="planned"){
         setWorkProgress("تنفيذ خطة العمل...");
         setPendingWork({...run,status:"running",stage_note:"إنشاء بيئة الاختبار المعزولة..."});
-        const resp=await fetch("/api/assistant/work",{
+        const resp=await apiFetch("/api/assistant/work",{
           method:"POST",headers:await authHeaders(),
           body:JSON.stringify({action:"execute",runId:run.id})
         });
@@ -547,7 +599,7 @@ export default function GeneralAssistant() {
       if(run.status!=="executed")throw new Error(
         "التنفيذ الجاري لم ينتهِ بعد. اضغط تحديث بعد قليل.");
       setWorkProgress("تحليل النتائج وإعداد التقرير...");
-      const resp=await fetch("/api/assistant/work",{
+      const resp=await apiFetch("/api/assistant/work",{
         method:"POST",headers:await authHeaders(),
         body:JSON.stringify({action:"finalize",runId:run.id,
           allowConditionalFreeTier:allowConditional})
@@ -566,7 +618,7 @@ export default function GeneralAssistant() {
       await loadWorkState(id);
     }finally{
       try{
-        const response=await fetch("/api/assistant?threadId="+encodeURIComponent(id),{
+        const response=await apiFetch("/api/assistant?threadId="+encodeURIComponent(id),{
           headers:await authHeaders(),cache:"no-store"
         });
         if(response.ok){
@@ -587,6 +639,7 @@ export default function GeneralAssistant() {
   async function sendMessage(text=draft,approved=false) {
     const message=text.trim();
     if(busy||!message||message.length>4500)return;
+    if(sessionExpired){setError("سجّل دخولك مجددًا ثم أعد إرسال الطلب.");return;}
     const previous=messages.filter(m=>m.role==="assistant").at(-1);
     const intent=detectAgentIntent(message,previous?.model);
     if(intent==="learning-list"){
@@ -616,7 +669,7 @@ export default function GeneralAssistant() {
     try {
       let id=threadId;
       if(!id){
-        const newRes=await fetch("/api/assistant",{
+        const newRes=await apiFetch("/api/assistant",{
           method:"POST",headers:await authHeaders(),
           body:JSON.stringify({action:"create",skill})
         });
@@ -693,7 +746,7 @@ export default function GeneralAssistant() {
         setShowStudioControls(false);
         setActiveArea("site");
         const diagnose=intent==="site-diagnose";
-        const res=await fetch("/api/assistant/site",{
+        const res=await apiFetch("/api/assistant/site",{
           method:"POST",headers:await authHeaders(),
           body:JSON.stringify({action:diagnose?"diagnose":"draft",
             threadId:id,task:message,allowConditionalFreeTier:allowConditional})
@@ -711,7 +764,7 @@ export default function GeneralAssistant() {
       }
       if(intent==="work"){
         setWorkProgress("تجهيز خطة العمل...");
-        const planRes=await fetch("/api/assistant/work",{
+        const planRes=await apiFetch("/api/assistant/work",{
           method:"POST",headers:await authHeaders(),
           body:JSON.stringify({action:"plan",threadId:id,task:message,
             allowConditionalFreeTier:allowConditional})
@@ -740,7 +793,7 @@ export default function GeneralAssistant() {
         return;
       }
       setActiveArea(null);
-      const res=await fetch("/api/assistant",{
+      const res=await apiFetch("/api/assistant",{
         method:"POST",headers:await authHeaders(),
         body:JSON.stringify({action:"send",threadId:id,text:message,skill:"auto",allowConditionalFreeTier:allowConditional,
           libraryItemId:selectedLibraryFile||undefined})
@@ -834,12 +887,21 @@ export default function GeneralAssistant() {
   const sending=busy==="send";
   return <div className="crm-root general-assistant-root" style={{"--agent-chat-font-size":fontSize+"px"} as React.CSSProperties}>
     <div className="crm-wrap">
-      {error && <div className="crm-error" role="alert">{error} <button type="button" onClick={()=>setError("")}>×</button></div>}
+      {sessionExpired&&<div className="assistant-session-banner" role="alert">
+        <span>انتهت جلسة AGENT. محادثاتك محفوظة، ولا يمكن تشغيل الأدوات حتى تجدد الدخول.</span>
+        <button type="button" onClick={()=>void retrySession()} disabled={loading||Boolean(busy)}>إعادة الاتصال</button>
+        <Link href="/crm">تسجيل الدخول</Link>
+        {draft.trim()&&<button type="button" onClick={()=>void navigator.clipboard.writeText(draft)}>نسخ الطلب قبل الانتقال</button>}
+      </div>}
+      {error&&!sessionExpired&&<div className="crm-error" role="alert">{error}
+        <button type="button" onClick={()=>setError("")}>×</button>
+      </div>}
       {loading ? <div className="assistant-loader"><LoaderCircle className="crm-spin" size={22}/> جاري تحميل مساعدك...</div>
       : !authorized ? <section className="crm-card assistant-login">
           <CircleAlert size={26}/><h2>سجّل دخولك إلى AGENT</h2>
           <p>المساعد الخاص يحتاج حساب مدير أو مسؤول تسويق مسجّل.</p>
           <Link href="/crm">الذهاب لتسجيل الدخول</Link>
+          <button type="button" onClick={()=>void retrySession()} disabled={loading}>إعادة الاتصال</button>
         </section>
       : <div className="assistant-layout">
           {sidebarPortalTarget ? createPortal(sidebar,sidebarPortalTarget) : sidebar}
@@ -931,7 +993,7 @@ export default function GeneralAssistant() {
                       {savedArtifacts.includes(pendingWork.id)?"محفوظ في المكتبة":"حفظ الكود والسجل"}</button>}
                 </div>
               </section>}
-              {activeArea==="studio"&&<div className="assistant-studio-tools">
+              {messages.length>0&&activeArea==="studio"&&<div className="assistant-studio-tools">
                 <button type="button" className="assistant-studio-tools-toggle"
                   aria-expanded={showStudioControls}
                   aria-controls="assistant-studio-tools-panel"
@@ -1084,10 +1146,10 @@ export default function GeneralAssistant() {
                   aria-label="اختيار ملف من المكتبة للتحليل" disabled={Boolean(busy)}
                   onClick={()=>void openLibraryDocuments()}><BookOpen size={17}/></button>
                 <textarea ref={inputRef} rows={2} maxLength={4500} value={draft}
-                  disabled={Boolean(busy)} placeholder="اكتب أي طلب هنا... مثال: اشرح لي، اعمل خطة، اكتب كود، صيغ رسالة..."
+                  disabled={Boolean(busy)||sessionExpired} placeholder="اكتب أي طلب هنا... مثال: اشرح لي، اعمل خطة، اكتب كود، صيغ رسالة..."
                   onChange={e=>setDraft(e.target.value)}
                   onKeyDown={e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();void sendMessage();}}}/>
-                <button type="button" aria-label="إرسال الرسالة" disabled={Boolean(busy)||!draft.trim()}
+                <button type="button" aria-label="إرسال الرسالة" disabled={Boolean(busy)||sessionExpired||!draft.trim()}
                   onClick={()=>void sendMessage()}><Send size={18}/></button>
               </div>
               <div className="assistant-compose-foot">

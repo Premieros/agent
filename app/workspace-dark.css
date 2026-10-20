@@ -1611,3 +1611,31 @@
     transition:none!important;
   }
 }
+
+
+/* Session recovery: keep the draft visible, block expired-token actions,
+   and make reconnection an explicit, easy-to-find action. */
+.workspace-shell .workspace-page .general-assistant-root .assistant-session-banner{
+  display:flex;align-items:center;flex-wrap:wrap;gap:9px;
+  padding:10px 13px;margin:7px 10px;
+  color:#ffe8cf;background:#342e30;border:1px solid #8d6761;
+  border-radius:10px;font-size:12px;line-height:1.8;
+}
+.workspace-shell .workspace-page .general-assistant-root .assistant-session-banner span{
+  flex:1 1 270px;
+}
+.workspace-shell .workspace-page .general-assistant-root .assistant-session-banner :is(button,a){
+  display:inline-flex;align-items:center;justify-content:center;
+  min-height:31px;padding:4px 10px;border:1px solid #886f65;
+  background:#403839;color:#ffedda;text-decoration:none;
+  border-radius:8px;font-size:11px;cursor:pointer;
+}
+.workspace-shell .workspace-page .general-assistant-root .assistant-session-banner :is(button,a):hover{
+  background:#564341;
+}
+.workspace-shell .workspace-page .general-assistant-root .assistant-session-banner button:disabled{
+  opacity:.5;cursor:wait;
+}
+.workspace-shell .workspace-page .general-assistant-root .assistant-composer-box textarea:disabled{
+  cursor:not-allowed;opacity:.74;
+}
