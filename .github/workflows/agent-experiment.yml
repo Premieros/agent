@@ -116,7 +116,18 @@ jobs:
             --memory 256m --cpus 1 --user 65534:65534 \
             --tmpfs /tmp:rw,noexec,nosuid,size=16m \
             --mount "type=bind,src=$root,dst=/workspace,readonly" \
-            node:22-alpine sh -c 'node --check /workspace/work.js && node /workspace/work.js' \
+            node:22-alpine sh -c '
+              set -eu
+              if [ -f /workspace/work.js ]; then
+                node --check /workspace/work.js
+                node /workspace/work.js
+              else
+                find /workspace -type f \( -name "*.js" -o -name "*.mjs" -o -name "*.cjs" \) | sort |
+                while IFS= read -r file; do node --check "$file"; done
+                cd /workspace
+                node --test
+              fi
+            ' \
             > "$RUNNER_TEMP/agent-output.txt" 2>&1
           exit_code=$?
           set -e
