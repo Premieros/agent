@@ -21,6 +21,7 @@ export default function AgentProjectBuilder({threadId,refreshKey,authHeaders,api
  const [maxAttempts,setMaxAttempts]=useState<1|2>(2);
  const [showTerminal,setShowTerminal]=useState(false);
  const active=useRef(false);
+ const haltedStep=useRef("");
  const load=useCallback(async()=>{
   if(!threadId)return;
   try{
@@ -57,12 +58,14 @@ export default function AgentProjectBuilder({threadId,refreshKey,authHeaders,api
   finally{setBusy(false);}
  }
  const advance=useCallback(async()=>{
-  if(!project||active.current||!["ready","repairing"].includes(project.status))return;
+  if(!project||active.current||!["ready","repairing"].includes(project.status)||
+    haltedStep.current===project.id+":"+project.status+":"+project.attempts)return;
   active.current=true;setBusy(true);setError("");
   try{
    await post("advance");
    await load();
   }catch(e){
+   haltedStep.current=project.id+":"+project.status+":"+project.attempts;
    setError(e instanceof Error?e.message:"توقف التنفيذ؛ افتح حالة المشروع مجددًا.");
    await load();
   }finally{active.current=false;setBusy(false);}
@@ -70,7 +73,8 @@ export default function AgentProjectBuilder({threadId,refreshKey,authHeaders,api
  // eslint-disable-next-line react-hooks/exhaustive-deps
  },[project?.id,project?.status,apiFetch,authHeaders,load]);
  useEffect(()=>{
-  if(project?.approved_at&&["ready","repairing"].includes(project.status)&&!busy){
+  if(project?.approved_at&&["ready","repairing"].includes(project.status)&&!busy&&
+    haltedStep.current!==project.id+":"+project.status+":"+project.attempts){
    void advance();
   }
  },[project?.id,project?.status,project?.approved_at,busy,advance]);
@@ -154,7 +158,11 @@ export default function AgentProjectBuilder({threadId,refreshKey,authHeaders,api
   {showTerminal&&<pre className="agent-work-stdout" dir="ltr">
    {project.execution_log||"$ waiting for approval / execution"}
   </pre>}
-  {error&&<p role="alert">{error}</p>}
+  {error&&<p role="alert">{error} {project.approved_at&&
+   ["ready","repairing"].includes(project.status)&&
+   <button type="button" disabled={busy} onClick={()=>{
+    haltedStep.current="";setError("");void advance();
+   }}>إعادة المحاولة يدويًا</button>}</p>}
   {note&&<p role="status">{note}</p>}
  </section>;
 }
