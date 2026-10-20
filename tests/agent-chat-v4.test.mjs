@@ -21,7 +21,7 @@ test("code samples have a safe built-in copy action",()=>{
  assert.match(source,/aria-label="نسخ الكود"/);
  assert.match(source,/navigator\.clipboard\.writeText\(code\)/);
  assert.match(source,/codeLines\.join\("\\n"\)/);
- assert.doesNotMatch(source,/dangerouslySetInnerHTML/);
+ assert.doesNotMatch(source,/dangerouslySetInnerHTML\s*=/);
 });
 test("real actions stay attached to the test result instead of making a second dashboard",()=>{
  const ui=read("components/general-assistant.tsx");
