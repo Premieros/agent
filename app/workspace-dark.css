@@ -1981,3 +1981,51 @@
     .assistant-bubble,.assistant-message-heading button,.assistant-composer-box
   ){animation:none!important;transition:none!important;}
 }
+
+
+/* AGENT black-and-soft-blue chat experiment, only on development branch. */
+.workspace-shell .workspace-page .general-assistant-root{
+  --agent-chat-surface:#0d0e11;
+  --agent-chat-raised:#21242b;
+  --agent-chat-ink:#f5f6f8;
+  --agent-chat-muted:#bbc2cb;
+}
+.workspace-shell .workspace-page .general-assistant-root :is(
+  .assistant-panel,.assistant-toolbar,.assistant-chat-scroll,.assistant-compose
+){background:#0d0e11!important;}
+.workspace-shell .workspace-page .general-assistant-root .assistant-bubble.user .assistant-message-text{
+  background:#274663!important;color:#f0f7ff!important;
+  border:1px solid #3b5d7d!important;box-shadow:none!important;
+}
+.workspace-shell .workspace-page .general-assistant-root .assistant-composer-box{
+  background:#20242a!important;border:1px solid #3b434e!important;
+}
+.workspace-shell .workspace-page .general-assistant-root .assistant-composer-box>button:not(
+  .assistant-attach-file,.assistant-pick-library
+){
+  background:#90beff!important;color:#12253e!important;
+}
+.workspace-shell .workspace-page .general-assistant-root .assistant-composer-box>button:not(
+  .assistant-attach-file,.assistant-pick-library
+):not(:disabled):hover{
+  background:#b4d2ff!important;
+}
+.workspace-shell .workspace-page .general-assistant-root .assistant-thinking,
+.workspace-shell .workspace-page .general-assistant-root .assistant-live-status{
+  display:flex;align-items:center;gap:9px;
+  color:#b7cdea!important;font-size:12px!important;
+  max-width:800px;margin-inline:auto;
+}
+.workspace-shell .workspace-page .general-assistant-root .assistant-live-status{
+  margin-bottom:8px;padding:6px 12px;border-radius:10px;
+  background:#17202b!important;width:fit-content;min-height:32px;
+}
+.workspace-shell .workspace-page .general-assistant-root .assistant-live-status svg,
+.workspace-shell .workspace-page .general-assistant-root .assistant-thinking svg{
+  color:#9cc9ff!important;
+}
+@media(prefers-reduced-motion:reduce){
+ .workspace-shell .workspace-page .general-assistant-root .assistant-live-status svg{
+  animation:none!important;
+ }
+}

@@ -87,3 +87,18 @@ test("a completed Work reply lets owner download ZIP in conversation",()=>{
   assert.match(ui,/تنزيل البرنامج ZIP/);
   assert.match(ui,/pendingWork\.code/);
 });
+
+test("black and pale-blue theme plus truthful progress are restricted to AGENT chat",()=>{
+  const css=read("app/workspace-dark.css");
+  assert.match(css,/AGENT black-and-soft-blue chat experiment/);
+  assert.match(css,/\.assistant-panel,\.assistant-toolbar,\.assistant-chat-scroll,\.assistant-compose/);
+  assert.match(css,/background:#0d0e11!important/);
+  assert.match(css,/\.assistant-bubble\.user \.assistant-message-text\{/);
+  assert.match(css,/background:#274663!important/);
+  assert.match(css,/background:#90beff!important/);
+  const ui=read("components/general-assistant.tsx");
+  assert.match(ui,/className="assistant-live-status"/);
+  assert.match(ui,/role="status" aria-live="polite"/);
+  assert.match(ui,/pendingWork\?\.status==="running"/);
+  assert.match(ui,/جاري اختبار البرنامج داخل البيئة المعزولة/);
+});

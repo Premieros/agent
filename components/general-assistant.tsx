@@ -1282,6 +1282,15 @@ export default function GeneralAssistant() {
               <div ref={endRef}/>
             </div>
             <div className="assistant-compose">
+              {((Boolean(busy)&&!sending)||pendingWork?.status==="running"||
+                pendingWork?.status==="reporting")&&
+                <div className="assistant-live-status" role="status" aria-live="polite">
+                  <LoaderCircle className="crm-spin" size={16}/>
+                  {pendingWork?.status==="running"?"جاري اختبار البرنامج داخل البيئة المعزولة...":
+                    pendingWork?.status==="reporting"?"AGENT يجهز نتيجة الاختبار...":
+                    busy==="work-repair"?"AGENT يحضّر إصلاحًا للمراجعة...":
+                    "AGENT يعمل على طلبك..."}
+                </div>}
               {showLibraryPicker&&<div className="assistant-library-picker">
                 <label>اختر ملفًا نصيًا من المكتبة لتحليله في الرسالة التالية
                   <select value={selectedLibraryFile} onChange={e=>setSelectedLibraryFile(e.target.value)}>
