@@ -83,22 +83,6 @@ export default function AssistantWorkspacePanel({initialView,initialOpenLead=fal
     }catch(e){setError(e instanceof Error?e.message:"تعذر تنفيذ الإجراء.");}
     finally{setBusy(false);}
   }
-  async function toggleConnector(item:Connector){
-    if(!item.toggleable||busy)return;
-    if(!window.confirm((item.enabled?"تعطيل":"تفعيل")+" إضافة "+(item.name||item.label||item.id)+" لهذا الحساب؟"))return;
-    setBusy(true);setError("");setNotice("");
-    try{
-      const response=await fetch("/api/assistant/integrations",{
-        method:"POST",headers:await authHeaders(),
-        body:JSON.stringify({connectorId:item.id,enabled:!item.enabled})
-      });
-      const result=await response.json() as {error?:string;ok?:boolean};
-      if(!response.ok||!result.ok)throw new Error(result.error||"تعذر تغيير حالة الإضافة.");
-      setNotice("تم تحديث صلاحية القراءة للإضافة.");
-      await refresh();
-    }catch(e){setError(e instanceof Error?e.message:"تعذر تغيير الإضافة.");}
-    finally{setBusy(false);}
-  }
   const leadName=(id:string)=>snapshot?.leads.find(l=>l.id===id)?.full_name||"عميل";
   const disabled=busy||loading;
   return <section className="assistant-workspace-card" dir="rtl" aria-label="مساحة العمل داخل المحادثة">
@@ -216,18 +200,16 @@ export default function AssistantWorkspacePanel({initialView,initialOpenLead=fal
       </>}
       {view==="integrations"&&<>
         <div className="assistant-workspace-section-head"><strong><PlugZap size={16}/> حالة الإضافات</strong></div>
-        <p>الإضافات المتاحة فعلًا فقط يمكن تفعيل قراءتها؛ لا تفعيل لحسابات خارجية غير موصولة.</p>
+        <p>حالة الربط للقراءة فقط هنا. توصيل المصادر وتغيير صلاحياتها من مركز الربط الواحد، ولا تُعد الخدمة متصلة قبل التفويض الفعلي.</p>
         <div className="assistant-workspace-list">
           {integrations?.connectors?.map(item=><div key={item.id}>
             <div><strong>{item.name||item.label||item.title||item.id}</strong>
               <small>{item.status} · {item.enabled?"مفعّلة":"غير مفعّلة"}</small></div>
-            {item.toggleable&&<button type="button" disabled={disabled}
-              onClick={()=>void toggleConnector(item)}>
-              {item.enabled?"تعطيل القراءة":"تفعيل القراءة"}</button>}
+
           </div>)}
           {!integrations&&<p>تعذر قراءة مركز الإضافات حاليًا.</p>}
         </div>
-        <Link href="/assistant/integrations">إعدادات الإضافات المتقدمة</Link>
+        <Link href="/assistant/integrations">فتح الربط وإعداداته</Link>
       </>}
       <p className="assistant-workspace-foot"><ShieldCheck size={14}/>
         البيانات من مؤسستك المصرّح بها؛ القراءة تلقائية، والحفظ أو التغيير بتأكيد منك.</p>

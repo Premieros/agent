@@ -102,6 +102,10 @@ export default function GeneralAssistant() {
   const [fontSize,setFontSize]=useState(15);
   const [browserResult,setBrowserResult]=useState<{url:string;title:string;fetched:boolean;note:string}|null>(null);
   const [researchResult,setResearchResult]=useState<AssistantResponse["researchResult"]>(null);
+  const [libraryDocuments,setLibraryDocuments]=useState<Array<{id:string;file_name:string}>>([]);
+  const [showLibraryPicker,setShowLibraryPicker]=useState(false);
+  const [selectedLibraryFile,setSelectedLibraryFile]=useState("");
+
   const endRef=useRef<HTMLDivElement|null>(null);
   const inputRef=useRef<HTMLTextAreaElement|null>(null);
   const fileRef=useRef<HTMLInputElement|null>(null);
@@ -140,6 +144,7 @@ export default function GeneralAssistant() {
 
   const openThread=useCallback(async (id:string) => {
     setBusy("loading-thread");setError("");setBrowserResult(null);setResearchResult(null);
+    setSelectedLibraryFile("");setShowLibraryPicker(false);
     setWorkspaceView(null);setWorkspaceCreateLead(false);
     try {
       const res=await fetch("/api/assistant?threadId="+encodeURIComponent(id),{
@@ -201,6 +206,20 @@ export default function GeneralAssistant() {
     }catch(e){setError(e instanceof Error?e.message:"تعذّر حفظ النتيجة.");}
     finally{setBusy("");}
   }
+  async function openLibraryDocuments(){
+    setShowLibraryPicker(v=>!v);setError("");
+    try{
+      const response=await fetch("/api/assistant/library",{
+        headers:await authHeaders(),cache:"no-store"
+      });
+      const value=await response.json() as {error?:string;items?:Array<{
+        id:string;file_name:string;mime_type:string;size_bytes:number}>};
+      if(!response.ok)throw new Error(value.error||"تعذّر تحميل الملفات.");
+      setLibraryDocuments((value.items||[]).filter(x=>
+        ["text/plain","text/markdown","text/csv","application/json"].includes(x.mime_type)
+        &&x.size_bytes<=100000).map(x=>({id:x.id,file_name:x.file_name})));
+    }catch(e){setError(e instanceof Error?e.message:"تعذّر قراءة المكتبة.");}
+  }
   async function uploadChatFile(file:File|null){
     if(!file||busy)return;
     setBusy("library-upload");setError("");setNote("");
@@ -220,6 +239,7 @@ export default function GeneralAssistant() {
   async function createThread(){
     if(busy)return;
     setBusy("create");setError("");setNote("");setWorkSteps([]);setWorkProgress("");setPendingWork(null);
+    setSelectedLibraryFile("");setShowLibraryPicker(false);
     setSiteChange(null);setStudioDraft(null);setStudioMissions([]);setStudioPages([]);
     setStudioPageId("");setStudioMissionId("");setPendingAction(null);setActiveArea(null);setShowLearning(false);
     setWorkspaceView(null);setWorkspaceCreateLead(false);
@@ -657,7 +677,8 @@ export default function GeneralAssistant() {
       setActiveArea(null);
       const res=await fetch("/api/assistant",{
         method:"POST",headers:await authHeaders(),
-        body:JSON.stringify({action:"send",threadId:id,text:message,skill:"auto",allowConditionalFreeTier:allowConditional})
+        body:JSON.stringify({action:"send",threadId:id,text:message,skill:"auto",allowConditionalFreeTier:allowConditional,
+          libraryItemId:selectedLibraryFile||undefined})
       });
       const data=await res.json() as AssistantResponse;
       if(!res.ok||!data.messages?.length)throw new Error(data.error||"لم يصل رد من المساعد.");
@@ -676,6 +697,7 @@ export default function GeneralAssistant() {
       setSourceProject(data.sourceInspection?.repository||"");
       setBrowserResult(data.browserResult||null);
       setResearchResult(data.researchResult||null);
+      setSelectedLibraryFile("");
       await loadThreads(false);
       await suggestLearningApproval(id);
     }catch(e){
@@ -943,13 +965,30 @@ export default function GeneralAssistant() {
                   {file.path}{file.truncated?" · مقتطف":""}
                 </a>)}
               </div>}
+              {showLibraryPicker&&<div className="assistant-library-picker">
+                <label>اختر ملفًا نصيًا من المكتبة لتحليله في الرسالة التالية
+                  <select value={selectedLibraryFile} onChange={e=>setSelectedLibraryFile(e.target.value)}>
+                    <option value="">بدون ملف</option>
+                    {libraryDocuments.map(file=><option key={file.id} value={file.id}>{file.file_name}</option>)}
+                  </select>
+                </label>
+                <small>يُقرأ الملف بإذن حسابك في هذا الطلب فقط؛ مدعوم نص وMarkdown وCSV وJSON حتى 100 كيلوبايت.</small>
+                <button type="button" onClick={()=>setShowLibraryPicker(false)}>إخفاء</button>
+              </div>}
+              {selectedLibraryFile&&<p className="assistant-library-selected">
+                ملف للتحليل: {libraryDocuments.find(x=>x.id===selectedLibraryFile)?.file_name||"ملف من المكتبة"}
+                <button type="button" onClick={()=>setSelectedLibraryFile("")}>إزالة ×</button>
+              </p>}
               <div className="assistant-composer-box">
                 <input ref={fileRef} type="file" hidden aria-label="رفع ملف إلى المكتبة"
                   accept=".txt,.md,.csv,.json,.pdf,.png,.jpg,.jpeg,.webp,.gif,.mp3,.wav,.ogg,.mp4,.webm"
                   onChange={e=>void uploadChatFile(e.currentTarget.files?.[0]||null)}/>
-                <button type="button" className="assistant-attach-file" title="إضافة ملف إلى المكتبة"
-                  aria-label="إضافة ملف إلى المكتبة" disabled={Boolean(busy)}
+                <button type="button" className="assistant-attach-file" title="رفع ملف إلى المكتبة"
+                  aria-label="رفع ملف إلى المكتبة" disabled={Boolean(busy)}
                   onClick={()=>fileRef.current?.click()}><Paperclip size={18}/></button>
+                <button type="button" className="assistant-pick-library" title="تحليل ملف نصي من المكتبة"
+                  aria-label="اختيار ملف من المكتبة للتحليل" disabled={Boolean(busy)}
+                  onClick={()=>void openLibraryDocuments()}><BookOpen size={17}/></button>
                 <textarea ref={inputRef} rows={2} maxLength={4500} value={draft}
                   disabled={Boolean(busy)} placeholder="اكتب أي طلب هنا... مثال: اشرح لي، اعمل خطة، اكتب كود، صيغ رسالة..."
                   onChange={e=>setDraft(e.target.value)}
