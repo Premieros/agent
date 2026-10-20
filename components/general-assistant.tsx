@@ -6,7 +6,7 @@ import {createPortal} from "react-dom";
 import {
   ArrowRight, Bot, BookOpen, Check, ChevronDown, CircleAlert, Code2, Copy,
   FileText, Lightbulb, LoaderCircle, Menu, MessageCircle, Plus, Send, ShieldCheck,
-  Sparkles, Trash2, WandSparkles, PlugZap, Globe, Minus, PlusCircle, Paperclip
+  Sparkles, Trash2, WandSparkles, PlugZap, Globe, Minus, PlusCircle, Paperclip, ThumbsUp, ThumbsDown
 } from "lucide-react";
 import { getSupabase } from "@/lib/supabase-browser";
 import { currentSession } from "@/lib/auth-session";
@@ -58,6 +58,8 @@ export default function GeneralAssistant() {
   const [threads,setThreads]=useState<Thread[]>([]);
   const [threadId,setThreadId]=useState("");
   const [messages,setMessages]=useState<ChatMessage[]>([]);
+  const [feedback,setFeedback]=useState<Record<string,"positive"|"negative">>({});
+  const [ratingBusy,setRatingBusy]=useState("");
   const [draft,setDraft]=useState("");
   const [skill,setSkill]=useState<AssistantSkill>("auto");
   const [allowConditional,setAllowConditional]=useState(false);
@@ -154,6 +156,7 @@ export default function GeneralAssistant() {
       if(!res.ok)throw new Error(data.error||"تعذر فتح المحادثة.");
       setThreadId(id);
       setMessages(data.messages||[]);
+      void loadFeedback(id);
       setSkill("auto");
       setPendingAction(null);setShowLearning(false);
       const lastReply=(data.messages||[]).filter(m=>m.role==="assistant").at(-1);
@@ -192,6 +195,32 @@ export default function GeneralAssistant() {
   useEffect(()=>{endRef.current?.scrollIntoView({behavior:"smooth",block:"end"});},[messages.length,busy,workspaceView,activeArea,showLearning]);
 
 
+  async function loadFeedback(id:string){
+    try{
+      const res=await fetch("/api/assistant/experience?threadId="+encodeURIComponent(id),{
+        headers:await authHeaders(),cache:"no-store"
+      });
+      if(res.ok){
+        const data=await res.json() as {feedback?:Record<string,"positive"|"negative">};
+        setFeedback(data.feedback||{});
+      }
+    }catch{/* Ratings do not block reading the conversation. */}
+  }
+  async function rateReply(messageId:string,outcome:"positive"|"negative"){
+    if(ratingBusy||busy||messageId.startsWith("pending-"))return;
+    setRatingBusy(messageId);
+    try{
+      const res=await fetch("/api/assistant/experience",{
+        method:"POST",headers:await authHeaders(),
+        body:JSON.stringify({messageId,outcome})
+      });
+      const data=await res.json() as {ok?:boolean;error?:string};
+      if(!res.ok||!data.ok)throw new Error(data.error||"تعذر حفظ التقييم.");
+      setFeedback(current=>({...current,[messageId]:outcome}));
+      setNote("تم حفظ تقييمك. يستفيد AGENT منه عند اختيار النموذج مستقبلًا.");
+    }catch(e){setError(e instanceof Error?e.message:"تعذر حفظ التقييم.");}
+    finally{setRatingBusy("");}
+  }
   async function saveMessageToLibrary(message:ChatMessage){
     if(busy||!threadId||message.role!=="assistant")return;
     setBusy("library-save");setError("");setNote("");
@@ -251,7 +280,7 @@ export default function GeneralAssistant() {
       });
       const data=await res.json() as AssistantResponse;
       if(!res.ok||!data.thread)throw new Error(data.error||"تعذر إنشاء المحادثة.");
-      setThreadId(data.thread.id);setMessages([]);setThreads(current=>[data.thread!,...current]);
+      setThreadId(data.thread.id);setMessages([]);setFeedback({});setThreads(current=>[data.thread!,...current]);
       setShowSidebar(false);
       window.dispatchEvent(new Event("agent:close-navigation"));
       setBrowserResult(null);setResearchResult(null);
@@ -273,7 +302,7 @@ export default function GeneralAssistant() {
       const remaining=threads.filter(t=>t.id!==id);
       setThreads(remaining);
       if(id===threadId){
-        setThreadId("");setMessages([]);setNote("");setBrowserResult(null);setResearchResult(null);setPendingWork(null);
+        setThreadId("");setMessages([]);setFeedback({});setNote("");setBrowserResult(null);setResearchResult(null);setPendingWork(null);
         setPendingAction(null);setActiveArea(null);setShowLearning(false);
         setShowStudioControls(false);
         setWorkspaceView(null);setWorkspaceCreateLead(false);
@@ -818,6 +847,18 @@ export default function GeneralAssistant() {
                         onClick={()=>void navigator.clipboard.writeText(m.content)}><Copy size={14}/></button>
                       <button type="button" title="حفظ النتيجة في المكتبة" disabled={Boolean(busy)}
                         onClick={()=>void saveMessageToLibrary(m)}><BookOpen size={14}/></button>
+                      <button type="button" title="هذه الإجابة مفيدة" aria-label="الإجابة مفيدة"
+                        aria-pressed={feedback[m.id]==="positive"}
+                        disabled={Boolean(ratingBusy)||Boolean(busy)}
+                        onClick={()=>void rateReply(m.id,"positive")}>
+                        <ThumbsUp size={14} color={feedback[m.id]==="positive"?"#91ddcb":undefined}/>
+                      </button>
+                      <button type="button" title="الإجابة تحتاج تحسين" aria-label="الإجابة تحتاج تحسين"
+                        aria-pressed={feedback[m.id]==="negative"}
+                        disabled={Boolean(ratingBusy)||Boolean(busy)}
+                        onClick={()=>void rateReply(m.id,"negative")}>
+                        <ThumbsDown size={14} color={feedback[m.id]==="negative"?"#f0ca96":undefined}/>
+                      </button>
                     </>}</div>
                   <div className="assistant-message-text" dir="auto">{m.role==="assistant"?<AssistantMarkdown content={m.content}/>:m.content}</div>
                   
