@@ -34,3 +34,29 @@ test("writing actions still require deliberate approval",()=>{
   assert.equal(requiresApproval("site-diagnose"),false);
   assert.equal(requiresApproval("studio-overview"),false);
 });
+
+
+test("Arabic Work Mode including the definite article routes CLI apps to execution planning",()=>{
+  const commands=[
+    "أنشئ برنامج Node.js صغير لإدارة المهام باستخدام وضع العمل (Sandbox) وحفظ البيانات",
+    "باستخدام وضع العمل، اختبر كود Node.js السابق على GitHub Actions",
+    "أنشئ تطبيق لإدارة المهام باستخدام وضع عمل",
+    "اختبر الكود في GitHub Actions وأظهر نتائج الاختبارات",
+    "نفذ البرنامج على GitHub Actions بعد مراجعته"
+  ];
+  for(const q of commands){
+    assert.equal(detectAgentIntent(q),"work",q);
+    assert.equal(requiresApproval(detectAgentIntent(q)),true,q);
+  }
+});
+
+test("explanations and studio tasks don't dispatch code implicitly",()=>{
+  for(const q of [
+    "اشرح كيف أستخدم وضع العمل",
+    "كيف أبدأ في GitHub Actions؟",
+    "اكتب مثال كود Node.js لإدارة المهام",
+    "ما هو وضع العمل؟"
+  ])assert.equal(detectAgentIntent(q),"chat",q);
+  assert.equal(detectAgentIntent("أنشئ مهمة تسويق للصفحة"),"studio-prepare");
+  assert.equal(detectAgentIntent("شغّل الوكلاء"),"studio-run");
+});

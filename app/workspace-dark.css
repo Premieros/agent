@@ -1657,3 +1657,23 @@
 .workspace-shell .integration-project-current code{
   word-break:break-all;font-size:11px;color:#b8e9dc;
 }
+
+
+/* Review generated JS before any GitHub Actions dispatch. */
+.workspace-shell .workspace-page .general-assistant-root .agent-work-code-review{
+  margin:10px 0 12px;padding:10px;border:1px solid #517287;border-radius:10px;
+  background:#223747;color:#d7e9f3;
+}
+.workspace-shell .workspace-page .general-assistant-root .agent-work-code-review summary{
+  cursor:pointer;font-weight:700;font-size:12px;color:#bce9da;
+  padding:2px 0 7px;
+}
+.workspace-shell .workspace-page .general-assistant-root .agent-work-code-review pre{
+  max-height:310px;overflow:auto;margin:0;padding:12px;border-radius:7px;
+  border:1px solid #415d72;background:#111f2d!important;
+  color:#dce6f8!important;font:12px/1.6 ui-monospace,Consolas,monospace!important;
+  white-space:pre-wrap;overflow-wrap:anywhere;text-align:left;direction:ltr;
+}
+.workspace-shell .workspace-page .general-assistant-root .agent-work-code-review small{
+  display:block;margin:7px 0 0;color:#f0ca96!important;
+}

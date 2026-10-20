@@ -52,3 +52,26 @@ test("GitHub connection clearly documents public read-only scope",()=>{
  assert.match(ui,/Vercel Sandbox/);
  assert.match(ui,/لا يتيح ربط القراءة وحده تشغيل Workflows أو تعديل المستودعات/);
 });
+
+
+test("generated code is shown to owner before approved execution",()=>{
+  const chat=read("components/general-assistant.tsx");
+  const api=read("app/api/assistant/work/route.ts");
+  assert.match(api,/codePreview:plan\.code,runnable:Boolean\(plan\.code\)/);
+  assert.match(api,/\.select\("id,status,steps,code,created_at/);
+  assert.match(api,/لم ينتج المخطّط كودًا قابلاً للتنفيذ/);
+  assert.match(api,/os\.tmpdir\(\)/);
+  assert.match(chat,/className="agent-work-code-review"/);
+  assert.match(chat,/code:planData\.codePreview\|\|null/);
+  assert.match(chat,/مراجعة وتشغيل/);
+  assert.match(chat,/requestApproval\("work-resume"/);
+  const workBranch=chat.slice(chat.indexOf('if(intent==="work"){'),chat.indexOf('setActiveArea(null);',chat.indexOf('if(intent==="work"){')));
+  assert.doesNotMatch(workBranch,/await finishWork\(work,id\)/);
+});
+
+test("latest generated code offers a one-click reviewed Work flow",()=>{
+  const chat=read("components/general-assistant.tsx");
+  assert.match(chat,/اختبر الكود في GitHub Actions/);
+  assert.match(chat,/messages\.filter\(v=>v\.role==="assistant"\)\.at\(-1\)/);
+  assert.match(chat,/باستخدام وضع العمل، اختبر كود Node\.js/);
+});
