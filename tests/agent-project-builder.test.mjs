@@ -1,0 +1,102 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import {readFileSync} from "node:fs";
+import {parseProjectSpec,validProjectPath,zipProjectFiles,packagedProjectFiles,
+ canAdvanceProject} from "../lib/agent-project-engine.ts";
+const read=p=>readFileSync(new URL("../"+p,import.meta.url),"utf8");
+const fixture={title:"Task board",steps:["Generate","Test"],files:[
+ {path:"server.js",content:"const http=require('node:http'); module.exports={http};\n"},
+ {path:"public/index.html",content:"<!doctype html><title>Task board</title>"},
+ {path:"public/style.css",content:"body { color: blue; }"},
+ {path:"test/server.test.mjs",content:"import test from 'node:test'; test('ready',()=>{});\n"}
+]};
+function unzipStored(bytes){
+ const out=new Map(),v=new DataView(bytes.buffer,bytes.byteOffset,bytes.byteLength);
+ let i=0,dec=new TextDecoder();
+ while(i+30<bytes.length&&v.getUint32(i,true)===0x04034b50){
+  const size=v.getUint32(i+18,true),n=v.getUint16(i+26,true),extra=v.getUint16(i+28,true);
+  const name=dec.decode(bytes.subarray(i+30,i+30+n)),pos=i+30+n+extra;
+  assert.ok(pos+size<=bytes.length);
+  out.set(name,dec.decode(bytes.subarray(pos,pos+size)));i=pos+size;
+ }
+ assert.equal(v.getUint32(i,true),0x02014b50);
+ assert.equal(v.getUint32(bytes.length-22,true),0x06054b50);
+ assert.equal(v.getUint16(bytes.length-12,true),out.size);
+ return out;
+}
+test("multi-file project with paths and test preserved in ZIP",()=>{
+ const spec=parseProjectSpec(JSON.stringify(fixture));
+ const entries=unzipStored(zipProjectFiles(packagedProjectFiles(spec,
+  "Build a task board","$ node --test\n[exit=0]","PASSED")));
+ assert.equal(entries.get("server.js"),fixture.files[0].content);
+ assert.match(entries.get("public/index.html"),/Task board/);
+ assert.match(entries.get("test/server.test.mjs"),/node:test/);
+ assert.equal(JSON.parse(entries.get("package.json")).scripts.test,"node --test");
+ assert.match(entries.get("TEST-RESULTS.txt"),/exit=0/);
+ assert.match(entries.get("AGENT-README.md"),/NOT committed to or deployed/);
+});
+test("reject traversal, absolute paths, hidden repo and reserved packages",()=>{
+ for(const path of ["../secrets.txt","/etc/passwd",".env","x/../../app.js",
+  "src\\evil.js","node_modules/main.js","src/.git/config.json","src//main.js",
+  "src/notallowed.sh","C:/settings.json"]){
+  assert.equal(validProjectPath(path),false,path);
+ }
+ for(const path of ["public/index.html","src/lib/app.js","test/unit.test.mjs"])
+  assert.equal(validProjectPath(path),true,path);
+ const malicious={...fixture,files:fixture.files.map((f,i)=>
+  i===0?{...f,path:"../../AGENT/app.js"}:f)};
+ assert.throws(()=>parseProjectSpec(JSON.stringify(malicious)),/INVALID_PROJECT_FILE/);
+});
+test("reject duplicate case-insensitive paths, package overrides and missing tests",()=>{
+ for(const bad of [
+  {...fixture,files:[...fixture.files,{path:"PUBLIC/INDEX.HTML",content:"oops"}]},
+  {...fixture,files:[...fixture.files,{path:"package.json",content:'{"scripts":{"test":"rm -rf /"}}'}]},
+  {...fixture,files:fixture.files.map(f=>f.path.startsWith("test/")?
+   {...f,path:"notes.txt"}:f)}
+ ])assert.throws(()=>parseProjectSpec(JSON.stringify(bad)));
+});
+test("permission state and time/attempt boundaries enforced",()=>{
+ const end=60000;
+ assert.equal(canAdvanceProject("planned",false,0,2,end,10),false);
+ assert.equal(canAdvanceProject("ready",true,0,2,end,10),true);
+ assert.equal(canAdvanceProject("repairing",true,1,2,end,10),true);
+ assert.equal(canAdvanceProject("ready",true,2,2,end,10),false);
+ assert.equal(canAdvanceProject("repairing",true,1,2,end,end),false);
+ assert.equal(canAdvanceProject("completed",true,0,2,end,10),false);
+});
+test("project API only tests in isolated VM, no host execution, no paid model",()=>{
+ const api=read("app/api/assistant/projects/route.ts");
+ assert.match(api,/requireAgentSession\(req\)/);
+ assert.match(api,/\.eq\("organization_id",s\.organizationId\)/);
+ assert.match(api,/\.eq\("user_id",s\.userId\)/);
+ assert.match(api,/AGENT_FREE_SANDBOX_VERIFIED/);
+ assert.match(api,/discoverAutoModels\(false\)/);
+ assert.match(api,/networkPolicy:"deny-all"/);
+ assert.match(api,/persistent:false/);
+ assert.match(api,/PER_ATTEMPT_MS=18_000/);
+ assert.match(api,/max_attempts/);
+ assert.match(api,/\.eq\("status",status\)/);
+ assert.match(api,/args:\["--test"\]/);
+ assert.doesNotMatch(api,/child_process|git\s+push|create_pull_request|deploy|runCommand\(\s*["']bash/);
+});
+test("separate downloads and saved archives are owner-scoped",()=>{
+ const dl=read("app/api/assistant/projects/download/route.ts");
+ assert.match(dl,/requireAgentSession\(req\)/);
+ assert.match(dl,/\.eq\("organization_id",s\.organizationId\)/);
+ assert.match(dl,/\.eq\("user_id",s\.userId\)/);
+ assert.match(dl,/Content-Disposition/);
+ const api=read("app/api/assistant/projects/route.ts");
+ assert.match(api,/storage\.from\("agent-library"\)/);
+ assert.match(api,/mime_type:"application\/zip",kind:"other"/);
+ assert.match(read("supabase/migrations/20261020_agent_project_builds.sql"),/enable row level security/);
+});
+test("work UI includes file review, cost approval and progress",()=>{
+ const ui=read("components/agent-project-builder.tsx");
+ assert.match(ui,/project\.files\.map/);
+ assert.match(ui,/maxAttempts/);
+ assert.match(ui,/"approve"/);
+ assert.match(ui,/"advance"/);
+ assert.match(ui,/تنزيل التطبيق ZIP/);
+ assert.match(ui,/عرض الترمنال الفعلي/);
+ assert.match(read("components/general-assistant.tsx"),/AgentProjectBuilder/);
+});
