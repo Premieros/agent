@@ -3,160 +3,72 @@
 import {useEffect,useState,type ReactNode} from "react";
 import Link from "next/link";
 import {usePathname} from "next/navigation";
-import {
-  Menu,MessageSquareText,Bot,BrainCircuit,ChevronDown,
-  Megaphone,PanelsTopLeft,Palette,UsersRound,Inbox,PlugZap,LayoutDashboard,
-  Settings2,X,Plus,ClipboardList,MessagesSquare,BriefcaseBusiness,LockKeyhole
-} from "lucide-react";
+import {Menu,MessagesSquare,PlugZap,Library,Plus,X} from "lucide-react";
 
-type GroupId="assistant"|"agents"|"marketing"|"customers"|"inbox"|"system";
-type NavItem={href:string;label:string;icon:typeof Bot};
-type NavGroup={id:GroupId;label:string;icon:typeof Bot;items:NavItem[]};
-
-const navigation:NavGroup[]=[
-  {id:"assistant",label:"المساعد",icon:MessageSquareText,items:[
-    {href:"/assistant",label:"المحادثات الذكية",icon:MessagesSquare}
-  ]},
-  {id:"agents",label:"الوكلاء",icon:Bot,items:[
-    {href:"/studio?section=agents",label:"مدير الوكلاء",icon:Bot},
-    {href:"/studio?section=outputs",label:"مخرجات الوكلاء",icon:ClipboardList}
-  ]},
-  {id:"marketing",label:"التسويق",icon:Megaphone,items:[
-    {href:"/studio?section=pages",label:"الصفحات والعلامات",icon:PanelsTopLeft},
-    {href:"/studio?section=campaigns",label:"الحملات والمهام",icon:BriefcaseBusiness},
-    {href:"/studio?section=creatives",label:"التصميمات",icon:Palette}
-  ]},
-  {id:"customers",label:"العملاء",icon:UsersRound,items:[
-    {href:"/crm?view=leads",label:"إدارة العملاء",icon:UsersRound},
-    {href:"/crm?view=tasks",label:"مهام المتابعة",icon:ClipboardList}
-  ]},
-  {id:"inbox",label:"المحادثات",icon:Inbox,items:[
-    {href:"/crm/inbox",label:"صندوق الوارد",icon:Inbox}
-  ]},
-  {id:"system",label:"الإعدادات",icon:Settings2,items:[
-    {href:"/studio?section=models",label:"النماذج ومفاتيح AI",icon:BrainCircuit},
-    {href:"/assistant/integrations",label:"مركز الإضافات",icon:PlugZap},
-    {href:"/crm?view=account",label:"الحساب والصلاحيات",icon:LockKeyhole}
-  ]}
-];
-
-function activeSelection(path:string,search:string){
-  const params=new URLSearchParams(search);
-  const paramName=path==="/assistant"?"skill":path==="/studio"?"section":
-    path==="/crm"?"view":path==="/crm/inbox"?"channel":
-    path==="/assistant/integrations"?"category":"";
-  const value=params.get(paramName)||(
-    path==="/studio"?"agents":path==="/crm"?"leads":"");
-  const item=navigation.flatMap(g=>g.items).find(i=>{
-    const dest=new URL(i.href,"https://agent.local");
-    if(dest.pathname!==path)return false;
-    return (dest.searchParams.get(paramName)||"")===value;
-  });
-  const group=navigation.find(g=>g.items.some(i=>i.href===item?.href));
-  const fallback:GroupId=path==="/studio"?"agents":path==="/crm"?"customers":
-    path==="/crm/inbox"?"inbox":path==="/assistant/integrations"?"system":"assistant";
-  return {href:item?.href||path,group:group?.id||fallback};
-}
+const sections=[
+  {href:"/assistant",label:"المحادثات",icon:MessagesSquare},
+  {href:"/assistant/integrations",label:"الربط وإعداداته",icon:PlugZap},
+  {href:"/assistant/library",label:"المكتبة",icon:Library}
+] as const;
 
 export default function WorkspaceShell({children}:{children:ReactNode}){
   const pathname=usePathname();
   const isWorkspace=pathname==="/"||pathname==="/studio"||pathname==="/assistant"||
     pathname.startsWith("/assistant/")||pathname==="/crm"||pathname.startsWith("/crm/");
   const [mobileOpen,setMobileOpen]=useState(false);
-  const [activeHref,setActiveHref]=useState("/");
-  const [openGroup,setOpenGroup]=useState<GroupId|null>(null);
-
   useEffect(()=>{
-    const sync=()=>{
-      const current=activeSelection(pathname,window.location.search);
-      setActiveHref(pathname==="/"?"/":current.href);
-      setOpenGroup(pathname==="/"?null:current.group);
-    };
-    sync();setMobileOpen(false);
-    window.addEventListener("popstate",sync);
-    return()=>window.removeEventListener("popstate",sync);
-  },[pathname]);
-  useEffect(()=>{
-    const toggle=()=>setMobileOpen(v=>!v);
     const close=()=>setMobileOpen(false);
-    window.addEventListener("agent:toggle-navigation",toggle);
+    const toggle=()=>setMobileOpen(v=>!v);
     window.addEventListener("agent:close-navigation",close);
+    window.addEventListener("agent:toggle-navigation",toggle);
     return()=>{
-      window.removeEventListener("agent:toggle-navigation",toggle);
       window.removeEventListener("agent:close-navigation",close);
+      window.removeEventListener("agent:toggle-navigation",toggle);
     };
   },[]);
+  useEffect(()=>{setMobileOpen(false);},[pathname]);
   if(!isWorkspace)return <>{children}</>;
-
-  function choose(item:NavItem){
-    setActiveHref(item.href);setMobileOpen(false);
-    const group=navigation.find(g=>g.items.some(i=>i.href===item.href));
-    if(group)setOpenGroup(group.id);
-    const u=new URL(item.href,"https://agent.local");
-    const dispatch=(name:string,param:string,fallback:string)=>
-      window.dispatchEvent(new CustomEvent(name,{detail:u.searchParams.get(param)||fallback}));
-    if(u.pathname==="/studio")dispatch("agent:select-studio-section","section","agents");
-    else if(u.pathname==="/crm")dispatch("agent:select-crm-view","view","leads");
-    else if(u.pathname==="/crm/inbox")dispatch("agent:select-inbox-channel","channel","all");
-    else if(u.pathname==="/assistant/integrations")dispatch("agent:select-integrations-category","category","all");
-    else if(u.pathname==="/assistant")dispatch("agent:select-assistant-skill","skill","auto");
-  }
-
-  const pageTitle=activeHref==="/"?"الرئيسية":
-    navigation.flatMap(g=>g.items).find(i=>i.href===activeHref)?.label||"مساحة العمل";
-  return <div className="workspace-shell">
-    {mobileOpen&&<button className="workspace-backdrop" type="button" aria-label="إغلاق القائمة"
+  const active=pathname.startsWith("/assistant/library")?sections[2]:
+    pathname.startsWith("/assistant/integrations")?sections[1]:sections[0];
+  const title=active.label;
+  return <div className="workspace-shell agent-chat-first">
+    {mobileOpen&&<button type="button" className="workspace-backdrop" aria-label="إغلاق القائمة"
       onClick={()=>setMobileOpen(false)}/>}
-    <aside className={"workspace-navigation"+(mobileOpen?" workspace-navigation-open":"")} aria-label="القائمة الجانبية">
+    <aside className={"workspace-navigation"+(mobileOpen?" workspace-navigation-open":"")}
+      aria-label="أقسام AGENT">
       <div className="workspace-brand">
-        <Link href="/assistant" className="workspace-logo">
+        <Link href="/assistant" className="workspace-logo" onClick={()=>setMobileOpen(false)}>
           <span className="workspace-brand-symbol">✦</span><strong>AGENT</strong>
         </Link>
-        <button className="workspace-close-mobile" type="button" onClick={()=>setMobileOpen(false)}
-          aria-label="إغلاق القائمة"><X size={20}/></button>
+        <button type="button" className="workspace-close-mobile" aria-label="إغلاق القائمة"
+          onClick={()=>setMobileOpen(false)}><X size={20}/></button>
       </div>
-      <Link href="/assistant?new=1" className="workspace-new-chat" title="محادثة جديدة"
-        onClick={e=>{
-          setMobileOpen(false);
-          if(pathname==="/assistant"){e.preventDefault();window.dispatchEvent(new Event("agent:new-chat"));}
-        }}><Plus size={19}/><span>محادثة جديدة</span></Link>
-      <nav className="workspace-nav-list" aria-label="أقسام AGENT">
-        <Link href="/" className={"workspace-nav-link workspace-home-link"+(activeHref==="/"?" selected":"")}
-          aria-current={activeHref==="/"?"page":undefined}
-          onClick={()=>{setActiveHref("/");setOpenGroup(null);setMobileOpen(false);}}>
-          <LayoutDashboard size={18}/><span>الرئيسية</span>
-        </Link>
-        {navigation.map(group=>{
-          const expanded=openGroup===group.id;
-          return <div key={group.id} className="workspace-nav-group">
-            <button type="button" className={"workspace-group-toggle"+(expanded?" expanded":"")}
-              aria-expanded={expanded} aria-controls={"workspace-section-"+group.id}
-              onClick={()=>setOpenGroup(expanded?null:group.id)}>
-              <group.icon size={17}/><span>{group.label}</span>
-              <ChevronDown className="workspace-group-chevron" size={15}/>
-            </button>
-            <div className="workspace-subnav" id={"workspace-section-"+group.id} hidden={!expanded}>
-              {group.items.map(item=><Link key={item.href} href={item.href} title={item.label}
-                className={"workspace-nav-link"+(activeHref===item.href?" selected":"")}
-                aria-current={activeHref===item.href?"page":undefined}
-                onClick={()=>choose(item)}>
-                <item.icon size={16} strokeWidth={1.8}/><span>{item.label}</span>
-              </Link>)}
-              {group.id==="assistant"&&pathname==="/assistant"&&
-                <div id="workspace-sidebar-slot" className="workspace-sidebar-slot"/>}
-            </div>
-          </div>;
-        })}
+      <Link href="/assistant?new=1" className="workspace-new-chat" onClick={e=>{
+        setMobileOpen(false);
+        if(pathname==="/assistant"){e.preventDefault();window.dispatchEvent(new Event("agent:new-chat"));}
+      }}><Plus size={18}/> محادثة جديدة</Link>
+      <nav className="workspace-nav-list" aria-label="التنقل الرئيسي">
+        {sections.map(item=><Link key={item.href} href={item.href}
+          aria-current={active.href===item.href?"page":undefined}
+          className={"workspace-nav-link agent-primary-nav"+(active.href===item.href?" selected":"")}
+          onClick={()=>setMobileOpen(false)}>
+          <item.icon size={18} strokeWidth={1.85}/><span>{item.label}</span>
+        </Link>)}
+        {pathname==="/assistant"&&<div id="workspace-sidebar-slot" className="workspace-sidebar-slot"/>}
       </nav>
-      <div className="workspace-navigation-footer"><span>AGENT · مساحة العمل</span></div>
+      <div className="workspace-navigation-footer">
+        <span>البحث والتحليل والوكلاء وإدارة العمل من داخل المحادثة.</span>
+      </div>
     </aside>
     <main className="workspace-main">
       <header className="workspace-topbar">
         <button type="button" className="workspace-mobile-menu" aria-label="فتح القائمة"
           onClick={()=>setMobileOpen(true)}><Menu size={21}/></button>
-        <span className="workspace-current-title">{pageTitle}</span>
+        <span className="workspace-current-title">{title}</span>
       </header>
-      <div className={"workspace-page"+(pathname==="/assistant"?" workspace-chat-page":"")}>{children}</div>
+      <div className={"workspace-page"+(pathname==="/assistant"?" workspace-chat-page":"")}>
+        {children}
+      </div>
     </main>
   </div>;
 }

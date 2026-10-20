@@ -1,3 +1,2 @@
-import AgentHome from "@/components/agent-home";
-
-export default function Home(){return <AgentHome/>;}
+import {redirect} from "next/navigation";
+export default function Home(){redirect("/assistant");}
