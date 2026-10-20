@@ -46,14 +46,10 @@ type AssistantResponse = {
       publishedAt:string|null;trusted:boolean}>}|null;
 };
 const starters=[
-  {label:"مساحة العمل",icon:Bot,text:"اعرض مساحة العمل"},
-  {label:"العملاء",icon:MessageCircle,text:"اعرض العملاء"},
-  {label:"متابعات الفريق",icon:Check,text:"اعرض المتابعات"},
-  {label:"الإضافات",icon:PlugZap,text:"اعرض الإضافات"},
-  {label:"كتابة", icon:FileText, text:"اكتب لي منشور احترافي لصفحة Premier.OS عن فوائد أنظمة الكاشير للمطاعم، بدون أسعار غير مؤكدة."},
-  {label:"تطوير POS", icon:Code2, text:"أنت مدير تطوير نظام Premier.OS الحالي. ابدأ بخطة لمراجعة علاقات الفروع والمخازن والمخزون والمبيعات والمشتريات والوصفات والتكاليف والحسابات. قل ما تحتاج رؤيته ولا تفترض مواصفات غير مؤكدة."},
-  {label:"تخطيط", icon:Lightbulb, text:"حوّل فكرة إنشاء شركة برمجيات لخطة عملية من 30 يوم بخطوات وأولويات."},
-  {label:"بحث الإنترنت", icon:Globe, text:"ابحث عن أحدث الأخبار الموثوقة في الذكاء الاصطناعي، وأرفق المصادر وتواريخ نشرها مع توضيح حدود التحقق."}
+  {label:"بحث بمصادر",icon:Globe,text:"ابحث في الإنترنت عن آخر تطورات الذكاء الاصطناعي، وأعطني المصادر وتواريخ نشرها."},
+  {label:"تحليل ملف",icon:FileText,text:"لخّص الملف النصي الذي سأختاره من المكتبة واستخرج النقاط المهمة. سأحدد الملف أولًا."},
+  {label:"تخطيط مشروع",icon:Lightbulb,text:"حوّل فكرتي إلى خطة تنفيذ عملية بمراحل واضحة وخطوات يمكن مراجعتها."},
+  {label:"مساحة العمل",icon:Bot,text:"اعرض مساحة العمل"}
 ];
 
 export default function GeneralAssistant() {
@@ -65,6 +61,8 @@ export default function GeneralAssistant() {
   const [skill,setSkill]=useState<AssistantSkill>("auto");
   const [allowConditional,setAllowConditional]=useState(false);
   const [activeArea,setActiveArea]=useState<"studio"|"site"|null>(null);
+  // Keep tools out of the reading flow until the user asks to open them.
+  const [showStudioControls,setShowStudioControls]=useState(false);
   const [pendingAction,setPendingAction]=useState<AgentApproval|null>(null);
   const [showLearning,setShowLearning]=useState(false);
   const [workspaceView,setWorkspaceView]=useState<WorkspaceView|null>(null);
@@ -145,6 +143,7 @@ export default function GeneralAssistant() {
   const openThread=useCallback(async (id:string) => {
     setBusy("loading-thread");setError("");setBrowserResult(null);setResearchResult(null);
     setSelectedLibraryFile("");setShowLibraryPicker(false);
+    setShowStudioControls(false);
     setWorkspaceView(null);setWorkspaceCreateLead(false);
     try {
       const res=await fetch("/api/assistant?threadId="+encodeURIComponent(id),{
@@ -241,6 +240,7 @@ export default function GeneralAssistant() {
     setBusy("create");setError("");setNote("");setWorkSteps([]);setWorkProgress("");setPendingWork(null);
     setSelectedLibraryFile("");setShowLibraryPicker(false);
     setSiteChange(null);setStudioDraft(null);setStudioMissions([]);setStudioPages([]);
+    setShowStudioControls(false);
     setStudioPageId("");setStudioMissionId("");setPendingAction(null);setActiveArea(null);setShowLearning(false);
     setWorkspaceView(null);setWorkspaceCreateLead(false);
     try {
@@ -274,6 +274,7 @@ export default function GeneralAssistant() {
       if(id===threadId){
         setThreadId("");setMessages([]);setNote("");setBrowserResult(null);setResearchResult(null);setPendingWork(null);
         setPendingAction(null);setActiveArea(null);setShowLearning(false);
+        setShowStudioControls(false);
         setWorkspaceView(null);setWorkspaceCreateLead(false);
       }
     }catch(e){setError(e instanceof Error?e.message:"تعذر الحذف.");}
@@ -531,6 +532,7 @@ export default function GeneralAssistant() {
     const previous=messages.filter(m=>m.role==="assistant").at(-1);
     const intent=detectAgentIntent(message,previous?.model);
     if(intent==="learning-list"){
+      setShowStudioControls(false);
       setShowLearning(true);setDraft("");setNote("دي معلومات AGENT المحفوظة فعليًا؛ تقدر تراجعها أو تحذفها.");return;
     }
     if(intent==="learning-hide"){
@@ -543,6 +545,7 @@ export default function GeneralAssistant() {
     };
     const requestedWorkspace=workspaceCommands[intent];
     if(requestedWorkspace){
+      setShowStudioControls(false);
       setWorkspaceView(requestedWorkspace);
       setWorkspaceCreateLead(intent==="workspace-lead-create");
       setActiveArea(null);setShowLearning(false);setDraft("");setError("");
@@ -591,7 +594,7 @@ export default function GeneralAssistant() {
         return;
       }
       if(intent==="studio-page-create"){
-        setActiveArea("studio");
+        setActiveArea("studio");setShowStudioControls(false);
         await studioRequest(id,"create_page",{
           pageName:pageName.trim(),platform:pagePlatform,
           productContext:pageContext.trim(),targetAudience:pageAudience.trim(),
@@ -603,13 +606,16 @@ export default function GeneralAssistant() {
         return;
       }
       if(intent==="studio-run"){
-        setActiveArea("studio");
+        setActiveArea("studio");setShowStudioControls(false);
         setMessages(current=>current.filter(m=>m.id!==optimistic.id));
         await runStudioMission(true,id);
         return;
       }
       if(intent==="studio-overview"||intent==="studio-summary"||intent==="studio-prepare"){
         setActiveArea("studio");
+        // A read-only overview already appears as a chat result. Do not open
+        // a second full dashboard repeating it. Preparation may need controls.
+        setShowStudioControls(intent==="studio-prepare");
         const action=intent==="studio-summary"?"summary":
           intent==="studio-prepare"?"prepare":"overview";
         const data=await studioRequest(id,action,{
@@ -626,6 +632,7 @@ export default function GeneralAssistant() {
         return;
       }
       if(intent==="site-diagnose"||intent==="site-draft"){
+        setShowStudioControls(false);
         setActiveArea("site");
         const diagnose=intent==="site-diagnose";
         const res=await fetch("/api/assistant/site",{
@@ -821,21 +828,6 @@ export default function GeneralAssistant() {
                   {m.role==="assistant"&&<small>{assistantSkills.find(s=>s.id===m.skill)?.title||m.skill||"مساعد عام"}{m.model?" · "+m.model:""}</small>}
                 </div>
               </article>)}
-              <div className="assistant-chat-shortcuts" role="group" aria-label="أوامر AGENT المباشرة">
-                {[
-                  {text:"مساحة العمل",command:"اعرض مساحة العمل"},
-                  {text:"العملاء",command:"اعرض العملاء"},
-                  {text:"المتابعات",command:"اعرض المتابعات"},
-                  {text:"الوارد",command:"اعرض صندوق الوارد"},
-                  {text:"الإضافات",command:"اعرض الإضافات"},
-                  {text:"الوكلاء والتسويق",command:"اعرض صفحات ومهام AGENT"},
-                  {text:"الموقع",command:"افحص حالة موقع AGENT"},
-                  {text:"الذاكرة",command:"اعرض الذاكرة والمهارات"}
-                ].map(item=><button type="button" key={item.command}
-                  disabled={Boolean(busy)} onClick={()=>void sendMessage(item.command)}>
-                  {item.text}
-                </button>)}
-              </div>
               {workspaceView&&<AssistantWorkspacePanel
                 initialView={workspaceView} initialOpenLead={workspaceCreateLead}
                 authHeaders={authHeaders} onClose={()=>{setWorkspaceView(null);setWorkspaceCreateLead(false);}}
@@ -850,11 +842,18 @@ export default function GeneralAssistant() {
                   <button type="button" disabled={Boolean(busy)}
                     onClick={()=>void loadWorkState(threadId)}>تحديث</button>}
               </div>}
-              {activeArea==="studio"&&<div className="assistant-studio-control" role="region" aria-label="إدارة صفحات التسويق والمهام">
+              {activeArea==="studio"&&<div className="assistant-studio-tools">
+                <button type="button" className="assistant-studio-tools-toggle"
+                  aria-expanded={showStudioControls}
+                  aria-controls="assistant-studio-tools-panel"
+                  onClick={()=>setShowStudioControls(v=>!v)}>
+                  <Code2 size={15}/> إجراءات الصفحات والمهام
+                  <ChevronDown size={14} aria-hidden="true" className={showStudioControls?"expanded":""}/>
+                </button>
+                {showStudioControls&&<div id="assistant-studio-tools-panel"
+                  className="assistant-studio-control" role="region" aria-label="إجراءات الصفحات والمهام">
                 <div className="assistant-studio-control-head">
                   <strong>إدارة الصفحات والمهام</strong>
-                  <button type="button" disabled={Boolean(busy)}
-                    onClick={()=>void sendMessage("اعرض صفحات ومهام AGENT")}>عرض الحالة</button>
                 </div>
                 <div className="assistant-studio-control-selects">
                   <label>الصفحة
@@ -894,6 +893,7 @@ export default function GeneralAssistant() {
                   <Link href="/studio?section=outputs">المخرجات الكاملة</Link>
                 </div>
                 <small>قراءة وتلخيص مباشرة؛ إضافة مهمة وتشغيل الوكلاء بموافقتك. لا نشر ولا إعلانات مدفوعة.</small>
+                </div>}
               </div>}
               {activeArea==="site"&&<div className="assistant-site-manager" role="region" aria-label="إدارة الموقع">
                 <div className="assistant-site-manager-head">
