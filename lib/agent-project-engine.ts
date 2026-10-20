@@ -102,3 +102,24 @@ export function canAdvanceProject(status:string,approved:boolean,attempts:number
   return approved&&now<deadline&&attempts<=maxAttempts&&
     (status==="ready"&&attempts<maxAttempts||status==="repairing"&&attempts<maxAttempts);
 }
+
+/** Require genuine node --test TAP totals, not a generated 'PASS' line. */
+export function verifiedProjectTest(log:string,conclusion:string|null):boolean{
+ const lines=log.replace(/\x1b\[[0-9;]*m/g,"").split(/\r?\n/);
+ let count:number|null=null,passed:number|null=null,failed:number|null=null;
+ let exit:number|null=null;
+ for(const source of lines){
+  const line=source.replace(/^\d{4}-\d{2}-\d{2}T[\d:.]+Z\s*/,"").trim();
+  const n=/^# (tests|pass|fail) (\d+)$/.exec(line);
+  if(n){
+   const value=Number(n[2]);
+   if(n[1]==="tests")count=value;
+   else if(n[1]==="pass")passed=value;
+   else failed=value;
+  }
+  const status=/^\[exit=(-?\d+)\]$/.exec(line);
+  if(status)exit=Number(status[1]);
+ }
+ return conclusion==="success"&&exit===0&&count!==null&&count>0&&
+  passed===count&&failed===0;
+}
