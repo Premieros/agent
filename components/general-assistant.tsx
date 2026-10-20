@@ -6,7 +6,7 @@ import {createPortal} from "react-dom";
 import {
   ArrowRight, Bot, BookOpen, Check, ChevronDown, CircleAlert, Code2, Copy,
   FileText, Lightbulb, LoaderCircle, Menu, MessageCircle, Plus, Send, ShieldCheck,
-  Sparkles, Trash2, WandSparkles, PlugZap, Globe, Minus, PlusCircle
+  Sparkles, Trash2, WandSparkles, PlugZap, Globe, Minus, PlusCircle, Paperclip
 } from "lucide-react";
 import { getSupabase } from "@/lib/supabase-browser";
 import { currentSession } from "@/lib/auth-session";
@@ -104,6 +104,7 @@ export default function GeneralAssistant() {
   const [researchResult,setResearchResult]=useState<AssistantResponse["researchResult"]>(null);
   const endRef=useRef<HTMLDivElement|null>(null);
   const inputRef=useRef<HTMLTextAreaElement|null>(null);
+  const fileRef=useRef<HTMLInputElement|null>(null);
   const active=threads.find(t=>t.id===threadId);
   useEffect(()=>setSidebarPortalTarget(document.getElementById("workspace-sidebar-slot")),[]);
   useEffect(()=>{
@@ -185,6 +186,37 @@ export default function GeneralAssistant() {
 
   useEffect(()=>{endRef.current?.scrollIntoView({behavior:"smooth",block:"end"});},[messages.length,busy,workspaceView,activeArea,showLearning]);
 
+
+  async function saveMessageToLibrary(message:ChatMessage){
+    if(busy||!threadId||message.role!=="assistant")return;
+    setBusy("library-save");setError("");setNote("");
+    try{
+      const response=await fetch("/api/assistant/library",{
+        method:"POST",headers:await authHeaders(),
+        body:JSON.stringify({action:"save_message",threadId,messageId:message.id})
+      });
+      const data=await response.json() as {ok?:boolean;error?:string};
+      if(!response.ok||!data.ok)throw new Error(data.error||"تعذّر حفظ النتيجة.");
+      setNote("حُفظت النتيجة كمستند في مكتبتك الخاصة.");
+    }catch(e){setError(e instanceof Error?e.message:"تعذّر حفظ النتيجة.");}
+    finally{setBusy("");}
+  }
+  async function uploadChatFile(file:File|null){
+    if(!file||busy)return;
+    setBusy("library-upload");setError("");setNote("");
+    try{
+      if(file.size>8*1024*1024)throw new Error("الحد الأقصى للملف 8 ميجابايت.");
+      const form=new FormData();form.set("file",file);
+      if(threadId)form.set("threadId",threadId);
+      const response=await fetch("/api/assistant/library",{
+        method:"POST",headers:await authHeaders(),body:form
+      });
+      const data=await response.json() as {ok?:boolean;error?:string};
+      if(!response.ok||!data.ok)throw new Error(data.error||"تعذّر رفع الملف.");
+      setNote("حُفظ الملف في المكتبة. رفعه لا يعني تحليله بواسطة نموذج AI تلقائيًا.");
+    }catch(e){setError(e instanceof Error?e.message:"تعذّر رفع الملف.");}
+    finally{setBusy("");if(fileRef.current)fileRef.current.value="";}
+  }
   async function createThread(){
     if(busy)return;
     setBusy("create");setError("");setNote("");setWorkSteps([]);setWorkProgress("");setPendingWork(null);
@@ -721,21 +753,6 @@ export default function GeneralAssistant() {
   const sending=busy==="send";
   return <div className="crm-root general-assistant-root" style={{"--agent-chat-font-size":fontSize+"px"} as React.CSSProperties}>
     <div className="crm-wrap">
-      <header className="crm-header">
-        <div><strong>AGENT</strong><span> · المساعد متعدد المهارات</span></div>
-        <nav className="crm-actions">
-          <Link href="/assistant/integrations"><PlugZap size={16}/> الإضافات</Link>
-          <Link href="/studio"><ArrowRight size={16}/> استوديو التسويق</Link>
-          <Link href="/crm">العملاء</Link>
-        </nav>
-      </header>
-      <div className="assistant-title">
-        <div><span className="crm-overline">AGENT • CHAT & TOOLS</span>
-          <h1>مساعدك الذكي</h1>
-          <p>مساعد واحد للمحادثات والذاكرة والمهارات والموقع والمهام والعمل، مع موافقة قبل الإجراءات.</p>
-        </div>
-        <div className="assistant-tag"><ShieldCheck size={15}/> أدوات تلقائية الاختيار · تشغيل بموافقتك</div>
-      </div>
       {error && <div className="crm-error" role="alert">{error} <button type="button" onClick={()=>setError("")}>×</button></div>}
       {loading ? <div className="assistant-loader"><LoaderCircle className="crm-spin" size={22}/> جاري تحميل مساعدك...</div>
       : !authorized ? <section className="crm-card assistant-login">
@@ -755,7 +772,7 @@ export default function GeneralAssistant() {
                 <span aria-live="polite">{fontSize}</span>
                 <button type="button" title="تكبير الخط" onClick={()=>setFontSize(x=>Math.min(19,x+1))} disabled={fontSize>=19}><PlusCircle size={15}/></button>
               </div>
-              <span className="assistant-auto-skill"><Sparkles size={14}/> اختيار المهارة تلقائيًا</span>
+              <span className="assistant-auto-skill"><Sparkles size={14}/> اختيار الأدوات تلقائيًا</span>
             </div>
             <div className="assistant-chat-scroll">
               {messages.length===0 && <div className="assistant-welcome">
@@ -772,8 +789,12 @@ export default function GeneralAssistant() {
                 <div className="assistant-avatar">{m.role==="assistant"?<Sparkles size={17}/>:<span>أنت</span>}</div>
                 <div className="assistant-message-body">
                   <div className="assistant-message-heading"><strong>{m.role==="assistant"?"AGENT":"أنت"}</strong>
-                    {m.role==="assistant"&&<button type="button" title="نسخ الرد"
-                      onClick={()=>void navigator.clipboard.writeText(m.content)}><Copy size={14}/></button>}</div>
+                    {m.role==="assistant"&&<>
+                      <button type="button" title="نسخ الرد"
+                        onClick={()=>void navigator.clipboard.writeText(m.content)}><Copy size={14}/></button>
+                      <button type="button" title="حفظ النتيجة في المكتبة" disabled={Boolean(busy)}
+                        onClick={()=>void saveMessageToLibrary(m)}><BookOpen size={14}/></button>
+                    </>}</div>
                   <div className="assistant-message-text" dir="auto">{m.role==="assistant"?<AssistantMarkdown content={m.content}/>:m.content}</div>
                   {m.role==="assistant"&&<small>{assistantSkills.find(s=>s.id===m.skill)?.title||m.skill||"مساعد عام"}{m.model?" · "+m.model:""}</small>}
                 </div>
@@ -923,6 +944,12 @@ export default function GeneralAssistant() {
                 </a>)}
               </div>}
               <div className="assistant-composer-box">
+                <input ref={fileRef} type="file" hidden aria-label="رفع ملف إلى المكتبة"
+                  accept=".txt,.md,.csv,.json,.pdf,.png,.jpg,.jpeg,.webp,.gif,.mp3,.wav,.ogg,.mp4,.webm"
+                  onChange={e=>void uploadChatFile(e.currentTarget.files?.[0]||null)}/>
+                <button type="button" className="assistant-attach-file" title="إضافة ملف إلى المكتبة"
+                  aria-label="إضافة ملف إلى المكتبة" disabled={Boolean(busy)}
+                  onClick={()=>fileRef.current?.click()}><Paperclip size={18}/></button>
                 <textarea ref={inputRef} rows={2} maxLength={4500} value={draft}
                   disabled={Boolean(busy)} placeholder="اكتب أي طلب هنا... مثال: اشرح لي، اعمل خطة، اكتب كود، صيغ رسالة..."
                   onChange={e=>setDraft(e.target.value)}
