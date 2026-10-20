@@ -8,7 +8,7 @@ export type AgentIntent =
   "studio-prepare"|"studio-run"|"site-diagnose"|"site-draft"|"work"|
   "workspace-overview"|"customers-overview"|"followups-overview"|"inbox-overview"|"integrations-overview"|"workspace-lead-create";
 const normal=(s:string)=>s.trim().toLocaleLowerCase("ar")
-  .replace(/[أإآ]/g,"ا").replace(/ى/g,"ي").replace(/ـ/g,"").replace(/[\u064b-\u065f]/g,"");
+  .replace(/[أإآ]/g,"ا").replace(/ى/g,"ي").replace(/ة/g,"ه").replace(/ـ/g,"").replace(/[\u064b-\u065f]/g,"");
 export const requiresApproval=(intent:AgentIntent)=>!["chat","learning-list","learning-hide",
   "workspace-overview","customers-overview","followups-overview","inbox-overview",
   "integrations-overview","workspace-lead-create","studio-overview","studio-summary",
