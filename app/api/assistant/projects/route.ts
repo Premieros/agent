@@ -94,7 +94,8 @@ export async function GET(req:NextRequest){
      const finished=trace.status==="completed";
      const actualExit=/\[exit=(-?\d+)\]/.exec(trace.log);
      const success=trace.conclusion==="success"&&actualExit?.[1]==="0";
-     const expired=Boolean(run.deadline_at&&Date.now()>new Date(run.deadline_at).getTime());
+     const endedAt=trace.finishedAt?new Date(trace.finishedAt).getTime():Date.now();
+     const expired=Boolean(run.deadline_at&&endedAt>new Date(run.deadline_at).getTime());
      const next=finished?(success&&!expired?"completed":
        !expired&&run.attempts<run.max_attempts&&run.model_calls===1?"repairing":"failed"):"testing";
      const stage=finished?success&&!expired?"اجتاز التطبيق الاختبارات الفعلية في GitHub Actions.":
