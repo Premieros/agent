@@ -27,7 +27,7 @@ export function parseProjectSpec(raw:string):ProjectSpec{
       content.length<1||new TextEncoder().encode(content).length>MAX_FILE)
       throw new Error("INVALID_PROJECT_FILE");
     const normalized=path.toLowerCase();
-    if(seen.has(normalized)||normalized==="package.json")throw new Error("DUPLICATE_OR_RESERVED_PROJECT_PATH");
+    if(seen.has(normalized)||["package.json","agent-readme.md","test-results.txt"].includes(normalized))throw new Error("DUPLICATE_OR_RESERVED_PROJECT_PATH");
     seen.add(normalized);total+=new TextEncoder().encode(content).length;
     if(total>MAX_TOTAL)throw new Error("PROJECT_TOO_LARGE");
     files.push({path,content});
@@ -70,9 +70,13 @@ export function zipProjectFiles(files:readonly ProjectFile[]):Uint8Array{
   for(let i=0;i<256;i++){let c=i;for(let j=0;j<8;j++)c=(c&1)?0xedb88320^(c>>>1):c>>>1;table[i]=c>>>0;}
   function crc(input:Uint8Array){let c=0xffffffff;for(const b of input)c=table[(c^b)&255]^(c>>>8);return(c^0xffffffff)>>>0;}
   const payload:Uint8Array[]=[],directory:Uint8Array[]=[];
+  const seen=new Set<string>();
   let offset=0;
   for(const file of files){
     if(!validProjectPath(file.path)||typeof file.content!=="string")throw new Error("INVALID_PROJECT_PATH");
+    const lower=file.path.toLowerCase();
+    if(seen.has(lower))throw new Error("DUPLICATE_PROJECT_PATH");
+    seen.add(lower);
     const name=encoder.encode(file.path),data=encoder.encode(file.content);
     if(data.length>MAX_FILE)throw new Error("PROJECT_FILE_TOO_LARGE");
     const checksum=crc(data);
