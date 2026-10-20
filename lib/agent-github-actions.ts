@@ -80,7 +80,7 @@ export async function dispatchAgentProject(input:{requestId:string;files:{path:s
   const token=await installationToken();
   await githubApi("/repos/"+AGENT_ACTIONS_REPO+"/actions/workflows/"+
     AGENT_ACTIONS_WORKFLOW+"/dispatches",token,"POST",{
-    ref:"main",inputs:{request_id:input.requestId,project_b64:b64}
+    ref:"dev/multifile-work-engine-20261020",inputs:{request_id:input.requestId,project_b64:b64}
   });
 }
 export async function fetchAgentExperiment(requestId:string,knownRunId?:number|null){
