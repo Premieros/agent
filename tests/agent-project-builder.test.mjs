@@ -64,20 +64,27 @@ test("permission state and time/attempt boundaries enforced",()=>{
  assert.equal(canAdvanceProject("repairing",true,1,2,end,end),false);
  assert.equal(canAdvanceProject("completed",true,0,2,end,10),false);
 });
-test("project API only tests in isolated VM, no host execution, no paid model",()=>{
+test("project runner uses free-eligible GitHub Actions, not host execution or paid Sandbox",()=>{
  const api=read("app/api/assistant/projects/route.ts");
+ const action=read(".github/workflows/agent-experiment.yml");
+ const auth=read("lib/agent-github-actions.ts");
  assert.match(api,/requireAgentSession\(req\)/);
  assert.match(api,/\.eq\("organization_id",s\.organizationId\)/);
  assert.match(api,/\.eq\("user_id",s\.userId\)/);
- assert.match(api,/AGENT_FREE_SANDBOX_VERIFIED/);
  assert.match(api,/discoverAutoModels\(false\)/);
- assert.match(api,/networkPolicy:"deny-all"/);
- assert.match(api,/await sandbox.stop\(\)/);
- assert.match(api,/PER_ATTEMPT_MS=18_000/);
+ assert.match(api,/builtInProjectRecipe\(body\.task\)/);
+ assert.match(api,/model_calls:modelCalls/);
+ assert.match(api,/dispatchAgentProject\(/);
+ assert.match(api,/fetchAgentExperiment\(/);
+ assert.match(api,/github_request_id:requestId/);
  assert.match(api,/max_attempts/);
  assert.match(api,/\.eq\("status",status\)/);
- assert.match(api,/args:\["--test"\]/);
- assert.doesNotMatch(api,/child_process|git\s+push|create_pull_request|deploy|runCommand\(\s*["']bash/);
+ assert.match(action,/--network none --read-only --cap-drop ALL/);
+ assert.match(action,/node --test/);
+ assert.match(action,/project_b64:/);
+ assert.match(auth,/permissions:\{actions:"write"\}/);
+ assert.doesNotMatch(api,/Sandbox\.create|child_process|git\s+push|create_pull_request|deploy/);
+ assert.doesNotMatch(action,/actions\/checkout@|npm install|git push/);
 });
 test("separate downloads and saved archives are owner-scoped",()=>{
  const dl=read("app/api/assistant/projects/download/route.ts");
