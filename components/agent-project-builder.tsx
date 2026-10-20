@@ -1,6 +1,7 @@
 "use client";
 import {useCallback,useEffect,useRef,useState} from "react";
 import {Download,LoaderCircle,Save,Terminal,ShieldCheck} from "lucide-react";
+import {readAssistantApiJson} from "@/lib/assistant-api-response";
 
 type ProjectFile={path:string;content:string};
 type ProjectBuild={
