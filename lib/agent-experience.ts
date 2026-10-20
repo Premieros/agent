@@ -90,7 +90,7 @@ export async function proposeValidatedExperienceLesson(s:AgentSession,domain:Age
   ].join(" ").slice(0,1000);
   const bases:Record<AgentDomain,string>={
     coding:"coding",writing:"writing",marketing:"marketing",
-    analysis:"analysis",research:"browser",planning:"planning",general:"general"
+    analysis:"analysis",research:"analysis",planning:"planning",general:"general"
   };
   const phrases:Record<AgentDomain,string[]>={
     coding:["راجع الكود","أصلح الخطأ","برمجة تطبيق"],
