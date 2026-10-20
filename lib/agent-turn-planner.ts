@@ -10,7 +10,7 @@ export type AgentTurnPlan={
   needsRecentEvidence:boolean;needsCitations:boolean;responseInstructions:string;
 };
 const webWords=/(?:\bsearch\s+(?:the\s+)?web\b|\bweb\s+search\b|(?:ابحث|فتش)(?:\s+لي)?\s+(?:عن|في|علي|على|بالانترنت|عبر\s+الويب)|(?:الانترنت|الإنترنت|الويب|مصادر\s+(?:حديثة|موثوقة)))/iu;
-const freshWords=/(?:\b(?:latest|recent|current|today|breaking)\b|آخر\s+(?:الأخبار|التطورات|المستجدات)|احدث\s+(?:الاخبار|التطورات)|أحدث\s+(?:الأخبار|التطورات)|ما\s+الجديد|ايه\s+الجديد|إيه\s+الجديد|أخبار\s+(?:اليوم|الآن)|اخبار\s+(?:اليوم|الان))/iu;
+const freshWords=/(?:\b(?:latest|recent|current|today|breaking)\b|آخر\s+(?:ال)?(?:أخبار|اخبار|تطورات|مستجدات)|احدث\s+(?:الاخبار|التطورات)|أحدث\s+(?:الأخبار|التطورات)|ما\s+الجديد|ايه\s+الجديد|إيه\s+الجديد|أخبار\s+(?:اليوم|الآن)|اخبار\s+(?:اليوم|الان))/iu;
 const repoWords=/(?:\b(?:github|git\s*hub|repository|repositories|repo)\b|مستودع|مستودعات|راجع\s+(?:الكود|الشفرة)|افحص\s+(?:الكود|المشروع)|حلل\s+(?:الكود|ملفات\s+المشروع))/iu;
 const pageWords=/(?:https:\/\/[^\s]+|اقرأ\s+(?:صفحة|الموقع)|حلل\s+(?:صفحة|موقع)|افحص\s+(?:صفحة|الموقع)|browse|visit\s+(?:the\s+)?site)/iu;
 const workspaceWords=/(?:كم\s+(?:عدد\s+)?(?:(?:عندي|لدينا|عندنا)\s+)?(?:عميل|العملاء|عملاء|محادثات|المحادثات|متابع[ةه]|متابعات)|(?:إحصائيات|احصائيات|ملخص|حالة|حاله|عدد)\s+(?:العملاء|العمل|المتابعات|المحادثات)|(?:آخر|اخر|أحدث|احدث)\s+(?:العملاء|المتابعات)|(?:how\s+many|count|latest)\s+(?:leads|customers|followups|conversations))/iu;
