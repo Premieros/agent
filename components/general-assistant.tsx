@@ -892,7 +892,7 @@ export default function GeneralAssistant() {
         body:JSON.stringify({action:"send",threadId:id,text:message,skill:"auto",allowConditionalFreeTier:allowConditional,
           libraryItemId:selectedLibraryFile||undefined})
       });
-      const data=await res.json() as AssistantResponse;
+      const data=await readAssistantApiJson<AssistantResponse>(res);
       if(!res.ok||!data.messages?.length)throw new Error(data.error||"لم يصل رد من المساعد.");
       setMessages(current=>[...current.filter(m=>m.id!==optimistic.id),...(data.messages||[])]);
       if(data.title)setThreads(current=>current.map(t=>t.id===id?{...t,title:data.title!}:t));
