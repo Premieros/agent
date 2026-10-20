@@ -72,7 +72,7 @@ test("project API only tests in isolated VM, no host execution, no paid model",(
  assert.match(api,/AGENT_FREE_SANDBOX_VERIFIED/);
  assert.match(api,/discoverAutoModels\(false\)/);
  assert.match(api,/networkPolicy:"deny-all"/);
- assert.match(api,/persistent:false/);
+ assert.match(api,/await sandbox.stop\(\)/);
  assert.match(api,/PER_ATTEMPT_MS=18_000/);
  assert.match(api,/max_attempts/);
  assert.match(api,/\.eq\("status",status\)/);
