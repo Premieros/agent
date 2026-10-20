@@ -40,7 +40,7 @@ export default function AgentProjectBuilder({threadId,refreshKey,authHeaders,api
    method:"POST",headers:await authHeaders(),
    body:JSON.stringify({action,id:project?.id,...payload})
   });
-  const data=await res.json() as {error?:string;ok?:boolean;status?:string;itemId?:string};
+  const data=await readAssistantApiJson<{error?:string;ok?:boolean;status?:string;itemId?:string}>(res);
   if(!res.ok||!data.ok)throw new Error(data.error||"تعذر متابعة بناء التطبيق.");
   return data;
  }
