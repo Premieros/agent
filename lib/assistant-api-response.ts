@@ -1,5 +1,5 @@
 /** Decodes untrusted server responses without hiding gateway and authentication errors. */
-export async function readAssistantApiJson<T extends Record<string,unknown>>(response:Response):Promise<T>{
+export async function readAssistantApiJson<T>(response:Response):Promise<T>{
  const type=(response.headers.get("content-type")||"").toLowerCase();
  if(!type.includes("application/json")&&!type.includes("+json")){
   if(response.status===401)return Promise.reject(new Error("انتهت الجلسة؛ سجّل الدخول مجددًا."));
