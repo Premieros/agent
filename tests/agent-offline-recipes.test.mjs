@@ -74,3 +74,16 @@ test("GitHub public workflow uses manifest validation, no checkout, network, sec
  assert.match(runner,/GITHUB_PROJECT_POSSIBLE_SECRET/);
  assert.doesNotMatch(runner,/permissions:\{contents:"write"/);
 });
+
+test("multi-file jobs select the development workflow and never modify main",()=>{
+ const github=read("lib/agent-github-actions.ts");
+ const projectDispatch=github.split("export async function dispatchAgentProject(")[1].split("export async function fetchAgentExperiment(")[0];
+ const legacy=github.split("export async function dispatchAgentExperiment(")[1].split("export async function dispatchAgentProject(")[0];
+ assert.match(legacy,/ref:"main"/);
+ assert.match(projectDispatch,/ref:"dev\/multifile-work-engine-20261020"/);
+ assert.doesNotMatch(projectDispatch,/contents:"write"|git push|create_pull_request/);
+ const workflow=read(".github/workflows/agent-experiment.yml");
+ assert.match(workflow,/project_b64:/);
+ assert.match(workflow,/node --test/);
+ assert.match(workflow,/permissions: \{\}/);
+});
