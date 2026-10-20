@@ -5,7 +5,7 @@ import {requireAgentSession,errorResponse,type AgentSession} from "@/lib/agent-s
 import {discoverAutoModels,askAutoAgent} from "@/lib/auto-ai";
 import {chooseExperiencedModels,recordSandboxExperience} from "@/lib/agent-experience";
 import {parseProjectSpec,packagedProjectFiles,zipProjectFiles,
-  canAdvanceProject,type ProjectFile,type ProjectSpec} from "@/lib/agent-project-engine";
+  canAdvanceProject,verifiedProjectTest,type ProjectFile,type ProjectSpec} from "@/lib/agent-project-engine";
 
 export const runtime="nodejs";
 export const maxDuration=60;
@@ -101,7 +101,7 @@ export async function GET(req:NextRequest){
     if(trace.found){
      const finished=trace.status==="completed";
      const actualExit=/\[exit=(-?\d+)\]/.exec(trace.log);
-     const success=trace.conclusion==="success"&&actualExit?.[1]==="0";
+     const success=verifiedProjectTest(trace.log,trace.conclusion);
      const endedAt=trace.finishedAt?new Date(trace.finishedAt).getTime():Date.now();
      const expired=Boolean(run.deadline_at&&endedAt>new Date(run.deadline_at).getTime());
      const next=finished?(success&&!expired?"completed":
@@ -154,6 +154,7 @@ export async function POST(req:NextRequest){
    const builtIn=builtInProjectRecipe(body.task);
    let spec:ProjectSpec|null=builtIn;
    let chosenModel=builtIn?"recipe:task-board":"",modelCalls=0;
+   let previouslyApproved=false;
    if(!spec){
     const past=await s.db.from("assistant_project_builds")
      .select("title,steps,files")
@@ -165,6 +166,7 @@ export async function POST(req:NextRequest){
     if(past.data)try{
      spec=parseProjectSpec(JSON.stringify(past.data));
      chosenModel="recipe:verified-reuse";
+     previouslyApproved=true;
     }catch{/* Previous data cannot bypass current validation. */}
    }
    if(!spec){
@@ -188,7 +190,7 @@ export async function POST(req:NextRequest){
    catch(e){return response({error:"النموذج لم يُنتج مشروعًا متعدد الملفات صالحًا للمراجعة. لم ينفّذ أي كود.",code:String(e)},422);}
    }
    if(!spec)throw new Error("PROJECT_PLAN_EMPTY");
-   const autoStart=Boolean(builtIn)&&githubActionsConfigured();
+   const autoStart=(Boolean(builtIn)||previouslyApproved)&&githubActionsConfigured();
    const inserted=await s.db.from("assistant_project_builds").insert({
     organization_id:s.organizationId,user_id:s.userId,thread_id:body.threadId,
     task:body.task.trim(),title:spec.title,steps:spec.steps,files:spec.files,
@@ -196,7 +198,7 @@ export async function POST(req:NextRequest){
     ...(autoStart?{approved_at:new Date().toISOString(),
       deadline_at:new Date(Date.now()+TTL_MS).toISOString()}:{}),
     stage_note:autoStart?
-      "وصفة محلية بلا نموذج؛ سيبدأ اختبارها تلقائيًا عبر GitHub Actions.":
+      "مهارة موثوقة أو مشروع سبق اختباره والتصريح به: إعادة اختبار تلقائية دون أي استدعاء نموذج.":
       chosenModel.startsWith("recipe:")?
       "أُعيد استخدام مشروع ناجح دون نموذج. إرسال ملفاته إلى GitHub العام يحتاج تصريحًا لهذا المشروع.":
       "الملفات جاهزة. إرسال الكود إلى GitHub Actions العام يحتاج تصريحًا واحدًا."
