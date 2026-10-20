@@ -88,3 +88,10 @@ test("user feedback is a visible and reviewable adaptation signal",()=>{
   assert.match(read("lib/agent-identity.ts"),/لا تدّعِ تدريب النموذج/);
   assert.match(read("app/api/assistant/route.ts"),/نموذج الرد غير متاح/);
 });
+
+test("learned research skills use an approved skill base instead of an unsupported browser ID",()=>{
+  const learning=read("lib/agent-experience.ts");
+  assert.match(learning,/research:"analysis"/);
+  assert.doesNotMatch(learning,/research:"browser"/);
+  assert.match(learning,/status:"suggested",source:"automatic"/);
+});
