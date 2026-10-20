@@ -12,6 +12,7 @@ import { getSupabase } from "@/lib/supabase-browser";
 import { currentSession } from "@/lib/auth-session";
 import { assistantSkills, type AssistantSkill } from "@/lib/assistant-skills";
 import AssistantMarkdown from "@/components/assistant-markdown";
+import AgentProjectBuilder from "@/components/agent-project-builder";
 import AssistantLearningPanel from "@/components/assistant-learning-panel";
 import AssistantWorkspacePanel,{type WorkspaceView} from "@/components/assistant-workspace-panel";
 import {detectAgentIntent,describeAgentIntent,extractMemory,requiresApproval,type AgentIntent} from "@/lib/assistant-intent";
@@ -90,6 +91,7 @@ export default function GeneralAssistant() {
   const [studioMissionId,setStudioMissionId]=useState("");
   const [siteChange,setSiteChange]=useState<SiteChange|null>(null);
   const [siteWriteReady,setSiteWriteReady]=useState(false);
+  const [projectRefreshKey,setProjectRefreshKey]=useState(0);
   const [workProgress,setWorkProgress]=useState("");
   const [workSteps,setWorkSteps]=useState<string[]>([]);
   const [pendingWork,setPendingWork]=useState<WorkRun|null>(null);
@@ -834,6 +836,19 @@ export default function GeneralAssistant() {
           "تم حفظ مقترح الموقع للمراجعة فقط؛ لا تغيير مباشر.");
         return;
       }
+      if(intent==="work"&&/(?:تطبيق|مشروع\\s+(?:كامل|برمجي)|موقع\\s+ويب|web\\s*app|full[ -]?stack|complete\\s+app|website)/iu.test(message)){
+        const projectResponse=await apiFetch("/api/assistant/projects",{
+          method:"POST",headers:await authHeaders(),
+          body:JSON.stringify({action:"plan",threadId:id,task:message})
+        });
+        const projectData=await projectResponse.json() as {ok?:boolean;error?:string;id?:string};
+        if(!projectResponse.ok||!projectData.ok)throw new Error(
+          projectData.error||"تعذر إنشاء ملفات التطبيق.");
+        setMessages(current=>current.filter(m=>m.id!==optimistic.id));
+        setProjectRefreshKey(k=>k+1);
+        setNote("تم تجهيز مشروع متعدد الملفات للمراجعة. لم تُشغّل الاختبارات؛ الموافقة على الحدود والتنفيذ خطوة منفصلة.");
+        return;
+      }
       if(intent==="work"){
         setWorkProgress("تجهيز خطة العمل...");
         const planRes=await apiFetch("/api/assistant/work",{
@@ -1082,6 +1097,8 @@ export default function GeneralAssistant() {
                 initialView={workspaceView} initialOpenLead={workspaceCreateLead}
                 authHeaders={authHeaders} onClose={()=>{setWorkspaceView(null);setWorkspaceCreateLead(false);}}
                 onPrompt={prompt=>void sendMessage(prompt)}/>}
+              <AgentProjectBuilder threadId={threadId} refreshKey={projectRefreshKey}
+                authHeaders={authHeaders} apiFetch={apiFetch}/>
               {pendingWork&&!finishedWork&&<section className="assistant-work-steps agent-work-terminal" aria-label="ترمنال تجربة AGENT">
                 <div className="agent-work-terminal-head">
                   <strong><Terminal size={15}/> {pendingWork.status==="planned"?"خطة برمجية بانتظار المراجعة": "تجربة "+(pendingWork.github_request_id?"GitHub Actions":"Sandbox")} · {pendingWork.status==="running"?"قيد التنفيذ":
