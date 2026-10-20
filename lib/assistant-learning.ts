@@ -69,6 +69,30 @@ export function selectCustomSkill(prompt:string,skills:CustomSkillRow[]){
 }
 const templates=[
   {
+    title:"بحث موثق ومقارنة المصادر",
+    rx:/(?:ابحث|مصادر|مراجع|تحقق\s+من\s+(?:الخبر|المعلوم)|آخر\s+الأخبار|أحدث\s+التطورات|search\s+web|research)/i,
+    description:"بحث موجز يوضح المصدر وتاريخه وحدود التحقق.",
+    phrases:["ابحث عن","آخر الأخبار","تحقق من الخبر","مصادر موثوقة","research"],
+    base_skill:"browser",
+    instructions:"حدد السؤال، وابحث بالأدوات المصرح بها فقط؛ قارن المصادر المتاحة عند الإمكان، واذكر التاريخ والروابط الحقيقية، وميز بين مقتطف الفهرسة والمقال المتحقق منه. قدم النتيجة المختصرة أولًا، ولا تختلق حقائق حديثة."
+  },
+  {
+    title:"تحليل الملفات والمستندات",
+    rx:/(?:حلل\s+(?:الملف|ملف|المستند|البيانات)|لخص\s+(?:الملف|المستند)|ملفات\s+(?:CSV|JSON)|analy[sz]e\s+(?:file|document)|summari[sz]e\s+(?:file|document))/i,
+    description:"تحليل ملخصات ومستندات المستخدم بعد اختيارها بإذن.",
+    phrases:["حلل الملف","لخص المستند","تحليل بيانات","analyze file","summarize document"],
+    base_skill:"analysis",
+    instructions:"ابدأ بما هو موجود بالفعل في نص الملف المصرح به فقط؛ استخرج حقائق ونتائج قابلة للتتبع، ثم أبرز أي مدخلات ناقصة. لا تدعِ قراءة صور أو ملفات PDF إن لم تتوفر أداة تحليلها. لا تحفظ أو ترسل المحتوى خارجيًا بدون إذن."
+  },
+  {
+    title:"تشخيص الأخطاء التقنية",
+    rx:/(?:اصلح\s+(?:الخطا|المشكلة|الكود)|أصلح\s+(?:الخطأ|المشكلة)|تشخيص\s+(?:مشكلة|خطأ)|(?:error|bug|crash|failed\s+build)\s+(?:in|at)?)/i,
+    description:"تحديد سبب المشكلة وخطة إصلاح قابلة للاختبار.",
+    phrases:["أصلح الخطأ","تشخيص المشكلة","failed build","bug fix"],
+    base_skill:"coding",
+    instructions:"ابدأ بمعلومات الخطأ والملفات المقروءة حقيقة، ثم حدد السبب المرجح وإصلاحًا صغيرًا واختبارًا واضحًا. لا تدعِ تعديل كود أو تشغيل اختبارات أو الاتصال بمستودع دون نتائج أداة مسموح بها."
+  },
+  {
     title:"تحليل الحملات",
     rx:/(?:حملة|حملات|إعلانات|اعلان|معدل\s*التحويل|conversion|campaign)/i,
     description:"تقارير أداء الحملات من أرقام حقيقية.",
@@ -117,7 +141,8 @@ export async function proposeFromConversation(s:AgentSession,threadId:string,
   // Repeated real requests trigger an inexpensive suggestion, not auto activation.
   const texts=[...previousUserMessages,userText].slice(-15);
   for(const t of templates){
-    if(!t.rx.test(userText)||texts.filter(p=>t.rx.test(p)).length<3)continue;
+    const repeats=texts.filter(p=>t.rx.test(p)).length;
+    if(!t.rx.test(userText)||repeats<2)continue;
     const {data:duplicates}=await s.db.from("assistant_custom_skills").select("id")
       .eq("organization_id",s.organizationId).eq("user_id",s.userId)
       .eq("title",t.title).limit(1);
