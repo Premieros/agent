@@ -5,15 +5,36 @@
  */
 export type AgentIntent =
   "chat"|"learning-list"|"learning-hide"|"memory-save"|"skill-create"|"studio-page-create"|"studio-overview"|"studio-summary"|
-  "studio-prepare"|"studio-run"|"site-diagnose"|"site-draft"|"work";
+  "studio-prepare"|"studio-run"|"site-diagnose"|"site-draft"|"work"|
+  "workspace-overview"|"customers-overview"|"followups-overview"|"inbox-overview"|"integrations-overview"|"workspace-lead-create";
 const normal=(s:string)=>s.trim().toLocaleLowerCase("ar")
-  .replace(/[أإآ]/g,"ا").replace(/ى/g,"ي").replace(/ـ/g,"").replace(/[\u064b-\u065f]/g,"");
-export const requiresApproval=(intent:AgentIntent)=>!["chat","learning-list","learning-hide"].includes(intent);
+  .replace(/[أإآ]/g,"ا").replace(/ى/g,"ي").replace(/ة/g,"ه").replace(/ـ/g,"").replace(/[\u064b-\u065f]/g,"");
+export const requiresApproval=(intent:AgentIntent)=>!["chat","learning-list","learning-hide",
+  "workspace-overview","customers-overview","followups-overview","inbox-overview",
+  "integrations-overview","workspace-lead-create","studio-overview","studio-summary",
+  "site-diagnose"].includes(intent);
 
 export function detectAgentIntent(text:string,lastAssistantModel?:string|null):AgentIntent{
   const q=normal(text);
   const latestStudio=lastAssistantModel==="studio-data";
   if(!q||q.length>4500)return "chat";
+
+  // Chat-first workspace: route only explicit commands. Informational questions
+  // and requests for marketing/studio/site work retain their normal routing.
+  if(/^(?:اعرض|وريني|افتح|راجع|شوف|هات|show|open)\s+(?:لي\s+)?(?:مساحه\s+العمل|ملخص\s+(?:الشغل|المؤسسه|المؤسسة)|لوحه\s+التحكم|الرئيسيه|داشبورد|workspace|dashboard)/iu.test(q)||
+     /^(?:حاله|ملخص)\s+(?:الشغل|مساحه\s+العمل|المؤسسه|المؤسسة)/iu.test(q))
+    return "workspace-overview";
+  if(/^(?:اضف|انشئ|سجل|اعمل|create|add)\s+(?:لي\s+)?(?:عميل|lead|customer)(?:\s|$)/iu.test(q))
+    return "workspace-lead-create";
+  if(/^(?:اعرض|وريني|افتح|راجع|شوف|هات|قائمه|show|list)\s+(?:لي\s+)?(?:العملاء|عملائي|الليدز|leads|customers)(?:\s|$)/iu.test(q))
+    return "customers-overview";
+  if(/^(?:اعرض|وريني|افتح|راجع|شوف|هات|قائمه|show|list)\s+(?:لي\s+)?(?:المتابعات|مهام\s+المتابعه|متابعات\s+العملاء|followups)(?:\s|$)/iu.test(q))
+    return "followups-overview";
+  if(/^(?:اعرض|وريني|افتح|راجع|شوف|هات|show|open)\s+(?:لي\s+)?(?:صندوق\s+الوارد|الوارد|محادثات\s+العملاء|inbox)(?:\s|$)/iu.test(q))
+    return "inbox-overview";
+  if(/^(?:اعرض|وريني|افتح|راجع|شوف|هات|show|open)\s+(?:لي\s+)?(?:الاضافات|الاضافات\s+المتصله|مركز\s+الاضافات|التكاملات|الاتصالات|integrations|connectors)(?:\s|$)/iu.test(q)||
+     /^(?:حاله|ما\s+حاله)\s+(?:الاضافات|التكاملات|connectors)/iu.test(q))
+    return "integrations-overview";
 
   // The library is invisible until requested through the conversation.
   if(/^(?:اعرض|وريني|افتح|راجع|شوف|show|list)\s+(?:لي\s+)?(?:ذاكرتي|الذاكره|الذاكرة|مهاراتي|المهارات|المعلومات\s+المحفوظة|المعلومات\s+المحفوظة|memory|skills)(?:\s|$)/iu.test(q))
@@ -67,6 +88,12 @@ export function detectAgentIntent(text:string,lastAssistantModel?:string|null):A
 export function describeAgentIntent(intent:AgentIntent){
   const text:Record<AgentIntent,{title:string;detail:string;cost:string}>={
     chat:{title:"محادثة عادية",detail:"إجابة نصية؛ البحث والقراءة عند الطلب يعملان تلقائيًا دون موافقة مسبقة.",cost:""},
+    "workspace-overview":{title:"بيانات مساحة العمل",detail:"قراءة مؤشرات العملاء والمحادثات والمتابعات المصرح بها في AGENT.",cost:"قراءة مجانية بدون نموذج AI"},
+    "customers-overview":{title:"عرض العملاء",detail:"عرض آخر العملاء من قاعدة المؤسسة داخل المحادثة.",cost:"قراءة مجانية"},
+    "followups-overview":{title:"متابعات العملاء",detail:"قراءة المتابعات وإنشاء متابعة فقط بعد تأكيد منفصل.",cost:"بدون نموذج AI"},
+    "inbox-overview":{title:"صندوق الوارد",detail:"عرض قائمة محادثات العملاء من البيانات الفعلية.",cost:"قراءة فقط"},
+    "integrations-overview":{title:"حالة الإضافات",detail:"عرض الإضافات الفعلية؛ تعديل صلاحيات القراءة بتأكيد مستقل.",cost:"بدون نموذج AI"},
+    "workspace-lead-create":{title:"إضافة عميل",detail:"فتح نموذج داخل المحادثة؛ لا حفظ قبل مراجعة وتأكيد صريحين.",cost:"بدون نموذج AI"},
     "learning-list":{title:"عرض الذاكرة والمهارات",detail:"فتح إدارة الذاكرة والمهارات عند الطلب فقط.",cost:"بدون AI"},
     "learning-hide":{title:"إخفاء الذاكرة والمهارات",detail:"إغلاق إدارة الذاكرة والمهارات.",cost:"بدون AI"},
     "studio-page-create":{title:"إضافة صفحة تسويق في AGENT",detail:"سيُحفظ ملف صفحة جديدة داخل قاعدة AGENT بعد مراجعة بياناته. هذا ليس ربطًا بحساب Meta ولا نشرًا خارجيًا.",cost:"بدون Sandbox أو استدعاء نموذج AI"},
