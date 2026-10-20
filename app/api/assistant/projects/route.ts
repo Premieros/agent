@@ -82,18 +82,44 @@ export async function GET(req:NextRequest){
   const s=await requireAgentSession(req);
   const threadId=new URL(req.url).searchParams.get("threadId");
   if(!threadId||!uuid.test(threadId))return response({error:"معرّف المحادثة غير صالح."},400);
-  // An interrupted function is NOT retried automatically or falsely marked passed.
-  await s.db.from("assistant_project_builds").update({
-    status:"failed",stage_note:"انقطع اختبار البيئة. لا إعادة تنفيذ تلقائية.",
-    test_passed:false,updated_at:new Date().toISOString()
-  }).eq("organization_id",s.organizationId).eq("user_id",s.userId)
-  .eq("thread_id",threadId).eq("status","testing")
-  .lt("updated_at",new Date(Date.now()-90_000).toISOString());
-  const x=await s.db.from("assistant_project_builds").select("*")
+  const q=await s.db.from("assistant_project_builds").select("*")
    .eq("organization_id",s.organizationId).eq("user_id",s.userId)
    .eq("thread_id",threadId).order("created_at",{ascending:false}).limit(1).maybeSingle();
-  if(x.error)throw x.error;
-  return response({project:x.data?publicBuild(x.data as Build):null});
+  if(q.error)throw q.error;
+  let run=q.data as Build|null;
+  if(run?.status==="testing"&&run.github_request_id&&githubActionsConfigured()){
+   try{
+    const trace=await fetchAgentExperiment(run.github_request_id,run.github_run_id);
+    if(trace.found){
+     const finished=trace.status==="completed";
+     const actualExit=/\[exit=(-?\d+)\]/.exec(trace.log);
+     const success=trace.conclusion==="success"&&actualExit?.[1]==="0";
+     const expired=Boolean(run.deadline_at&&Date.now()>new Date(run.deadline_at).getTime());
+     const next=finished?(success&&!expired?"completed":
+       !expired&&run.attempts<run.max_attempts&&run.model_calls===1?"repairing":"failed"):"testing";
+     const stage=finished?success&&!expired?"اجتاز التطبيق الاختبارات الفعلية في GitHub Actions.":
+       next==="repairing"?"فشلت الاختبارات؛ سيصلحها النموذج المجاني مرة واحدة.":
+       "فشلت الاختبارات، أو انتهت المهلة، أو لا يوجد دليل كافٍ على نجاحها.":
+       "GitHub Actions: "+trace.status+" (المحاولة "+run.attempts+"/"+run.max_attempts+")";
+     await note(s,run,{status:next,github_run_id:trace.runId,
+       ...(finished?{test_passed:success&&!expired}:{}),
+       execution_log:(run.execution_log+"\n"+trace.log).slice(-14000),
+       stage_note:stage},"testing");
+     if(finished&&actualExit&&["completed","failed"].includes(next))
+      await finishExperience(s,run,success&&!expired);
+     run=await ownerRun(s,run.id);
+    }
+   }catch(e){
+    console.warn("AGENT GitHub project polling unavailable",e instanceof Error?e.name:"unknown");
+   }
+  }
+  if(run?.status==="testing"&&run.deadline_at&&
+    Date.now()>new Date(run.deadline_at).getTime()){
+   await note(s,run,{status:"failed",test_passed:false,
+    stage_note:"انتهت مهلة التشغيل؛ لا إعادة إرسال تلقائية إلى GitHub."},"testing");
+   run=await ownerRun(s,run.id);
+  }
+  return response({project:run?publicBuild(run):null});
  }catch(e){const x=errorResponse(e);return response({error:x.message},x.status);}
 }
 
