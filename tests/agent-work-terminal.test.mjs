@@ -22,7 +22,7 @@ test("terminal is pollable only by thread owner",()=>{
  const chat=read("components/general-assistant.tsx");
  assert.match(chat,/agent-work-stdout/);
  assert.match(chat,/pendingWork\.execution_log/);
- assert.match(chat,/setInterval\(\(\)=>\{void loadWorkState\(threadId\);\},1400\)/);
+ assert.match(chat,/setInterval\(\(\)=>\{void loadWorkState\(threadId\);\},4300\)/);
  assert.match(chat,/setPendingWork\(\{\.\.\.run,status:"running"/);
  assert.match(chat,/ليس التفكير الداخلي/);
 });

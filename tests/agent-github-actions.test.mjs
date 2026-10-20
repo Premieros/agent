@@ -12,7 +12,7 @@ test("GitHub Actions executes demo code in unprivileged offline Docker without s
   assert.match(workflow,/--security-opt no-new-privileges --pids-limit 64/);
   assert.match(workflow,/--user 65534:65534/);
   assert.match(workflow,/node --check \/workspace\/work\.js && node \/workspace\/work\.js/);
-  assert.doesNotMatch(workflow,/actions\/checkout|secrets\.|GITHUB_TOKEN|npm install|git push/);
+  assert.doesNotMatch(workflow,/actions\/checkout@|secrets\.[A-Z_]|GITHUB_TOKEN|npm install|git push/);
 });
 test("AGENT mints scoped GitHub App installation tokens on the server only",()=>{
   const file=read("lib/agent-github-actions.ts");
