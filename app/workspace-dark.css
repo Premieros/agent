@@ -943,3 +943,52 @@
 .workspace-shell .workspace-page .assistant-on-demand-learning .assistant-learning{
   margin-bottom:0
 }
+
+
+/* Indexed research is part of the scrollable conversation, never the composer.
+   Keep the panel collapsed by default and prevent URL/excerpt overflow. */
+.workspace-shell .workspace-page .general-assistant-root .assistant-message-text,
+.workspace-shell .workspace-page .general-assistant-root .assistant-md,
+.workspace-shell .workspace-page .general-assistant-root .assistant-md a{
+  min-width:0;max-width:100%;overflow-wrap:anywhere;word-break:break-word;
+}
+.workspace-shell .workspace-page .general-assistant-root .assistant-research-results{
+  max-width:860px;min-width:0;margin:9px auto 19px;overflow:hidden;
+  background:#1c1c1c;color:#e8e8e8;border:1px solid #3c3c3c;border-radius:11px;
+  font-size:12px;line-height:1.7;
+}
+.workspace-shell .workspace-page .general-assistant-root .assistant-research-results>summary{
+  padding:11px 14px;cursor:pointer;display:flex;flex-wrap:wrap;
+  justify-content:space-between;gap:9px;align-items:center;list-style:none;
+}
+.workspace-shell .workspace-page .general-assistant-root .assistant-research-results>summary::-webkit-details-marker{display:none}
+.workspace-shell .workspace-page .general-assistant-root .assistant-research-results>summary>span{
+  display:inline-flex;align-items:center;gap:7px;
+}
+.workspace-shell .workspace-page .general-assistant-root .assistant-research-hint{
+  color:#b8b8b8;font-size:11px;
+}
+.workspace-shell .workspace-page .general-assistant-root .assistant-research-results[open] .assistant-research-hint svg{
+  transform:rotate(180deg);
+}
+.workspace-shell .workspace-page .general-assistant-root .assistant-research-body{
+  padding:0 14px 12px;border-top:1px solid #393939;
+  overflow-wrap:anywhere;min-width:0;
+}
+.workspace-shell .workspace-page .general-assistant-root .assistant-research-body>p{
+  margin:11px 0;font-size:11px;color:#bcbcbc;line-height:1.75;
+}
+.workspace-shell .workspace-page .general-assistant-root .assistant-research-item{
+  min-width:0;padding:11px 0;border-top:1px solid #343434;
+}
+.workspace-shell .workspace-page .general-assistant-root .assistant-research-item a{
+  color:#b9d5ff;display:block;font-weight:700;text-decoration:underline;
+  overflow-wrap:anywhere;word-break:break-word;
+}
+.workspace-shell .workspace-page .general-assistant-root .assistant-research-item small{
+  display:block;color:#b4b4b4;font-size:10px;margin-top:3px;
+}
+.workspace-shell .workspace-page .general-assistant-root .assistant-research-item p{
+  color:#dbdbdb;font-size:11px;margin:4px 0 0;
+  overflow-wrap:anywhere;word-break:break-word;
+}

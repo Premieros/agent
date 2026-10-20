@@ -751,6 +751,23 @@ export default function GeneralAssistant() {
                   {m.role==="assistant"&&<small>{assistantSkills.find(s=>s.id===m.skill)?.title||m.skill||"مساعد عام"}{m.model?" · "+m.model:""}</small>}
                 </div>
               </article>)}
+              {researchResult&&<details className="assistant-research-results">
+                <summary>
+                  <span><Globe size={15}/> مصادر البحث ({researchResult.sources.length}) · {new Date(researchResult.searchedAt).toLocaleDateString("ar-EG")}</span>
+                  <span className="assistant-research-hint">عرض النتائج والمصادر <ChevronDown size={14}/></span>
+                </summary>
+                <div className="assistant-research-body">
+                  <p>هذه مقتطفات فهرسة مرتبطة بالسؤال، وليست تحققًا مستقلًا من المقالات. لا تحفظ معلوماتها كحقائق دون مراجعتها.</p>
+                  {researchResult.sources.map((source,i)=><section key={source.url} className="assistant-research-item">
+                    <a href={source.url} dir="auto" target="_blank" rel="noopener noreferrer">
+                      {i+1}. {source.title}</a>
+                    <small>{source.publisher}{source.publishedAt?" · "+source.publishedAt.slice(0,10):" · غير مؤرخ"}
+                      {source.trusted?" · موقع معروف (ليس تحققًا من المحتوى)":" · يحتاج تحققًا إضافيًا"}</small>
+                    {source.excerpt&&<p dir="auto">{source.excerpt.slice(0,225)}</p>}
+                  </section>)}
+                  {researchResult.warnings.length>0&&<p className="assistant-research-warnings">{researchResult.warnings.join(" · ")}</p>}
+                </div>
+              </details>}
               {sending && <div className="assistant-thinking"><LoaderCircle size={16} className="crm-spin"/> AGENT بيحضّر الرد...</div>}
               <div ref={endRef}/>
             </div>
@@ -761,23 +778,6 @@ export default function GeneralAssistant() {
                 {browserResult.fetched
                   ? <a href={browserResult.url} target="_blank" rel="noopener noreferrer">صفحة تمت قراءتها: {browserResult.title||browserResult.url}</a>
                   : <span>تعذرت قراءة الصفحة: {browserResult.note}</span>}
-              </div>}
-              {researchResult&&<div className="assistant-source-list" role="region" aria-label="مصادر البحث الحقيقية">
-                <strong>نتائج بحث مباشر · {new Date(researchResult.searchedAt).toLocaleString("ar-EG")} · قراءة مقتطفات</strong>
-                <small>هذه روابط ومقتطفات فهرسة وليست تحققًا من المقالات كاملة. حفظ أي معرفة يتطلب موافقتك.</small>
-                {researchResult.sources.map((source,i)=><div key={source.url}>
-                  <a href={source.url} target="_blank" rel="noopener noreferrer">
-                    {i+1}. {source.title}</a>
-                  <small> {source.publisher}{source.publishedAt?" · "+source.publishedAt.slice(0,10):""}
-                    {source.trusted?" · نطاق مرجعي":" · يحتاج تحققًا إضافيًا"}</small>
-                  {source.excerpt&&<p>{source.excerpt.slice(0,240)}</p>}
-                  <button type="button" disabled={Boolean(busy)} onClick={()=>requestApproval("memory-save",
-                    ("نتيجة بحث للمتابعة: "+source.title+" — "+source.excerpt.slice(0,390)+
-                    " | المصدر: "+source.url).slice(0,850))}>
-                    حفظ معلومة بعد المراجعة
-                  </button>
-                </div>)}
-                {researchResult.warnings.length>0&&<small>{researchResult.warnings.join(" · ")}</small>}
               </div>}
               {sourceFiles.length>0 && <div className="assistant-source-list">
                 <strong>ملفات الكود المقروءة من {sourceProject||"GitHub"} — قراءة فقط:</strong>
