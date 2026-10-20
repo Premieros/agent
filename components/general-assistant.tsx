@@ -840,7 +840,7 @@ export default function GeneralAssistant() {
           "تم حفظ مقترح الموقع للمراجعة فقط؛ لا تغيير مباشر.");
         return;
       }
-      if(intent==="work"&&/(?:تطبيق|مشروع\\s+(?:كامل|برمجي)|موقع\\s+ويب|web\\s*app|full[ -]?stack|complete\\s+app|website)/iu.test(message)){
+      if(intent==="work"&&/(?:تطبيق|مشروع\s+(?:كامل|برمجي)|موقع\s+ويب|web\s*app|full[ -]?stack|complete\s+app|website)/iu.test(message)){
         const projectResponse=await apiFetch("/api/assistant/projects",{
           method:"POST",headers:await authHeaders(),
           body:JSON.stringify({action:"plan",threadId:id,task:message})
