@@ -15,6 +15,7 @@ import AssistantMarkdown from "@/components/assistant-markdown";
 import AssistantLearningPanel from "@/components/assistant-learning-panel";
 import AssistantWorkspacePanel,{type WorkspaceView} from "@/components/assistant-workspace-panel";
 import {detectAgentIntent,describeAgentIntent,extractMemory,requiresApproval,type AgentIntent} from "@/lib/assistant-intent";
+import {describeWorkEvidence} from "@/lib/agent-work-evidence";
 
 type Thread = { id:string; title:string; skill:AssistantSkill; updated_at:string; created_at:string };
 type ChatMessage = {id:string;role:"user"|"assistant";content:string;model?:string|null;skill?:string|null;created_at:string};
@@ -92,7 +93,8 @@ export default function GeneralAssistant() {
   const [workProgress,setWorkProgress]=useState("");
   const [workSteps,setWorkSteps]=useState<string[]>([]);
   const [pendingWork,setPendingWork]=useState<WorkRun|null>(null);
-  const [terminalVisible,setTerminalVisible]=useState(true);
+  const [terminalVisible,setTerminalVisible]=useState(false);
+  const finalizedWorkRef=useRef(new Set<string>());
   const [workRunner,setWorkRunner]=useState<"github"|"sandbox">("github");
   const [artifactBusy,setArtifactBusy]=useState(false);
   const [savedArtifacts,setSavedArtifacts]=useState<string[]>([]);
@@ -376,9 +378,9 @@ export default function GeneralAssistant() {
       });
       if(!res.ok)return;
       const data=await res.json() as {runs?:WorkRun[]};
-      const active=(data.runs||[]).find(r=>
-        ["planned","running","executed","reporting"].includes(r.status));
-      const current=active||data.runs?.[0]||null;
+      // Show the latest experiment outcome first, including failures.
+      // Otherwise an older pending job can hide the newest result indefinitely.
+      const current=data.runs?.[0]||null;
       setPendingWork(current);
       if(current){
         setWorkSteps(current.steps||[]);
@@ -575,10 +577,37 @@ export default function GeneralAssistant() {
     finally{setArtifactBusy(false);}
   }
 
+  async function proposeWorkRepair(run:WorkRun){
+    if(busy||!threadId)return;
+    setBusy("work-repair");setError("");
+    try{
+      const res=await apiFetch("/api/assistant/work",{
+        method:"POST",headers:await authHeaders(),
+        body:JSON.stringify({action:"repair",runId:run.id,
+          allowConditionalFreeTier:allowConditional})
+      });
+      const data=await res.json() as {
+        error?:string;ok?:boolean;message?:string;run?:{
+          id:string;steps:string[];code:string;stage_note:string
+        }
+      };
+      if(!res.ok||!data.ok||!data.run)throw new Error(
+        data.error||"تعذر إنشاء إصلاح للمراجعة.");
+      setPendingWork({id:data.run.id,status:"planned",steps:data.run.steps,
+        code:data.run.code,stage_note:data.run.stage_note,
+        sandbox_ran:false,sandbox_succeeded:null});
+      setWorkSteps(data.run.steps);
+      setWorkProgress(data.run.stage_note);
+      setTerminalVisible(false);
+      setNote(data.message||"جهزت إصلاحًا للمراجعة، دون تشغيل.");
+    }catch(e){setError(e instanceof Error?e.message:"تعذر اقتراح إصلاح.");}
+    finally{setBusy("");}
+  }
+
   async function finishWork(initial:WorkRun,id:string){
     if(initial.status==="planned"&&workRunner==="github"&&
       !window.confirm("سيرسل AGENT كود التجربة إلى GitHub Actions على مستودع عام، وقد تكون سجلاته علنية. لا تستخدم أسرارًا أو بيانات عملاء. تشغيل تجربة Node.js دون تعديل GitHub أو نشرها؟"))return;
-    setBusy("work");setError("");setTerminalVisible(true);
+    setBusy("work");setError("");setTerminalVisible(false);
     let run=initial;
     try{
       if(run.status==="planned"){
@@ -619,8 +648,9 @@ export default function GeneralAssistant() {
         (run.sandbox_ran?"اكتمل التحليل في البيئة المعزولة.":"اكتمل تحليل الأدلة دون تشغيل كود."):
         "انتهت المحاولة مع فشل الاختبار. راجع التقرير.");
       setNote(run.sandbox_ran?
-        (run.sandbox_succeeded?"تجربة Sandbox ناجحة.":"تعذر اختبار Sandbox؛ النتيجة توضح ذلك."):
-        "تحليل مصادر ونتائج، بدون تشغيل Sandbox.");
+        (run.sandbox_succeeded?"اجتاز الاختبار الذي شُغّل؛ راجع التفاصيل.":
+          "فشل الاختبار؛ يعرض AGENT السبب وخيار اقتراح إصلاح."):
+        "انتهى التحليل دون إثبات نجاح اختبار برمجي.");
     }catch(e){
       setError(e instanceof Error?e.message:"تعذر استكمال العمل.");
       await loadWorkState(id);
@@ -643,6 +673,17 @@ export default function GeneralAssistant() {
     const timer=setInterval(()=>{void loadWorkState(threadId);},4300);
     return()=>clearInterval(timer);
   },[threadId,pendingWork?.id,pendingWork?.status]);
+
+  // An approved GitHub run should explain its result on completion without
+  // demanding that the user discover and press another "finalize" button.
+  // Finalization of GitHub evidence is deterministic and costs no AI tokens.
+  useEffect(()=>{
+    if(!threadId||!pendingWork||pendingWork.status!=="executed"||
+      !pendingWork.github_request_id||finalizedWorkRef.current.has(pendingWork.id))return;
+    finalizedWorkRef.current.add(pendingWork.id);
+    void finishWork(pendingWork,threadId);
+  },[threadId,pendingWork?.id,pendingWork?.status,pendingWork?.github_request_id]);
+
 
   async function sendMessage(text=draft,approved=false) {
     const message=text.trim();
@@ -856,6 +897,13 @@ export default function GeneralAssistant() {
     await sendMessage(choice.text,true);
   }
 
+  const workEvidence=pendingWork?describeWorkEvidence({
+    status:pendingWork.status,attempted:pendingWork.sandbox_ran,
+    succeeded:pendingWork.sandbox_succeeded,
+    log:pendingWork.execution_log,
+    runner:pendingWork.github_request_id?"github":"sandbox"
+  }):null;
+
   const approvalInfo=pendingAction?(
     pendingAction.intent==="studio-confirm"?
       {title:"تأكيد إضافة المهمة",detail:"سيُحفظ التكليف داخل AGENT فقط. تشغيل الوكلاء خطوة منفصلة.",cost:"بدون نموذج AI أو Sandbox"}:
@@ -982,23 +1030,32 @@ export default function GeneralAssistant() {
                   <strong><Terminal size={15}/> {pendingWork.status==="planned"?"خطة برمجية بانتظار المراجعة": "تجربة "+(pendingWork.github_request_id?"GitHub Actions":"Sandbox")} · {pendingWork.status==="running"?"قيد التنفيذ":
                     pendingWork.status==="planned"?"بانتظار موافقتك":
                     pendingWork.status==="reporting"?"تحليل النتيجة": "سجل التجربة"}</strong>
+
+                </div>
+                <div className="agent-work-verdict" role="status">
+                  <strong>{workEvidence?.phase||"جارٍ تحضير النتيجة"}</strong>
+                  {workEvidence?.cause&&<p>{workEvidence.cause}</p>}
+                  {workEvidence?.next&&<p>{workEvidence.next}</p>}
+                  {pendingWork.status==="running"&&
+                    <p>جارٍ تشغيل التجربة. ستظهر النتيجة هنا بمجرد اكتمالها.</p>}
+                </div>
+                {pendingWork.status==="planned"&&<details className="agent-work-code-review" open>
+                  <summary>مراجعة الكود قبل تشغيل التجربة</summary>
+                  <pre dir="ltr" aria-label="كود Node.js للمراجعة">
+                    {pendingWork.code||"لا يوجد كود برمجي لهذه المهمة."}
+                  </pre>
+                  <small>راجع الكود والبيئة. لن يبدأ التشغيل إلا بعد موافقتك.</small>
+                </details>}
+                <div className="agent-work-log-toggle">
                   <button type="button" aria-expanded={terminalVisible}
                     onClick={()=>setTerminalVisible(v=>!v)}>
-                    {terminalVisible?"إخفاء الترمنال":"عرض الترمنال"} <ChevronDown size={14}/>
+                    <Terminal size={14}/> {terminalVisible?"إخفاء التفاصيل التقنية":"عرض سجل الأوامر التقني"}
                   </button>
                 </div>
-                <p>{pendingWork.stage_note||workProgress}</p>
                 {terminalVisible&&<>
                   <div className="agent-work-plan" aria-label="ملخص خطة العمل">
                     {pendingWork.steps?.map((step,i)=><span key={i}>{i+1}. {step}</span>)}
                   </div>
-                  {pendingWork.status==="planned"&&<details className="agent-work-code-review" open>
-                    <summary>مراجعة كود Node.js قبل التشغيل</summary>
-                    <pre dir="ltr" aria-label="الكود الذي سيُختبر">
-                      {pendingWork.code||"لا يوجد كود برمجي لهذه المهمة."}
-                    </pre>
-                    <small>هذا الكود لم يُشغّل بعد. لا توافق على إرسال بيانات خاصة أو مفاتيح إلى GitHub Actions.</small>
-                  </details>}
                   <pre className="agent-work-stdout" dir="ltr" aria-label="أوامر ومخرجات التنفيذ الفعلية">
                     {pendingWork.execution_log||(
                       pendingWork.status==="planned"?"$ awaiting your approval":
@@ -1024,6 +1081,11 @@ export default function GeneralAssistant() {
                       onClick={()=>requestApproval("work-resume",pendingWork.status==="planned"?"تشغيل كود التجربة الذي راجعته":"استكمال مهمة عمل محفوظة")}>{pendingWork.status==="planned"?"مراجعة وتشغيل":"استكمال"}</button>}
                   {["running","reporting"].includes(pendingWork.status)&&
                     <button type="button" onClick={()=>void loadWorkState(threadId)}>تحديث</button>}
+                  {workEvidence?.failed&&
+                    <button type="button" disabled={Boolean(busy)}
+                      onClick={()=>void proposeWorkRepair(pendingWork)}>
+                      <Code2 size={14}/> اقترح إصلاحًا وراجعه
+                    </button>}
                   {["executed","completed","failed"].includes(pendingWork.status)&&
                     <button type="button" disabled={artifactBusy||Boolean(busy)}
                       onClick={()=>void saveWorkArtifact(pendingWork.id)}><Save size={14}/>

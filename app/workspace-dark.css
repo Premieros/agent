@@ -1677,3 +1677,31 @@
 .workspace-shell .workspace-page .general-assistant-root .agent-work-code-review small{
   display:block;margin:7px 0 0;color:#f0ca96!important;
 }
+
+
+/* Chat-first Work reports: outcome and next step precede optional terminal. */
+.workspace-shell .workspace-page .general-assistant-root .agent-work-verdict{
+  border:1px solid #4f7780;border-radius:10px;
+  padding:12px 14px;margin:10px 0;
+  background:rgba(52,94,102,.18);
+  color:#e7eff4;
+}
+.workspace-shell .workspace-page .general-assistant-root .agent-work-verdict strong{
+  color:#c6f2e2;font-size:13px;line-height:1.7;
+}
+.workspace-shell .workspace-page .general-assistant-root .agent-work-verdict p{
+  margin:5px 0!important;font-size:12px!important;
+  color:#d0dfe9!important;line-height:1.8;
+}
+.workspace-shell .workspace-page .general-assistant-root .agent-work-log-toggle{
+  margin:9px 0;
+}
+.workspace-shell .workspace-page .general-assistant-root .agent-work-log-toggle button{
+  display:inline-flex;align-items:center;gap:7px;cursor:pointer;
+  padding:6px 10px;border:1px solid #456575;border-radius:8px;
+  color:#d6eaf2;background:#253d4b;font-size:11px;
+}
+.workspace-shell .workspace-page .general-assistant-root .agent-work-log-toggle button:focus-visible,
+.workspace-shell .workspace-page .general-assistant-root .agent-work-controls button:focus-visible{
+  outline:2px solid #88dccc;outline-offset:2px;
+}
