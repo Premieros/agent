@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {readFileSync} from "node:fs";
 import {parseProjectSpec,validProjectPath,zipProjectFiles,packagedProjectFiles,
- canAdvanceProject} from "../lib/agent-project-engine.ts";
+ canAdvanceProject,verifiedProjectTest} from "../lib/agent-project-engine.ts";
 const read=p=>readFileSync(new URL("../"+p,import.meta.url),"utf8");
 const fixture={title:"Task board",steps:["Generate","Test"],files:[
  {path:"server.js",content:"const http=require('node:http'); module.exports={http};\n"},
@@ -106,4 +106,22 @@ test("work UI includes file review, cost approval and progress",()=>{
  assert.match(ui,/تنزيل التطبيق ZIP/);
  assert.match(ui,/عرض الترمنال الفعلي/);
  assert.match(read("components/general-assistant.tsx"),/AgentProjectBuilder/);
+});
+
+test("a printed PASS cannot masquerade as real node --test evidence",()=>{
+ assert.equal(verifiedProjectTest("PASS: جميع اختبارات المخزون نجحت\n[exit=0]","success"),false);
+ assert.equal(verifiedProjectTest("# tests 0\n# pass 0\n# fail 0\n[exit=0]","success"),false);
+ assert.equal(verifiedProjectTest("# tests 6\n# pass 6\n# fail 0\n[exit=0]","success"),true);
+ assert.equal(verifiedProjectTest(
+  "2026-10-20T14:13:34.125Z # tests 8\n2026-10-20T14:13:34.125Z # pass 8\n2026-10-20T14:13:34.125Z # fail 0\n2026-10-20T14:13:34.125Z [exit=0]",
+  "success"),true);
+ assert.equal(verifiedProjectTest("# tests 8\n# pass 7\n# fail 1\n[exit=0]","success"),false);
+ assert.equal(verifiedProjectTest("# tests 8\n# pass 8\n# fail 0\n[exit=1]","success"),false);
+ assert.equal(verifiedProjectTest("# tests 8\n# pass 8\n# fail 0\n[exit=0]","failure"),false);
+});
+test("previously approved successful exact projects can repeat without model or approval",()=>{
+ const api=read("app/api/assistant/projects/route.ts");
+ assert.match(api,/previouslyApproved=true/);
+ assert.match(api,/const autoStart=\(Boolean\(builtIn\)\|\|previouslyApproved\)/);
+ assert.match(api,/const success=verifiedProjectTest\(trace.log,trace.conclusion\)/);
 });
