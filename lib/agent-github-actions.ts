@@ -75,7 +75,7 @@ export async function dispatchAgentProject(input:{requestId:string;files:{path:s
   const raw=Buffer.from(JSON.stringify({files:input.files}),"utf8");
   const b64=raw.toString("base64");
   if(raw.byteLength>40_000||b64.length>56_000)throw new Error("GITHUB_PROJECT_INPUT_TOO_LARGE");
-  if(input.files.some(f=>/-----BEGIN (?:RSA |OPENSSH |EC )?PRIVATE KEY-----|\\b(?:ghp_|ghs_|sk-)[A-Za-z0-9_-]{18,}/.test(f.content)))
+  if(input.files.some(f=>/-----BEGIN (?:RSA |OPENSSH |EC )?PRIVATE KEY-----|\b(?:ghp_|ghs_|sk-)[A-Za-z0-9_-]{18,}/.test(f.content)))
     throw new Error("GITHUB_PROJECT_POSSIBLE_SECRET");
   const token=await installationToken();
   await githubApi("/repos/"+AGENT_ACTIONS_REPO+"/actions/workflows/"+
