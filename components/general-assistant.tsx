@@ -6,7 +6,7 @@ import {createPortal} from "react-dom";
 import {
   ArrowRight, Bot, BookOpen, Check, ChevronDown, CircleAlert, Code2, Copy,
   FileText, Lightbulb, LoaderCircle, Menu, MessageCircle, Plus, Send, ShieldCheck,
-  Sparkles, Trash2, WandSparkles, PlugZap, Globe, Minus, PlusCircle, Paperclip, ThumbsUp, ThumbsDown, Terminal, Save
+  Download, Sparkles, Trash2, WandSparkles, PlugZap, Globe, Minus, PlusCircle, Paperclip, ThumbsUp, ThumbsDown, Terminal, Save
 } from "lucide-react";
 import { getSupabase } from "@/lib/supabase-browser";
 import { currentSession } from "@/lib/auth-session";
@@ -97,6 +97,7 @@ export default function GeneralAssistant() {
   const finalizedWorkRef=useRef(new Set<string>());
   const [workRunner,setWorkRunner]=useState<"github"|"sandbox">("github");
   const [artifactBusy,setArtifactBusy]=useState(false);
+  const [downloadingRun,setDownloadingRun]=useState("");
   const [savedArtifacts,setSavedArtifacts]=useState<string[]>([]);
   const [busy,setBusy]=useState("");
   const [loading,setLoading]=useState(true);
@@ -559,6 +560,28 @@ export default function GeneralAssistant() {
       setNote("تم فتح Pull Request للمراجعة فقط؛ لم يُنشر أي تعديل.");
     }catch(e){setError(e instanceof Error?e.message:"تعذر فتح طلب المراجعة.");}
     finally{setBusy("");}
+  }
+
+  async function downloadWorkProgram(runId:string){
+    if(downloadingRun||busy)return;
+    setDownloadingRun(runId);setError("");
+    try{
+      const res=await apiFetch("/api/assistant/work/download?runId="+encodeURIComponent(runId),{
+        headers:await authHeaders(),cache:"no-store"
+      });
+      if(!res.ok){
+        const data=await res.json() as {error?:string};
+        throw new Error(data.error||"تعذر تنزيل البرنامج.");
+      }
+      const url=URL.createObjectURL(await res.blob());
+      try{
+        const link=document.createElement("a");
+        link.href=url;link.download="AGENT-program-"+runId.slice(0,8)+".zip";
+        document.body.appendChild(link);link.click();link.remove();
+      }finally{window.setTimeout(()=>URL.revokeObjectURL(url),1500);}
+      setNote("تم إعداد تنزيل البرنامج المستقل؛ لا دمج أو تعديل لملفات AGENT.");
+    }catch(e){setError(e instanceof Error?e.message:"تعذر تسليم البرنامج.");}
+    finally{setDownloadingRun("");}
   }
 
   async function saveWorkArtifact(runId:string){
@@ -1030,6 +1053,11 @@ export default function GeneralAssistant() {
                             onClick={()=>void proposeWorkRepair(pendingWork)}>
                             <Code2 size={15}/> حضّر إصلاحًا
                           </button>}
+                        {pendingWork.code&&
+                          <button type="button" disabled={Boolean(busy)||Boolean(downloadingRun)}
+                            onClick={()=>void downloadWorkProgram(pendingWork.id)}>
+                            <Download size={15}/> {downloadingRun===pendingWork.id?"جاري التجهيز...":"تنزيل البرنامج ZIP"}
+                          </button>}
                         <button type="button" disabled={Boolean(busy)||artifactBusy}
                           onClick={()=>void saveWorkArtifact(pendingWork.id)}>
                           <Save size={15}/>
@@ -1114,6 +1142,11 @@ export default function GeneralAssistant() {
                     <button type="button" disabled={Boolean(busy)}
                       onClick={()=>void proposeWorkRepair(pendingWork)}>
                       <Code2 size={14}/> اقترح إصلاحًا وراجعه
+                    </button>}
+                  {["executed","completed","failed"].includes(pendingWork.status)&&pendingWork.code&&
+                    <button type="button" disabled={Boolean(busy)||Boolean(downloadingRun)}
+                      onClick={()=>void downloadWorkProgram(pendingWork.id)}>
+                      <Download size={14}/> تنزيل البرنامج ZIP
                     </button>}
                   {["executed","completed","failed"].includes(pendingWork.status)&&
                     <button type="button" disabled={artifactBusy||Boolean(busy)}
