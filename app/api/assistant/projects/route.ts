@@ -1,5 +1,6 @@
 import {NextRequest,NextResponse} from "next/server";
-import {Sandbox} from "@vercel/sandbox";
+import {githubActionsConfigured,dispatchAgentProject,fetchAgentExperiment} from "@/lib/agent-github-actions";
+import {builtInProjectRecipe} from "@/lib/agent-project-recipes";
 import {requireAgentSession,errorResponse,type AgentSession} from "@/lib/agent-server";
 import {discoverAutoModels,askAutoAgent} from "@/lib/auto-ai";
 import {chooseExperiencedModels,recordSandboxExperience} from "@/lib/agent-experience";
@@ -9,7 +10,7 @@ import {parseProjectSpec,packagedProjectFiles,zipProjectFiles,
 export const runtime="nodejs";
 export const maxDuration=60;
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-const TTL_MS=180_000,PER_ATTEMPT_MS=18_000;
+const TTL_MS=12*60_000;
 const headers={"Cache-Control":"private, no-store"};
 const response=(data:unknown,status=200)=>NextResponse.json(data,{status,headers});
 type Build={
@@ -17,6 +18,7 @@ type Build={
  files:ProjectFile[];status:string;approved_at:string|null;deadline_at:string|null;
  max_attempts:number;attempts:number;model_calls:number;model:string;
  execution_log:string;stage_note:string;test_passed:boolean|null;saved_artifact_id:string|null;
+ github_request_id:string|null;github_run_id:number|null;
  updated_at:string;
 };
 function specFrom(run:Build):ProjectSpec{
@@ -28,7 +30,7 @@ function publicBuild(run:Build){
   deadline_at:run.deadline_at,max_attempts:run.max_attempts,attempts:run.attempts,
   model_calls:run.model_calls,model:run.model,stage_note:run.stage_note,
   execution_log:run.execution_log,test_passed:run.test_passed,
-  saved_artifact_id:run.saved_artifact_id};
+  saved_artifact_id:run.saved_artifact_id,github_run_id:run.github_run_id};
 }
 async function ownerRun(s:AgentSession,id:string):Promise<Build|null>{
  const x=await s.db.from("assistant_project_builds").select("*")
@@ -73,45 +75,6 @@ async function finishExperience(s:AgentSession,run:Build,succeeded:boolean){
   base_skill:"coding",status:"suggested",source:"automatic"
  });
  if(proposed.error)console.warn("AGENT suggested project skill unavailable");
-}
-async function sandboxTest(spec:ProjectSpec,onProgress:(text:string,command?:string)=>Promise<void>){
- // Entire untrusted project runs ONLY in a stopped-after-use, network-denied microVM.
- // No AGENT checkout, host process execution, shell, credentials or npm install.
- let sandbox:Sandbox|null=null;
- let log="$ sandbox --network deny-all --stop-after-run\n";
- try{
-  sandbox=await Sandbox.create({timeout:PER_ATTEMPT_MS,networkPolicy:"deny-all",
-    resources:{vcpus:1}});
-  const dirs=new Set<string>();
-  for(const file of spec.files){
-    const parts=file.path.split("/");
-    for(let i=1;i<parts.length;i++)dirs.add(parts.slice(0,i).join("/"));
-  }
-  for(const path of [...dirs].sort((a,b)=>a.split("/").length-b.split("/").length))
-    await sandbox.mkDir(path);
-  await sandbox.writeFiles(spec.files.map(f=>({path:f.path,content:Buffer.from(f.content,"utf8")})));
-  await onProgress("كُتبت "+spec.files.length+" ملفات في مساحة مشروع مستقلة.");
-  const check=spec.files.filter(f=>/\.(?:js|mjs|cjs)$/.test(f.path)).slice(0,16);
-  for(const file of check){
-    const r=await sandbox.runCommand({cmd:"node",args:["--check",file.path],cwd:"/vercel/sandbox"});
-    const out=(await r.stdout()).slice(0,500),err=(await r.stderr()).slice(0,850);
-    const command="$ node --check "+file.path+"\\n"+out+err+"[exit="+r.exitCode+"]\\n";
-    log+=command;
-    await onProgress("فحص صياغة "+file.path+"...",command);
-    if(r.exitCode!==0)return {passed:false,log:log.slice(0,14000)};
-  }
-  await onProgress("فحص الصياغة ناجح؛ تشغيل اختبارات المشروع...","$ node --test\n");
-  const r=await sandbox.runCommand({cmd:"node",args:["--test"],cwd:"/vercel/sandbox"});
-  log+="$ node --test\n"+(await r.stdout()).slice(0,8500)+
-    (await r.stderr()).slice(0,2600)+"\n[exit="+r.exitCode+"]\n";
-  return {passed:r.exitCode===0,log:log.slice(0,14000)};
- }catch(e){
-  log+="[sandbox error] "+(e instanceof Error?e.name:"UNAVAILABLE")+
-    " — no project tests were confirmed.\n";
-  return {passed:false,log:log.slice(0,14000),unavailable:true};
- }finally{
-  if(sandbox)try{await sandbox.stop();}catch{console.warn("AGENT project sandbox stop failed");}
- }
 }
 
 export async function GET(req:NextRequest){
