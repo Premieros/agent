@@ -6,7 +6,7 @@ import {createPortal} from "react-dom";
 import {
   ArrowRight, Bot, BookOpen, Check, ChevronDown, CircleAlert, Code2, Copy,
   FileText, Lightbulb, LoaderCircle, Menu, MessageCircle, Plus, Send, ShieldCheck,
-  Sparkles, Trash2, WandSparkles, PlugZap, Globe, Minus, PlusCircle, Paperclip, ThumbsUp, ThumbsDown
+  Sparkles, Trash2, WandSparkles, PlugZap, Globe, Minus, PlusCircle, Paperclip, ThumbsUp, ThumbsDown, Terminal, Save
 } from "lucide-react";
 import { getSupabase } from "@/lib/supabase-browser";
 import { currentSession } from "@/lib/auth-session";
@@ -19,7 +19,8 @@ import {detectAgentIntent,describeAgentIntent,extractMemory,requiresApproval,typ
 type Thread = { id:string; title:string; skill:AssistantSkill; updated_at:string; created_at:string };
 type ChatMessage = {id:string;role:"user"|"assistant";content:string;model?:string|null;skill?:string|null;created_at:string};
 type WorkRun={id:string;status:"planned"|"running"|"executed"|"reporting"|"completed"|"failed";
-  steps:string[];stage_note:string;sandbox_ran:boolean;sandbox_succeeded:boolean|null};
+  steps:string[];stage_note:string;sandbox_ran:boolean;sandbox_succeeded:boolean|null;
+  execution_log?:string;report?:string};
 type StudioPage={id:string;name:string;platform:string;connection_status:string};
 type StudioMission={id:string;page_id:string;objective:string;brief:string;status:string;created_at:string};
 type StudioDraft={id:string;page_id:string;objective:string;brief:string;
@@ -91,6 +92,9 @@ export default function GeneralAssistant() {
   const [workProgress,setWorkProgress]=useState("");
   const [workSteps,setWorkSteps]=useState<string[]>([]);
   const [pendingWork,setPendingWork]=useState<WorkRun|null>(null);
+  const [terminalVisible,setTerminalVisible]=useState(true);
+  const [artifactBusy,setArtifactBusy]=useState(false);
+  const [savedArtifacts,setSavedArtifacts]=useState<string[]>([]);
   const [busy,setBusy]=useState("");
   const [loading,setLoading]=useState(true);
   const [authorized,setAuthorized]=useState(false);
@@ -319,12 +323,13 @@ export default function GeneralAssistant() {
       });
       if(!res.ok)return;
       const data=await res.json() as {runs?:WorkRun[]};
-      const running=(data.runs||[]).find(r=>
+      const active=(data.runs||[]).find(r=>
         ["planned","running","executed","reporting"].includes(r.status));
-      setPendingWork(running||null);
-      if(running){
-        setWorkSteps(running.steps||[]);
-        setWorkProgress(running.stage_note||"مهمة محفوظة بانتظار استكمال.");
+      const current=active||data.runs?.[0]||null;
+      setPendingWork(current);
+      if(current){
+        setWorkSteps(current.steps||[]);
+        setWorkProgress(current.stage_note||"مهمة محفوظة بانتظار استكمال.");
       }
     }catch{/* The normal chat stays usable even when run history is unavailable. */}
   }
@@ -501,12 +506,29 @@ export default function GeneralAssistant() {
     finally{setBusy("");}
   }
 
+  async function saveWorkArtifact(runId:string){
+    if(artifactBusy||!threadId)return;
+    setArtifactBusy(true);setError("");
+    try{
+      const res=await fetch("/api/assistant/work",{
+        method:"POST",headers:await authHeaders(),
+        body:JSON.stringify({action:"save_artifact",runId})
+      });
+      const value=await res.json() as {ok?:boolean;error?:string};
+      if(!res.ok||!value.ok)throw new Error(value.error||"تعذر حفظ التجربة.");
+      setSavedArtifacts(prev=>[...new Set([...prev,runId])]);
+      setNote("تم حفظ الكود وسجل أوامر التجربة في مكتبتك.");
+    }catch(e){setError(e instanceof Error?e.message:"تعذر حفظ التجربة.");}
+    finally{setArtifactBusy(false);}
+  }
+
   async function finishWork(initial:WorkRun,id:string){
-    setBusy("work");setError("");
+    setBusy("work");setError("");setTerminalVisible(true);
     let run=initial;
     try{
       if(run.status==="planned"){
         setWorkProgress("تنفيذ خطة العمل...");
+        setPendingWork({...run,status:"running",stage_note:"إنشاء بيئة الاختبار المعزولة..."});
         const resp=await fetch("/api/assistant/work",{
           method:"POST",headers:await authHeaders(),
           body:JSON.stringify({action:"execute",runId:run.id})
@@ -532,7 +554,7 @@ export default function GeneralAssistant() {
       });
       const result=await resp.json() as {status?:string;error?:string;message?:ChatMessage};
       if(!resp.ok||!result.message)throw new Error(result.error||"تعذر تجهيز التقرير.");
-      setPendingWork(null);setWorkSteps([]);
+      await loadWorkState(id);
       setWorkProgress(result.status==="completed"?
         (run.sandbox_ran?"اكتمل التحليل في البيئة المعزولة.":"اكتمل تحليل الأدلة دون تشغيل كود."):
         "انتهت المحاولة مع فشل الاختبار. راجع التقرير.");
@@ -555,6 +577,12 @@ export default function GeneralAssistant() {
       setBusy("");
     }
   }
+
+  useEffect(()=>{
+    if(!threadId||!pendingWork||!["running","reporting"].includes(pendingWork.status))return;
+    const timer=setInterval(()=>{void loadWorkState(threadId);},1400);
+    return()=>clearInterval(timer);
+  },[threadId,pendingWork?.id,pendingWork?.status]);
 
   async function sendMessage(text=draft,approved=false) {
     const message=text.trim();
@@ -868,16 +896,41 @@ export default function GeneralAssistant() {
                 initialView={workspaceView} initialOpenLead={workspaceCreateLead}
                 authHeaders={authHeaders} onClose={()=>{setWorkspaceView(null);setWorkspaceCreateLead(false);}}
                 onPrompt={prompt=>void sendMessage(prompt)}/>}
-              {pendingWork&&<div className="assistant-work-steps" role="status">
-                <strong>{workProgress||pendingWork?.stage_note}</strong>
-                <span>{workSteps.map((step,i)=>(i+1)+". "+step).join(" · ")}</span>
-                {pendingWork&&["planned","executed"].includes(pendingWork.status)&&
-                  <button type="button" disabled={Boolean(busy)}
-                    onClick={()=>requestApproval("work-resume","استكمال مهمة عمل محفوظة")}>استكمال</button>}
-                {pendingWork&&["running","reporting"].includes(pendingWork.status)&&
-                  <button type="button" disabled={Boolean(busy)}
-                    onClick={()=>void loadWorkState(threadId)}>تحديث</button>}
-              </div>}
+              {pendingWork&&<section className="assistant-work-steps agent-work-terminal" aria-label="ترمنال تجربة AGENT">
+                <div className="agent-work-terminal-head">
+                  <strong><Terminal size={15}/> تجربة Sandbox · {pendingWork.status==="running"?"قيد التنفيذ":
+                    pendingWork.status==="planned"?"بانتظار موافقتك":
+                    pendingWork.status==="reporting"?"تحليل النتيجة": "سجل التجربة"}</strong>
+                  <button type="button" aria-expanded={terminalVisible}
+                    onClick={()=>setTerminalVisible(v=>!v)}>
+                    {terminalVisible?"إخفاء الترمنال":"عرض الترمنال"} <ChevronDown size={14}/>
+                  </button>
+                </div>
+                <p>{pendingWork.stage_note||workProgress}</p>
+                {terminalVisible&&<>
+                  <div className="agent-work-plan" aria-label="ملخص خطة العمل">
+                    {pendingWork.steps?.map((step,i)=><span key={i}>{i+1}. {step}</span>)}
+                  </div>
+                  <pre className="agent-work-stdout" dir="ltr" aria-label="أوامر ومخرجات التنفيذ الفعلية">
+                    {pendingWork.execution_log||(
+                      pendingWork.status==="planned"?"$ awaiting your approval":
+                      pendingWork.status==="running"?"$ starting isolated sandbox...":
+                      "$ no command output recorded")}
+                  </pre>
+                  <small>يُعرض هنا سجل الأوامر ونتائجها الحقيقية، وليس التفكير الداخلي للنموذج. GitHub للقراءة فقط؛ لا دفع كود ولا نشر.</small>
+                </>}
+                <div className="agent-work-controls">
+                  {["planned","executed"].includes(pendingWork.status)&&
+                    <button type="button" disabled={Boolean(busy)}
+                      onClick={()=>requestApproval("work-resume","استكمال مهمة عمل محفوظة")}>استكمال</button>}
+                  {["running","reporting"].includes(pendingWork.status)&&
+                    <button type="button" onClick={()=>void loadWorkState(threadId)}>تحديث</button>}
+                  {["executed","completed","failed"].includes(pendingWork.status)&&
+                    <button type="button" disabled={artifactBusy||Boolean(busy)}
+                      onClick={()=>void saveWorkArtifact(pendingWork.id)}><Save size={14}/>
+                      {savedArtifacts.includes(pendingWork.id)?"محفوظ في المكتبة":"حفظ الكود والسجل"}</button>}
+                </div>
+              </section>}
               {activeArea==="studio"&&<div className="assistant-studio-tools">
                 <button type="button" className="assistant-studio-tools-toggle"
                   aria-expanded={showStudioControls}

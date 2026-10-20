@@ -1563,3 +1563,51 @@
 .workspace-shell .workspace-page .general-assistant-root .assistant-md li::marker{
   color:#a9b9c9!important;
 }
+
+
+/* Safe, read-only AGENT work terminal; only actual recorded commands/output. */
+.workspace-shell .workspace-page .general-assistant-root .agent-work-terminal{
+  max-width:860px;min-width:0;padding:13px;margin:12px auto 20px;
+  border:1px solid #426878!important;border-radius:12px;
+  background:#1a2835!important;color:#dcecf6!important;
+}
+.workspace-shell .workspace-page .general-assistant-root .agent-work-terminal-head,
+.workspace-shell .workspace-page .general-assistant-root .agent-work-controls{
+  display:flex;justify-content:space-between;align-items:center;
+  flex-wrap:wrap;gap:10px;
+}
+.workspace-shell .workspace-page .general-assistant-root .agent-work-terminal-head strong{
+  display:flex;align-items:center;gap:8px;color:#93ddcb;
+  font-size:12px;
+}
+.workspace-shell .workspace-page .general-assistant-root .agent-work-terminal-head button,
+.workspace-shell .workspace-page .general-assistant-root .agent-work-controls button{
+  display:inline-flex;gap:6px;align-items:center;
+  padding:6px 10px;background:#294552!important;border:1px solid #4b7984!important;
+  border-radius:8px;color:#dbf2f6!important;font-size:11px;cursor:pointer;
+}
+.workspace-shell .workspace-page .general-assistant-root .agent-work-terminal p{
+  margin:10px 0!important;color:#bcceda!important;font-size:11px!important;
+}
+.workspace-shell .workspace-page .general-assistant-root .agent-work-plan{
+  display:flex;flex-direction:column;gap:3px;
+  color:#c4d7e4!important;font-size:11px;line-height:1.6;
+  border-bottom:1px solid #334d5a;margin:8px 0 10px;padding-bottom:9px;
+}
+.workspace-shell .workspace-page .general-assistant-root .agent-work-stdout{
+  display:block;max-height:315px;min-height:70px;overflow:auto;width:100%;
+  padding:13px;background:#101d29!important;border:1px solid #354e60;
+  border-radius:9px;color:#b4eddc!important;font:12px/1.7 ui-monospace,SFMono-Regular,Consolas,monospace!important;
+  white-space:pre-wrap;overflow-wrap:anywhere;text-align:left;direction:ltr;
+}
+.workspace-shell .workspace-page .general-assistant-root .agent-work-terminal small{
+  color:#aabfcb!important;font-size:10px;display:block;margin-bottom:10px;
+}
+.workspace-shell .workspace-page .general-assistant-root .agent-work-controls{
+  justify-content:flex-start;
+}
+@media(prefers-reduced-motion:reduce){
+  .workspace-shell .workspace-page .general-assistant-root .agent-work-terminal *{
+    transition:none!important;
+  }
+}
