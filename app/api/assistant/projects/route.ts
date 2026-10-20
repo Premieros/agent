@@ -202,21 +202,21 @@ export async function POST(req:NextRequest){
 
   if(body.action==="approve"){
    if(run.status!=="planned")return response({error:"المشروع لم يعد في انتظار الموافقة."},409);
-   if(process.env.AGENT_FREE_SANDBOX_VERIFIED!=="1")
-    return response({error:"تشغيل Sandbox معطّل لحماية شرط عدم الإنفاق. لا يُفتح إلا بعد التحقق من توفر حصة مجانية فعلية، دون إضافة خدمة مدفوعة."},409);
+   if(!githubActionsConfigured())
+    return response({error:"GitHub Actions غير مهيأ بالصلاحيات السابقة."},409);
    const maxAttempts=body.maxAttempts===1?1:2;
    const now=Date.now();
    const ok=await claim(s,run,"planned","ready",{
     approved_at:new Date(now).toISOString(),deadline_at:new Date(now+TTL_MS).toISOString(),
-    max_attempts:maxAttempts,stage_note:"تمت الموافقة. جاهز لفحص الملفات والاختبارات."
+    max_attempts:maxAttempts,stage_note:"تم التصريح بإرسال ملفات هذا المشروع إلى GitHub Actions العام؛ لا حاجة لموافقة أخرى أثناء الإصلاح."
    });
    return ok?response({ok:true,status:"ready"}):response({error:"الموافقة مسجّلة بالفعل."},409);
   }
 
   if(body.action==="advance"){
    if(!run.approved_at||!run.deadline_at)return response({error:"التشغيل يتطلب موافقتك أولًا."},403);
-   if(process.env.AGENT_FREE_SANDBOX_VERIFIED!=="1")
-    return response({error:"البيئة المجانية غير معتمدة؛ لن يتم تشغيل كود يمكن أن يستهلك رصيدًا مدفوعًا."},409);
+   if(!githubActionsConfigured())
+    return response({error:"مشغّل GitHub Actions غير مهيأ."},409);
    const deadline=new Date(run.deadline_at).getTime();
    if(!canAdvanceProject(run.status,true,run.attempts,run.max_attempts,deadline,Date.now())){
     if(Date.now()>=deadline&&["ready","repairing"].includes(run.status)){
@@ -225,7 +225,11 @@ export async function POST(req:NextRequest){
     return response({error:"انتهى العمل أو تجاوزه للحدود المعتمدة.",status:run.status},409);
    }
    if(run.status==="repairing"){
-    if(run.model_calls>=2)return response({error:"انتهى حد استدعاءات النماذج."},409);
+    if(run.model_calls!==1){
+     await claim(s,run,"repairing","failed",{test_passed:false,
+       stage_note:"الاختبار فشل. الوصفة المتعلّمة لا تستدعي نموذجًا تلقائيًا؛ تحتاج وصفة إصلاح جديدة."});
+     return response({ok:true,status:"failed"});
+    }
     const claimed=await claim(s,run,"repairing","testing",{
       stage_note:"تحليل سجل الاختبار وصياغة إصلاح للمشروع..."});
     if(!claimed)return response({error:"طلب إصلاح آخر يعمل بالفعل."},409);
@@ -255,27 +259,24 @@ export async function POST(req:NextRequest){
     }
    }
    const attempts=run.attempts+1;
+   const requestId=crypto.randomUUID();
    const claimed=await claim(s,run,"ready","testing",{
-    attempts,stage_note:"الاختبار "+attempts+"/"+run.max_attempts+" داخل Sandbox مستقل..."});
-   if(!claimed)return response({error:"بدأ الاختبار بالفعل."},409);
-   let events="";
-   const result=await sandboxTest(specFrom(run),async (stage,command)=>{
-    events+=stage+"\\n"+(command||"");
-    await note(s,run,{stage_note:stage,
-     execution_log:(run.execution_log+"\\n"+events).slice(-14000)},"testing");
+    attempts,github_request_id:requestId,github_run_id:null,test_passed:null,
+    stage_note:"إرسال المشروع إلى حاوية GitHub Actions معزولة عن مصدر AGENT.",
+    execution_log:(run.execution_log+"\n$ GitHub Actions attempt "+attempts+
+      " request "+requestId+"\n").slice(-14000)
    });
-   const log=[run.execution_log,"\n## Attempt "+attempts+"\n",events,result.log].join("\n").slice(-14000);
-   const expired=Date.now()>=deadline;
-   const status=!expired&&result.passed?"completed":
-     (result.unavailable||expired||attempts>=run.max_attempts?"failed":"repairing");
-   await note(s,run,{status,execution_log:log,test_passed:result.passed,
-     stage_note:result.passed?"اجتاز المشروع اختبارات Node.js المحددة.":
-       status==="repairing"?"فشلت الاختبارات؛ سيحلل AGENT الأخطاء ويُصلح الملفات مرة واحدة.":
-       "انتهى التنفيذ دون اختبار ناجح؛ لا إعادة تلقائية خارج الحدود."},"testing");
-   if(status==="completed"||status==="failed"){
-    if(!result.unavailable)await finishExperience(s,{...run,attempts},!expired&&result.passed);
+   if(!claimed)return response({error:"الاختبار بدأ بالفعل."},409);
+   try{
+    await dispatchAgentProject({requestId,files:specFrom(run).files});
+   }catch(e){
+    // A timeout may occur AFTER GitHub accepted a dispatch. Never resend
+    // blindly; poll the same request ID and expire with a bounded deadline.
+    await note(s,run,{stage_note:
+      "لم يتأكد استلام GitHub للمهمة؛ سنفحص المعرف دون إعادة إرسال مكررة."},"testing");
+    console.warn("AGENT project dispatch uncertain",e instanceof Error?e.message:"unknown");
    }
-   return response({ok:true,status,attempts,testPassed:result.passed});
+   return response({ok:true,status:"testing",attempts});
   }
 
   if(body.action==="save"){
