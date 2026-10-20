@@ -18,6 +18,7 @@ export default function GithubConnectionPanel(){
   const [working,setWorking]=useState("");
   const [error,setError]=useState("");
   const [notice,setNotice]=useState("");
+  const [actionsInfo,setActionsInfo]=useState<{configured:boolean;repository:string;workflow:string}|null>(null);
 
   const credentials=useCallback(async()=>{
     if(!db)throw new Error("سجّل دخولك أولًا.");
@@ -29,10 +30,12 @@ export default function GithubConnectionPanel(){
   const refresh=useCallback(async()=>{
     try{
       const headers=await credentials();
-      const [p,e]=await Promise.all([
+      const [p,e,a]=await Promise.all([
         fetch("/api/assistant/github",{headers,cache:"no-store"}),
-        fetch("/api/assistant/tool-events",{headers,cache:"no-store"})
+        fetch("/api/assistant/tool-events",{headers,cache:"no-store"}),
+        fetch("/api/assistant/github-actions",{headers,cache:"no-store"})
       ]);
+      if(a.ok)setActionsInfo(await a.json() as {configured:boolean;repository:string;workflow:string});
       const project=await p.json() as Saved&{error?:string};
       if(!p.ok)throw new Error(project.error||"تعذر تحميل المشروع.");
       setSaved(project);setInput(project.repository);
@@ -69,7 +72,7 @@ export default function GithubConnectionPanel(){
   return <section className="integration-project-panel" aria-label="إدارة مستودع GitHub">
     <div className="integration-project-heading">
       <div><h2><Link2 size={19}/> مستودع GitHub للمساعد</h2>
-        <p>اختَر مستودع GitHub <strong>عامًا</strong> لقراءة كوده. تشغيل الكود واختباره يتم في <strong>Vercel Sandbox</strong> المعزول، وليس داخل GitHub. هذا الاتصال لا يمنح AGENT صلاحية كتابة أو GitHub Actions أو الوصول إلى مستودع خاص.</p></div>
+        <p>قراءة كود المستودعات العامة منفصلة عن تشغيل الاختبارات. يمكن تشغيل تجارب Node.js في <strong>GitHub Actions</strong> بعد تفويض GitHub App صريح؛ وتظل تجربة Vercel Sandbox خيارًا يدويًا. لا يتيح ربط القراءة وحده تشغيل Workflows أو تعديل المستودعات.</p></div>
     </div>
     <div className="integration-project-form">
       <label htmlFor="agent-github-project">رابط المستودع أو owner/repo</label>
@@ -98,6 +101,23 @@ export default function GithubConnectionPanel(){
     </p>}
     {error&&<p className="integration-project-error"><AlertCircle size={15}/>{error}</p>}
     <p className="integration-project-note">هذه الوصلة لا تفتح مستودعات خاصة ولا تستخدم GitHub OAuth. قد تتطلب المستودعات الخاصة إذن GitHub App في إصدار لاحق.</p>
+    <div className="integration-project-current" role="status">
+      <BookOpen size={16}/>
+      <div>
+        <strong>GitHub Actions — تنفيذ تجارب AGENT</strong>
+        <p>{actionsInfo?.configured
+          ?"إعدادات GitHub App موجودة على الخادم، لكن نجاح التفويض لا يتأكد إلا عند تشغيل تجربة معتمدة."
+          :"لم تُضف بيانات GitHub App إلى AGENT بعد؛ لا يمكن تشغيل GitHub Actions آليًا من المحادثة."}</p>
+        <p>المستودع الوحيد المسموح بتنفيذ التجارب عليه: <code>Premieros/agent</code> ·
+          Workflow: <code>agent-experiment.yml</code>.</p>
+        <p>للتفعيل: أنشئ GitHub App بصلاحيات <code>Actions: Read and write</code> و
+          <code>Metadata: Read</code> فقط، ثم ثبّته على مستودع AGENT وحده.
+          أضف المتغيرات التالية إلى مشروع AGENT في Vercel:</p>
+        <code dir="ltr">AGENT_GITHUB_APP_ID · AGENT_GITHUB_APP_INSTALLATION_ID · AGENT_GITHUB_APP_PRIVATE_KEY</code>
+        <p>لا ترسل المفتاح الخاص في المحادثة. سجلات Actions في هذا المستودع العام قد تكون علنية؛
+          استخدم كودًا تجريبيًا فقط، بدون مفاتيح أو بيانات عملاء. التشغيل لا يكتب كودًا إلى GitHub ولا ينشر تطبيقًا.</p>
+      </div>
+    </div>
     <div className="integration-audit-head"><h3>آخر عمليات الأدوات</h3>
       <button type="button" onClick={()=>void refresh()} title="تحديث السجل"><RefreshCw size={14}/></button>
     </div>
