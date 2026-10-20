@@ -14,7 +14,7 @@ on:
         required: true
         type: string
 
-# No GITHUB_TOKEN repository permissions. Never checkout source or use secrets.
+# No workflow repository permissions. Never checkout source or use secrets.
 permissions: {}
 
 concurrency:

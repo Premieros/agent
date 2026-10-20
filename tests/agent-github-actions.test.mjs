@@ -53,7 +53,7 @@ test("GitHub Actions queue is visible in the existing AGENT mini-terminal",()=>{
 });
 test("github App setup is explained but not represented as connected without testing",()=>{
   const panel=read("components/github-connection-panel.tsx");
-  assert.match(panel,/configured\?/);
+  assert.match(panel,/actionsInfo\?\.configured/);
   assert.match(panel,/AGENT_GITHUB_APP_INSTALLATION_ID/);
   assert.match(panel,/نجاح التفويض لا يتأكد إلا عند تشغيل تجربة/);
   const api=read("app/api/assistant/github-actions/route.ts");
