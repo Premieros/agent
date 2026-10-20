@@ -33,8 +33,8 @@ export function planAgentTurn(input:{
   if(publicPageRequested)desired.push("public_page");
   if(input.libraryItemSelected)desired.push("library");
   if(workspaceWords.test(prompt))desired.push("workspace");
-  const tools=desired.filter(tool=>tool==="library"||
-    (tool==="workspace"||tool==="library"?true:tool==="github"?input.githubEnabled:input.webEnabled));
+  const tools=desired.filter(tool=>tool==="library"||tool==="workspace"||
+    (tool==="github"?input.githubEnabled:input.webEnabled));
   const blocked=desired.filter(tool=>!tools.includes(tool));
   const goal:AgentTurnPlan["goal"]=fresh?"fresh_research":
     githubRequested?"code_review":input.libraryItemSelected?"document_analysis":
