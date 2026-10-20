@@ -30,7 +30,7 @@ export default function AgentProjectBuilder({threadId,refreshKey,authHeaders,api
    const res=await apiFetch("/api/assistant/projects?threadId="+encodeURIComponent(threadId),
     {headers:await authHeaders(),cache:"no-store"});
    if(!res.ok)return;
-   const data=await res.json() as {project:ProjectBuild|null};
+   const data=await readAssistantApiJson<{project:ProjectBuild|null}>(res);
    setProject(data.project||null);
   }catch{/* Main chat stays available independently. */}
  },[threadId,refreshKey,apiFetch,authHeaders]);
