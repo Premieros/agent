@@ -64,6 +64,6 @@ grant select,insert,update on public.assistant_project_builds to authenticated;
 -- The existing private library already supports kind='other'. Allow ZIP files
 -- in the existing AGENT bucket, without creating a new public bucket.
 update storage.buckets
-set allowed_mime_types=array_append(coalesce(allowed_mime_types,array[]::text[]),'application/zip')
-where id='agent-library'
-  and not ('application/zip'=any(coalesce(allowed_mime_types,array[]::text[])));
+set allowed_mime_types=array_append(allowed_mime_types,'application/zip')
+where id='agent-library' and allowed_mime_types is not null
+  and not ('application/zip'=any(allowed_mime_types));
