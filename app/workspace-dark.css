@@ -1531,3 +1531,35 @@
   max-width:860px;margin:4px auto;display:flex;align-items:center;
   gap:10px;flex-wrap:wrap;color:#b4ebdc!important;font-size:11px;
 }
+
+
+/* Chat-first presentation: one result, optional contextual controls.
+   The full task studio is retained but collapsed instead of duplicating
+   read-only information below every agent response. */
+.workspace-shell .workspace-page .general-assistant-root .assistant-studio-tools{
+  max-width:860px;margin:8px auto 14px;min-width:0;
+}
+.workspace-shell .workspace-page .general-assistant-root .assistant-studio-tools-toggle{
+  display:inline-flex;gap:8px;align-items:center;justify-content:center;
+  padding:7px 12px;color:#c6ebec!important;background:#243744!important;
+  border:1px solid #42616b!important;border-radius:9px;
+  font:700 11px "Cairo",Tahoma,sans-serif;cursor:pointer;
+}
+.workspace-shell .workspace-page .general-assistant-root .assistant-studio-tools-toggle:hover,
+.workspace-shell .workspace-page .general-assistant-root .assistant-studio-tools-toggle:focus-visible{
+  background:#2b4854!important;border-color:#6babb0!important;
+}
+.workspace-shell .workspace-page .general-assistant-root .assistant-studio-tools-toggle>svg:last-child{
+  transition:transform .16s ease;
+}
+.workspace-shell .workspace-page .general-assistant-root .assistant-studio-tools-toggle>svg.expanded{
+  transform:rotate(180deg);
+}
+.workspace-shell .workspace-page .general-assistant-root .assistant-studio-tools>.assistant-studio-control{
+  margin:8px 0 0!important;padding:12px!important;background:#1f303f!important;
+  border-color:#3d5d70!important;
+}
+/* A green bullet should never imply a disconnected service is connected. */
+.workspace-shell .workspace-page .general-assistant-root .assistant-md li::marker{
+  color:#a9b9c9!important;
+}
