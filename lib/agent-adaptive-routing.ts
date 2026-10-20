@@ -16,7 +16,7 @@ export function taskDomain(text:string,skill="auto"):AgentDomain{
     ["coding","github","pos_development"].includes(skill))return "coding";
   if(/(?:\b(?:research|source|citation|news|web search)\b|مصادر|ابحث|أخبار|اخبار|مراجع|تطورات)/iu.test(q)||
     skill==="browser")return "research";
-  if(/(?:\b(?:campaign|advert|marketing|social media)\b|تسويق|اعلان|إعلان|حملات|الصفحات|منشور)/iu.test(q)||skill==="marketing")return "marketing";
+  if(/(?:\b(?:campaign|advert|marketing|social media)\b|تسويق|اعلان|إعلان|حملات|الصفحات|منشور\s+إعلاني)/iu.test(q)||skill==="marketing")return "marketing";
   if(/(?:\b(?:draft|rewrite|story|article|write)\b|اكتب|صياغ|تحرير|مقال|قصة|محتوى)/iu.test(q)||
     skill==="writing")return "writing";
   if(/(?:\b(?:analyze|analyse|analysis|calculate|csv|json)\b|حلل|تحليل|احسب|بيانات|أرقام|ارقام)/iu.test(q)||
