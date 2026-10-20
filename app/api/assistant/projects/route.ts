@@ -232,6 +232,7 @@ export async function POST(req:NextRequest){
      return response({ok:true,status:"failed"});
     }
     const claimed=await claim(s,run,"repairing","testing",{
+      github_request_id:null,github_run_id:null,
       stage_note:"تحليل سجل الاختبار وصياغة إصلاح للمشروع..."});
     if(!claimed)return response({error:"طلب إصلاح آخر يعمل بالفعل."},409);
     try{
