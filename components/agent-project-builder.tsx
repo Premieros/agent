@@ -44,15 +44,10 @@ export default function AgentProjectBuilder({threadId,refreshKey,authHeaders,api
  }
  async function approve(){
   if(!project||project.status!=="planned"||busy)return;
-  const confirmation=window.confirm(
-   "الموافقة على تشغيل كود هذه الملفات داخل Sandbox معزول دون شبكة، بحد "+
-   maxAttempts+" اختبار/اختبارات، وإصلاح تلقائي واحد كحد أقصى، واستدعاء نموذج إصلاح مجاني واحد، ومهلة إجمالية 3 دقائق. لا تثبيت npm أو نشر أو تعديل AGENT. لا نبدأ إن لم تُؤكَّد الحصة المجانية. هل توافق؟"
-  );
-  if(!confirmation)return;
   setBusy(true);setError("");setNote("");
   try{
    await post("approve",{maxAttempts});
-   setNote("تم تسجيل الموافقة والحدود؛ تبدأ خطوات الاختبار تلقائيًا.");
+   setNote("سمحت بتشغيل ملفات هذا المشروع على GitHub Actions؛ لن يطلب AGENT الموافقة مجددًا أثناء اختباراته وإصلاحه.");
    await load();
   }catch(e){setError(e instanceof Error?e.message:"تعذر اعتماد الحدود.");}
   finally{setBusy(false);}
@@ -117,7 +112,7 @@ export default function AgentProjectBuilder({threadId,refreshKey,authHeaders,api
      project.status==="repairing"?"تحليل الأخطاء وإصلاح الملفات":
      project.status==="testing"?"تشغيل اختبارات التطبيق":"جاهز لخطوة الاختبار التالية"}</strong>
    <p>{project.stage_note}</p>
-   <small>{project.files.length} ملفات · المحاولة {project.attempts}/{project.max_attempts} · استدعاءات النموذج {project.model_calls}/2 · لا نشر أو دمج</small>
+   <small>{project.files.length} ملفات · المحاولة {project.attempts}/{project.max_attempts} · استدعاءات النموذج {project.model_calls}/2 · GitHub Actions · دون نشر أو دمج</small>
   </div>
   {project.status==="planned"&&<>
    <div className="agent-work-plan">
@@ -136,12 +131,14 @@ export default function AgentProjectBuilder({threadId,refreshKey,authHeaders,api
      <option value={2}>محاولتان، مع إصلاح واحد كحد أقصى</option>
     </select>
    </label>
-   <small>المهلة الكلية 3 دقائق، وكل اختبار بحد 18 ثانية؛ النموذج مجاني مؤكد فقط. لا تنشيط تلقائي لـSandbox إذا كانت حصته المجانية غير مؤكدة.</small>
+   <small>المهلة الكلية 12 دقيقة متضمنة انتظار GitHub، والاختبار داخل حاوية بلا شبكة بحد 45 ثانية في كل محاولة؛ حدّ أقصى لاختبارين وإصلاح مجاني واحد عند الحاجة. GitHub Actions في مستودع عام وقد تظهر المدخلات والسجلات؛ لا ترسل أسرارًا أو بيانات خاصة. لا تُطلب موافقة لكل خطوة.</small>
    <div className="agent-work-controls"><button type="button" disabled={busy}
-    onClick={()=>void approve()}>أوافق على الحدود وأبدأ الاختبار</button></div>
+    onClick={()=>void approve()}>أسمح بإرسال هذا المشروع العام وبدء الاختبار</button></div>
   </>}
   {project.status==="testing"||project.status==="repairing"||project.status==="ready"?
    <p role="status"><LoaderCircle className="crm-spin" size={15}/> {project.stage_note}</p>:null}
+  {project.github_run_id&&<a target="_blank" rel="noopener noreferrer"
+    href={"https://github.com/Premieros/agent/actions/runs/"+project.github_run_id}>فتح سجل GitHub Actions</a>}
   {finished&&<div className="agent-work-controls">
    <button type="button" onClick={()=>void download()} disabled={busy}>
     <Download size={14}/> تنزيل التطبيق ZIP
