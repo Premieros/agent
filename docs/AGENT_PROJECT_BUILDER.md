@@ -123,6 +123,47 @@ Identical owner-verified requests can reuse their previous files without AI.
 6. Keep the existing production branch and other resources unchanged.
 
 
+## Improvements staged for review (2026-10-21)
+
+**Independent acceptance:** The trusted AGENT workflow can now run a separate,
+read-only HTTP acceptance suite mounted outside generated project files for
+audited inventory or task-board recipes. The test result is not accepted
+without the independent acceptance marker. Arbitrary newly generated apps
+still require dedicated independent acceptance specifications: their own
+Node tests are not sufficient evidence of full requirement coverage.
+
+**Owner project history:** Authenticated assistant conversations can select
+among the ten most recent projects, see the current status and retrieve
+owner-only ZIPs. The GitHub run reconciliation scans up to 200 workflow
+dispatches, capped at two pages; IDs are still matched before trusting logs.
+
+**Durable planning quota:** New AGENT-only migration
+`agent_project_plan_quota_20261021` was applied to AGENT's Supabase database.
+An atomic, owner-authorized RPC reserves one of two planning attempts in
+ten minutes **before** the model call, so unsuccessful and timed-out planning
+requests cannot bypass quotas. The new table has RLS and does not expose
+another tenant's data.
+
+**Background executor (not enabled yet):** New `internal-tick` POST route
+is **fail-closed** unless ALL AGENT-only worker settings are provisioned:
+`AGENT_PROJECT_WORKER_SECRET` (random >=32-character secret),
+`AGENT_PROJECT_WORKER_DB_KEY` (AGENT project service-role credential),
+`AGENT_PROJECT_WORKER_PROJECT_ID=gldlgdycgneadbqftcrj`, plus the existing
+AGENT GitHub App connection and Supabase URL. The worker validates the
+AGENT database hostname and uses the original owner/organization scope
+for every row. A tick processes only one previously approved project:
+dispatch, poll, one bounded model repair, or expiration. A signed scheduler
+must be configured separately. **No worker secrets, service-role access,
+scheduler or preview GitHub credentials were provisioned during this work.**
+Without those settings, there is no unattended progression while tabs are
+closed. Do not configure these credentials without scoped approval and a
+review of production access.
+
+The workflow on `main` still accepts only the old one-file
+`code_b64` experiment input. Branch CI passing does not prove the full
+multi-file `workflow_dispatch` contract until a reviewed default-branch
+rollout, or a separately verified equivalent deployment.
+
 ## Limits
 
 - Offline recipes build a **Node.js task manager** and **Arabic inventory site**.
