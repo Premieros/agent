@@ -3,7 +3,7 @@ import {createClient} from "@supabase/supabase-js";
 import {randomUUID} from "node:crypto";
 import {dispatchAgentProject,fetchAgentExperiment,githubActionsConfigured} from "@/lib/agent-github-actions";
 import {parseProjectSpec,publicGithubProjectPreflight,verifiedProjectTest,
- acceptanceKindForModel,repairPreservesTests,type ProjectFile} from "@/lib/agent-project-engine";
+ repairPreservesTests,type ProjectFile} from "@/lib/agent-project-engine";
 import {nextProjectWorkerAction,projectShouldRepair,type AgentProjectPhase} from "@/lib/agent-project-worker-logic";
 import {chooseExperiencedModels,recordSandboxExperience} from "@/lib/agent-experience";
 import {discoverAutoModels,askAutoAgent} from "@/lib/auto-ai";
@@ -16,7 +16,7 @@ type Row={
  title:string;steps:string[];task:string;files:ProjectFile[];
  model:string;model_calls:number;github_request_id:string|null;github_run_id:number|null;
  attempts:number;max_attempts:number;approved_at:string|null;deadline_at:string|null;
- execution_log:string;updated_at:string;
+ execution_log:string;updated_at:string;acceptance_kind:"none"|"inventory"|"task_board";
 };
 function workerClient(){
  const projectId=process.env.AGENT_PROJECT_WORKER_PROJECT_ID;
@@ -63,10 +63,10 @@ export async function runOneAgentProjectWorkerTick(){
    // The previous repair request may have timed out before saving its result.
    // Fail it after a grace period; never resend code without a new run ID.
    const stuck=Date.now()-new Date(row.updated_at).getTime()>90_000;
+   if(!stuck)return {processed:false,action:"repair_running"};
    const {error:e}=await db.from("assistant_project_builds").update({
-    ...(stuck?{status:"failed",test_passed:false,stage_note:
-     "انقطع الإصلاح أو التسجيل قبل إنشاء طلب GitHub جديد."}:{
-     stage_note:"الإصلاح قيد التنفيذ في طلب آخر."}),
+    status:"failed",test_passed:false,stage_note:
+     "انقطع الإصلاح أو التسجيل قبل إنشاء طلب GitHub جديد.",
     updated_at:new Date().toISOString()
    }).eq("id",row.id).eq("user_id",row.user_id)
     .eq("organization_id",row.organization_id).eq("status","testing")
@@ -86,7 +86,7 @@ export async function runOneAgentProjectWorkerTick(){
    return {processed:true,action:"queued"};
   }
   const finished=trace.status==="completed";
-  const success=verifiedProjectTest(trace.log,trace.conclusion,acceptanceKindForModel(row.model));
+  const success=verifiedProjectTest(trace.log,trace.conclusion,row.acceptance_kind||"none");
   const actualExit=/\[exit=(-?\d+)\]/.exec(trace.log);
   const expired=Boolean(row.deadline_at&&
    Date.now()>=new Date(row.deadline_at).getTime());
@@ -125,7 +125,7 @@ export async function runOneAgentProjectWorkerTick(){
   if(!claimed)return {processed:false,action:"already_claimed"};
   try{
    await dispatchAgentProject({requestId,files:spec.files,
-    acceptanceKind:acceptanceKindForModel(row.model)});
+    acceptanceKind:row.acceptance_kind||"none"});
   }catch{
    // GitHub may have received it. Do not dispatch twice.
    await db.from("assistant_project_builds").update({stage_note:
