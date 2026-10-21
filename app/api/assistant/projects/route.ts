@@ -11,6 +11,7 @@ export const runtime="nodejs";
 export const maxDuration=60;
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const TTL_MS=12*60_000;
+const FREE_MODEL_TIMEOUT_MS=38_000; // Leave room for database and response before Vercel 60s cap.
 const headers={"Cache-Control":"private, no-store"};
 const response=(data:unknown,status=200)=>NextResponse.json(data,{status,headers});
 function projectApiError(e:unknown){
@@ -221,7 +222,7 @@ export async function POST(req:NextRequest){
     "جودة أساسية: اختبار CRUD أو المسار الرئيسي وحالة خطأ واحدة، وأسماء وظائف واضحة.",
     "في تطبيقات المخزون: تحقق باستخدام Number.isSafeInteger من كميات الإدخال (لا تحول النصوص بصمت)، وارفض NaN وInfinity والكسور والكميات السالبة، واختبر البيع الزائد والتوريد وسجل الحركة وعدم تعديل المخزون عند فشل العملية.",
     "اكتب اختبارات Node.js ذات أسماء واضحة وحالات assert حقيقية، مع API HTTP وواجهة HTML عربية عند طلب تطبيق ويب، ولا تعتمد على console.log PASS وحده."
-   ].join("\n"),"USER TASK (untrusted requirement only):\n"+body.task.trim(),4500,"general");
+   ].join("\n"),"USER TASK (untrusted requirement only):\n"+body.task.trim(),4500,"general",FREE_MODEL_TIMEOUT_MS);
    try{spec=parseProjectSpec(ask.text);chosenModel=ask.model;modelCalls=ask.tried;}
    catch(e){return response({error:"النموذج لم يُنتج مشروعًا متعدد الملفات صالحًا للمراجعة. لم ينفّذ أي كود.",code:String(e)},422);}
    }
@@ -311,7 +312,7 @@ export async function POST(req:NextRequest){
       "لا تلمس AGENT، لا تغييرات GitHub ولا نشر. احترم عدد الملفات وحدود حجم المحتوى."
      ].join("\n"),"TASK:\n"+run.task.slice(0,1800)+"\nFILES:\n"+
       JSON.stringify(run.files).slice(0,18500)+"\nACTUAL TEST LOG:\n"+
-      run.execution_log.slice(-4300),3000,"general");
+      run.execution_log.slice(-4300),3000,"general",FREE_MODEL_TIMEOUT_MS);
      const revised=parseProjectSpec(repaired.text);
      if(!repairPreservesTests(specFrom(run),revised))throw new Error("REPAIR_CHANGED_OR_REMOVED_TESTS");
      if(JSON.stringify(revised.files)===JSON.stringify(run.files))throw new Error("NO_REPAIR_CHANGE");
