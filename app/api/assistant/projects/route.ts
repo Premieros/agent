@@ -1,6 +1,6 @@
 import {NextRequest,NextResponse} from "next/server";
 import {githubActionsConfigured,dispatchAgentProject,fetchAgentExperiment} from "@/lib/agent-github-actions";
-import {builtInProjectRecipe} from "@/lib/agent-project-recipes";
+import {builtInProjectRecipe,normalizedProjectTask} from "@/lib/agent-project-recipes";
 import {requireAgentSession,errorResponse,type AgentSession} from "@/lib/agent-server";
 import {discoverAutoModels,askAutoAgent} from "@/lib/auto-ai";
 import {chooseExperiencedModels,recordSandboxExperience} from "@/lib/agent-experience";
@@ -194,14 +194,16 @@ export async function POST(req:NextRequest){
    let previouslyApproved=false;
    if(!spec){
     const past=await s.db.from("assistant_project_builds")
-     .select("title,steps,files")
+     .select("task,title,steps,files")
      .eq("organization_id",s.organizationId).eq("user_id",s.userId)
-     .eq("task",body.task.trim()).eq("status","completed").eq("test_passed",true)
+     .eq("status","completed").eq("test_passed",true)
      .not("approved_at","is",null).order("created_at",{ascending:false})
-     .limit(1).maybeSingle();
+     .limit(25);
     if(past.error)throw past.error;
-    if(past.data)try{
-     spec=parseProjectSpec(JSON.stringify(past.data));
+    const candidate=(past.data||[]).find(item=>
+     normalizedProjectTask(item.task)===normalizedProjectTask(body.task));
+    if(candidate)try{
+     spec=parseProjectSpec(JSON.stringify(candidate));
      chosenModel="recipe:verified-reuse";
      previouslyApproved=true;
     }catch{/* Previous data cannot bypass current validation. */}
