@@ -197,11 +197,14 @@ export async function POST(req:NextRequest){
     .eq("user_id",s.userId).maybeSingle();
    if(thread.error)throw thread.error;
    if(!thread.data)return response({error:"المحادثة غير موجودة."},404);
-   const recent=await s.db.from("assistant_project_builds").select("id",{count:"exact",head:true})
-    .eq("organization_id",s.organizationId).eq("user_id",s.userId)
-    .gte("created_at",new Date(Date.now()-10*60_000).toISOString());
-   if(recent.error)throw recent.error;
-   if((recent.count||0)>=2)return response({error:"الحد الآمن: مشروعان خلال 10 دقائق."},429);
+   // Claim the durable per-owner quota *before* calling a model. Failed
+   // planning requests count too. SQL transaction serializes concurrent tabs.
+   const quota=await s.db.rpc("claim_agent_project_plan_slot",{
+    p_organization_id:s.organizationId,p_thread_id:body.threadId
+   });
+   if(quota.error)throw quota.error;
+   if(quota.data!==true)return response({error:
+    "الحد الآمن: محاولتان لتخطيط المشاريع خلال 10 دقائق، بما فيها المحاولات غير المكتملة."},429);
    const builtIn=builtInProjectRecipe(body.task);
    let spec:ProjectSpec|null=builtIn;
    let chosenModel=builtIn?(builtIn.title.includes("مخزون")?"recipe:inventory":"recipe:task-board"):"",modelCalls=0;
