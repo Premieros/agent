@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {readFileSync} from "node:fs";
 import {parseProjectSpec,validProjectPath,zipProjectFiles,packagedProjectFiles,
- canAdvanceProject,verifiedProjectTest,publicGithubProjectPreflight} from "../lib/agent-project-engine.ts";
+ canAdvanceProject,verifiedProjectTest,publicGithubProjectPreflight,repairPreservesTests} from "../lib/agent-project-engine.ts";
 const read=p=>readFileSync(new URL("../"+p,import.meta.url),"utf8");
 const fixture={title:"Task board",steps:["Generate","Test"],files:[
  {path:"server.js",content:"const http=require('node:http'); module.exports={http};\n"},
@@ -169,4 +169,18 @@ test("approved tasks dispatch from server before browser effects and stale polli
  assert.match(source,/\.eq\("github_request_id",expectedGithubRequestId\)/);
  assert.match(source,/if\(transitioned&&finished/);
  assert.match(source,/const claimed=await claim\(s,run,"ready","testing"/);
+});
+
+test("repair cannot delete or weaken the owner's original tests",()=>{
+ const original=parseProjectSpec(JSON.stringify(fixture));
+ const changedTest=structuredClone(original);
+ changedTest.files.find(f=>f.path==="test/server.test.mjs").content="import test from 'node:test';test('always passes',()=>{});";
+ assert.equal(repairPreservesTests(original,changedTest),false);
+ const removedTest=structuredClone(original);
+ removedTest.files=removedTest.files.filter(f=>!f.path.includes(".test."));
+ assert.equal(repairPreservesTests(original,removedTest),false);
+ const repaired=structuredClone(original);
+ repaired.files.find(f=>f.path==="server.js").content+="\n// Valid bug fix\n";
+ assert.equal(repairPreservesTests(original,repaired),true);
+ assert.match(read("app/api/assistant/projects/route.ts"),/REPAIR_CHANGED_OR_REMOVED_TESTS/);
 });
