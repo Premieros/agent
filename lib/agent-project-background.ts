@@ -61,7 +61,16 @@ export async function runOneAgentProjectWorkerTick(){
  if(action==="poll"){
   if(!row.github_request_id)return {processed:false,action:"missing_request_id"};
   const trace=await fetchAgentExperiment(row.github_request_id,row.github_run_id);
-  if(!trace.found)return {processed:true,action:"queued"};
+  if(!trace.found){
+   // Rotate queued jobs so one slow GitHub dispatch does not starve others.
+   await db.from("assistant_project_builds").update({
+    updated_at:new Date().toISOString(),
+    stage_note:"انتظار تعيين مشغّل GitHub للمهمة."
+   }).eq("id",row.id).eq("user_id",row.user_id)
+    .eq("organization_id",row.organization_id).eq("status","testing")
+    .eq("github_request_id",row.github_request_id);
+   return {processed:true,action:"queued"};
+  }
   const finished=trace.status==="completed";
   const success=verifiedProjectTest(trace.log,trace.conclusion,acceptanceKindForModel(row.model));
   const actualExit=/\[exit=(-?\d+)\]/.exec(trace.log);
