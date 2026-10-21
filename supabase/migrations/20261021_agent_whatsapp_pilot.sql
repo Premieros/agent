@@ -59,8 +59,8 @@ begin
    if v_lead is null then
     insert into public.leads(organization_id,full_name,phone,source,business_type)
      values(p_organization_id,
-      pg_catalog.left(pg_catalog.coalesce(
-       pg_catalog.nullif(pg_catalog.btrim(p_customer_name),''),'عميل واتساب'),100),
+      pg_catalog.left(coalesce(
+       nullif(pg_catalog.btrim(p_customer_name),''),'عميل واتساب'),100),
       p_sender,'whatsapp','other') returning id into v_lead;
    end if;
    insert into public.conversations
@@ -82,8 +82,8 @@ begin
  from public.agent_reply_rules r
  where r.organization_id=p_organization_id;
  return pg_catalog.jsonb_build_object('claimed',true,'conversation_id',v_thread,
-  'mode',v_mode,'keyword_enabled',pg_catalog.coalesce(v_rule,false),
-  'keyword',pg_catalog.coalesce(v_trigger,'#مساعد'));
+  'mode',v_mode,'keyword_enabled',coalesce(v_rule,false),
+  'keyword',coalesce(v_trigger,'#مساعد'));
 end;
 $$;
 revoke all on function public.agent_claim_whatsapp_incoming(uuid,text,text,text,text)
