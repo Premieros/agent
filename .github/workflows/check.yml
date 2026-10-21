@@ -44,20 +44,27 @@ jobs:
           import {parseProjectSpec} from "./lib/agent-project-engine.ts";
           import {mkdirSync,writeFileSync} from "node:fs";
           import {join,dirname} from "node:path";
-          const spec=parseProjectSpec(JSON.stringify(builtInProjectRecipe("ابن تطبيق إدارة مهام")));
-          for(const file of spec.files){
-            const target=join(process.env.AGENT_SMOKE_ROOT,file.path);
-            mkdirSync(dirname(target),{recursive:true,mode:0o755});
-            writeFileSync(target,file.content,{mode:0o644});
+          for(const [folder,task] of [
+            ["tasks","ابن تطبيق إدارة مهام"],
+            ["inventory","ابن تطبيق إدارة مخزون"]
+          ]){
+            const spec=parseProjectSpec(JSON.stringify(builtInProjectRecipe(task)));
+            for(const file of spec.files){
+              const target=join(process.env.AGENT_SMOKE_ROOT,folder,file.path);
+              mkdirSync(dirname(target),{recursive:true,mode:0o755});
+              writeFileSync(target,file.content,{mode:0o644});
+            }
           }
           JS
           chmod -R a+rX "$root"
-          timeout 45s docker run --rm \
-            --network none --read-only --cap-drop ALL --security-opt no-new-privileges \
-            --pids-limit 64 --memory 256m --cpus 1 --user 65534:65534 \
-            --tmpfs /tmp:rw,noexec,nosuid,size=16m \
-            --mount "type=bind,src=$root,dst=/workspace,readonly" \
-            node:22-alpine sh -ec 'cd /workspace; node --check server.js; node --test'
+          for job in tasks inventory; do
+            timeout 45s docker run --rm \
+              --network none --read-only --cap-drop ALL --security-opt no-new-privileges \
+              --pids-limit 64 --memory 256m --cpus 1 --user 65534:65534 \
+              --tmpfs /tmp:rw,noexec,nosuid,size=16m \
+              --mount "type=bind,src=$root/$job,dst=/workspace,readonly" \
+              node:22-alpine sh -ec 'cd /workspace; node --check server.js; node --test'
+          done
       - name: Build without external credentials
         run: npm run build
       - name: Check TypeScript
