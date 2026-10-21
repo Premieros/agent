@@ -48,11 +48,14 @@ export async function runOneAgentProjectWorkerTick(){
  const action=nextProjectWorkerAction(row.status,row.approved_at,row.deadline_at,
   row.attempts,row.max_attempts,now);
  const session:AgentSession={db,userId:row.user_id,organizationId:row.organization_id,role:"worker"};
- const where=()=>db.from("assistant_project_builds").update({updated_at:new Date().toISOString()})
-  .eq("id",row.id).eq("organization_id",row.organization_id).eq("user_id",row.user_id)
-  .eq("status",row.status);
  if(action==="expire"){
-  await where().update({status:"failed",test_passed:false,stage_note:"انتهت مهلة التشغيل دون إعادة إرسال تلقائية."});
+  const {error:e}=await db.from("assistant_project_builds").update({
+   status:"failed",test_passed:false,
+   stage_note:"انتهت مهلة التشغيل دون إعادة إرسال تلقائية.",
+   updated_at:new Date().toISOString()
+  }).eq("id",row.id).eq("organization_id",row.organization_id)
+   .eq("user_id",row.user_id).eq("status",row.status);
+  if(e)throw e;
   return {processed:true,action};
  }
  if(action==="poll"){
