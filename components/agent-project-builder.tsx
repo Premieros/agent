@@ -8,7 +8,7 @@ type ProjectBuild={
  id:string;title:string;task:string;steps:string[];files:ProjectFile[];
  status:"planned"|"ready"|"testing"|"repairing"|"completed"|"failed";
  approved_at:string|null;max_attempts:number;attempts:number;model_calls:number;
- github_run_id:number|null;
+ github_run_id:number|null;runner_available:boolean;
  stage_note:string;execution_log:string;test_passed:boolean|null;saved_artifact_id:string|null;
 };
 type Props={
@@ -134,7 +134,11 @@ export default function AgentProjectBuilder({threadId,refreshKey,authHeaders,api
     </select>
    </label>
    <small>المهلة الكلية 12 دقيقة متضمنة انتظار GitHub، والاختبار داخل حاوية بلا شبكة بحد 45 ثانية في كل محاولة؛ حدّ أقصى لاختبارين وإصلاح مجاني واحد عند الحاجة. GitHub Actions في مستودع عام وقد تظهر المدخلات والسجلات؛ لا ترسل أسرارًا أو بيانات خاصة. لا تُطلب موافقة لكل خطوة.</small>
-   <div className="agent-work-controls"><button type="button" disabled={busy}
+   {!project.runner_available&&<p role="status">
+    تشغيل GitHub Actions غير متاح في هذه النسخة لأن اتصال GitHub App لم يُفعّل لها.
+    يمكنك تنزيل ملف ZIP غير المختبر الآن؛ لا حاجة للموافقة على تشغيل غير متاح.
+   </p>}
+   <div className="agent-work-controls"><button type="button" disabled={busy||!project.runner_available}
     onClick={()=>void approve()}>أسمح بإرسال هذا المشروع العام وبدء الاختبار</button></div>
   </>}
   {project.status==="testing"||project.status==="repairing"||project.status==="ready"?
