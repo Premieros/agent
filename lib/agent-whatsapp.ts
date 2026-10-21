@@ -93,3 +93,15 @@ export function decideWhatsAppReply(text:string|null,faq:WhatsAppFaq[],
   return {kind:"reply",reply:welcome.trim().slice(0,900),reason:"welcome"};
  return {kind:"handoff",reply:"",reason:"unanswered_question"};
 }
+
+/** Keyword must begin the text, followed by a space or end of message.
+ * Avoid accidentally responding to the keyword embedded in unrelated content. */
+export function whatsappPilotTriggered(text:string|null,keyword="#مساعد"):boolean{
+ if(!text||typeof keyword!=="string")return false;
+ const phrase=keyword.trim();
+ if(!/^#?[\p{L}\p{N}_-]{2,31}$/u.test(phrase))return false;
+ const incoming=text.trim();
+ return incoming===phrase||incoming.startsWith(phrase+" ");
+}
+export const WHATSAPP_PILOT_ACK=
+ "أهلًا بك 👋 أنا مساعد AGENT التجريبي. تم استلام رسالتك بنجاح. لو حابب تتحدث مع موظف، اكتب: موظف.";
