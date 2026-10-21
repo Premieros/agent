@@ -140,6 +140,35 @@ export async function GET(req:NextRequest){
  }catch(e){return projectApiError(e);}
 }
 
+async function startApprovedProject(s:AgentSession,run:Build){
+ if(run.status!=="ready"||!run.approved_at||!run.deadline_at)
+  return {ok:false,status:run.status,error:"Project is not approved and ready"};
+ if(Date.now()>=new Date(run.deadline_at).getTime())
+  return {ok:false,status:run.status,error:"Project time limit expired"};
+ if(run.attempts>=run.max_attempts)
+  return {ok:false,status:run.status,error:"Attempt limit reached"};
+ const safety=publicGithubProjectPreflight(specFrom(run).files);
+ if(!safety.ok)return {ok:false,status:run.status,error:"Rejected unsafe project: "+safety.reason};
+ const attempts=run.attempts+1;
+ const requestId=crypto.randomUUID();
+ const claimed=await claim(s,run,"ready","testing",{
+  attempts,github_request_id:requestId,github_run_id:null,test_passed:null,
+  stage_note:"أُرسل المشروع إلى GitHub Actions؛ يستمر الاختبار حتى بعد إغلاق الصفحة.",
+  execution_log:(run.execution_log+"\n$ GitHub Actions attempt "+attempts+
+    " request "+requestId+"\n").slice(-14000)
+ });
+ if(!claimed)return {ok:false,status:"testing",error:"Already claimed"};
+ try{
+  await dispatchAgentProject({requestId,files:specFrom(run).files});
+ }catch(e){
+  // A timeout could mean an accepted dispatch; never submit twice.
+  await note(s,run,{stage_note:
+   "لم يتأكد استلام GitHub؛ احتفظنا بالمعرّف لتجنّب تنفيذ مكرر."},"testing",requestId);
+  console.warn("AGENT project dispatch uncertain",e instanceof Error?e.message:"unknown");
+ }
+ return {ok:true,status:"testing",attempts};
+}
+
 export async function POST(req:NextRequest){
  try{
   const s=await requireAgentSession(req);
@@ -220,6 +249,12 @@ export async function POST(req:NextRequest){
     organization_id:s.organizationId,thread_id:body.threadId,
     role:"user",content:body.task.trim(),skill:"coding"
    });
+   if(autoStart){
+    // Dispatch within the approved plan request: closing the browser no longer
+    // prevents the first GitHub job from starting.
+    const persisted=await ownerRun(s,inserted.data.id);
+    if(persisted)await startApprovedProject(s,persisted);
+   }
    return response({ok:true,id:inserted.data.id});
   }
   if(!body.id||!uuid.test(body.id))return response({error:"معرّف مشروع غير صالح."},400);
@@ -238,7 +273,11 @@ export async function POST(req:NextRequest){
     approved_at:new Date(now).toISOString(),deadline_at:new Date(now+TTL_MS).toISOString(),
     max_attempts:maxAttempts,stage_note:"تم التصريح بإرسال ملفات هذا المشروع إلى GitHub Actions العام؛ لا حاجة لموافقة أخرى أثناء الإصلاح."
    });
-   return ok?response({ok:true,status:"ready"}):response({error:"الموافقة مسجّلة بالفعل."},409);
+   if(!ok)return response({error:"الموافقة مسجّلة بالفعل."},409);
+   const persisted=await ownerRun(s,run.id);
+   if(!persisted)return response({error:"المشروع غير موجود."},404);
+   const started=await startApprovedProject(s,persisted);
+   return response({...started,ok:true});
   }
 
   if(body.action==="advance"){
@@ -287,27 +326,7 @@ export async function POST(req:NextRequest){
      return response({ok:true,status:"failed"});
     }
    }
-   const safety=publicGithubProjectPreflight(specFrom(run).files);
-   if(!safety.ok)return response({error:"رفض إرسال ملفات غير آمنة إلى GitHub: "+safety.reason},422);
-   const attempts=run.attempts+1;
-   const requestId=crypto.randomUUID();
-   const claimed=await claim(s,run,"ready","testing",{
-    attempts,github_request_id:requestId,github_run_id:null,test_passed:null,
-    stage_note:"إرسال المشروع إلى حاوية GitHub Actions معزولة عن مصدر AGENT.",
-    execution_log:(run.execution_log+"\n$ GitHub Actions attempt "+attempts+
-      " request "+requestId+"\n").slice(-14000)
-   });
-   if(!claimed)return response({error:"الاختبار بدأ بالفعل."},409);
-   try{
-    await dispatchAgentProject({requestId,files:specFrom(run).files});
-   }catch(e){
-    // A timeout may occur AFTER GitHub accepted a dispatch. Never resend
-    // blindly; poll the same request ID and expire with a bounded deadline.
-    await note(s,run,{stage_note:
-      "لم يتأكد استلام GitHub للمهمة؛ سنفحص المعرف دون إعادة إرسال مكررة."},"testing");
-    console.warn("AGENT project dispatch uncertain",e instanceof Error?e.message:"unknown");
-   }
-   return response({ok:true,status:"testing",attempts});
+   return response(await startApprovedProject(s,run));
   }
 
   if(body.action==="save"){
