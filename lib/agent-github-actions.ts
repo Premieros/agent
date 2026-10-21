@@ -99,10 +99,16 @@ export async function fetchAgentExperiment(requestId:string,knownRunId?:number|n
     if(!run.display_title?.includes(requestId))
       throw new Error("GITHUB_ACTIONS_RUN_MISMATCH");
   }else{
-    const r=await githubApi(repo+"/actions/workflows/"+AGENT_ACTIONS_WORKFLOW+
-      "/runs?event=workflow_dispatch&per_page=30",token);
-    const payload=await r.json() as {workflow_runs?:GitHubRun[]};
-    run=(payload.workflow_runs||[]).find(x=>x.display_title?.includes(requestId))||null;
+    // Public AGENT can have concurrent experiment jobs. A 30-run window
+    // could make an accepted dispatch look lost and eventually expire.
+    for(const page of [1,2]){
+      const r=await githubApi(repo+"/actions/workflows/"+AGENT_ACTIONS_WORKFLOW+
+        "/runs?event=workflow_dispatch&per_page=100&page="+page,token);
+      const payload=await r.json() as {workflow_runs?:GitHubRun[]};
+      const runs=payload.workflow_runs||[];
+      run=runs.find(x=>x.display_title?.includes(requestId))||null;
+      if(run||runs.length<100)break;
+    }
   }
   if(!run)return {found:false as const,status:"queued",log:"$ GitHub Actions: waiting for runner\n"};
   let log="$ github actions workflow "+requestId+"\n";
