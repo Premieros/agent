@@ -97,11 +97,21 @@ async function finishExperience(s:AgentSession,run:Build,succeeded:boolean){
 export async function GET(req:NextRequest){
  try{
   const s=await requireAgentSession(req);
-  const threadId=new URL(req.url).searchParams.get("threadId");
-  if(!threadId||!uuid.test(threadId))return response({error:"معرّف المحادثة غير صالح."},400);
-  const q=await s.db.from("assistant_project_builds").select("*")
+  const url=new URL(req.url);
+  const threadId=url.searchParams.get("threadId");
+  const projectId=url.searchParams.get("projectId");
+  if(!threadId||!uuid.test(threadId)||projectId&&!uuid.test(projectId))
+   return response({error:"معرّف المحادثة أو المشروع غير صالح."},400);
+  const history=await s.db.from("assistant_project_builds")
+   .select("id,title,status,created_at,test_passed,model_calls")
    .eq("organization_id",s.organizationId).eq("user_id",s.userId)
-   .eq("thread_id",threadId).order("created_at",{ascending:false}).limit(1).maybeSingle();
+   .eq("thread_id",threadId).order("created_at",{ascending:false}).limit(10);
+  if(history.error)throw history.error;
+  let lookup=s.db.from("assistant_project_builds").select("*")
+   .eq("organization_id",s.organizationId).eq("user_id",s.userId)
+   .eq("thread_id",threadId);
+  if(projectId)lookup=lookup.eq("id",projectId);
+  const q=await lookup.order("created_at",{ascending:false}).limit(1).maybeSingle();
   if(q.error)throw q.error;
   let run=q.data as Build|null;
   if(run?.status==="testing"&&run.github_request_id&&githubActionsConfigured()){
@@ -139,7 +149,7 @@ export async function GET(req:NextRequest){
     run.github_request_id||undefined);
    run=await ownerRun(s,run.id);
   }
-  return response({project:run?publicBuild(run):null});
+  return response({project:run?publicBuild(run):null,history:history.data||[]});
  }catch(e){return projectApiError(e);}
 }
 
