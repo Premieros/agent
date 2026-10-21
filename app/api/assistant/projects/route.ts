@@ -15,6 +15,8 @@ const FREE_MODEL_TIMEOUT_MS=38_000; // Leave room for database and response befo
 const headers={"Cache-Control":"private, no-store"};
 const response=(data:unknown,status=200)=>NextResponse.json(data,{status,headers});
 function projectApiError(e:unknown){
+ if(e instanceof Error&&["AbortError","TimeoutError"].includes(e.name))
+  return response({error:"انتهت مهلة النموذج المجاني قبل اكتمال التخطيط. لم نفعّل أي نموذج مدفوع أو نشغّل كودًا غير مختبر.",code:"FREE_MODEL_TIMEOUT"},504);
  const err=e as {code?:string;message?:string}|null;
  if(err&&(err.code==="42P01"||err.code==="PGRST205"||
    err.message?.includes("assistant_project_builds"))){
