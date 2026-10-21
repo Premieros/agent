@@ -89,7 +89,7 @@ export default function AgentProjectBuilder({threadId,refreshKey,authHeaders,api
    if(!res.ok)throw new Error("تعذر تنزيل ملف المشروع.");
    const url=URL.createObjectURL(await res.blob());
    const link=document.createElement("a");link.href=url;
-   link.download="AGENT-app-"+project.id.slice(0,8)+".zip";
+   link.download="AGENT-app-"+project.id.slice(0,8)+(project.status==="completed"?"":"-unverified")+".zip";
    document.body.append(link);link.click();link.remove();URL.revokeObjectURL(url);
   }catch(e){setError(e instanceof Error?e.message:"تعذر التنزيل.");}
   finally{setBusy(false);}
@@ -141,6 +141,11 @@ export default function AgentProjectBuilder({threadId,refreshKey,authHeaders,api
    <p role="status"><LoaderCircle className="crm-spin" size={15}/> {project.stage_note}</p>:null}
   {project.github_run_id&&<a target="_blank" rel="noopener noreferrer"
     href={"https://github.com/Premieros/agent/actions/runs/"+project.github_run_id}>فتح سجل GitHub Actions</a>}
+  {!finished&&<div className="agent-work-controls">
+   <button type="button" onClick={()=>void download()} disabled={busy}>
+    <Download size={14}/> تنزيل ملفات ZIP (غير مختبرة بعد)
+   </button>
+  </div>}
   {finished&&<div className="agent-work-controls">
    <button type="button" onClick={()=>void download()} disabled={busy}>
     <Download size={14}/> تنزيل التطبيق ZIP
