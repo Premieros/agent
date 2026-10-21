@@ -5,7 +5,7 @@ import {requireAgentSession,errorResponse,type AgentSession} from "@/lib/agent-s
 import {discoverAutoModels,askAutoAgent} from "@/lib/auto-ai";
 import {chooseExperiencedModels,recordSandboxExperience} from "@/lib/agent-experience";
 import {parseProjectSpec,packagedProjectFiles,zipProjectFiles,
-  canAdvanceProject,verifiedProjectTest,publicGithubProjectPreflight,repairPreservesTests,type ProjectFile,type ProjectSpec} from "@/lib/agent-project-engine";
+  canAdvanceProject,verifiedProjectTest,acceptanceKindForModel,publicGithubProjectPreflight,repairPreservesTests,type ProjectFile,type ProjectSpec} from "@/lib/agent-project-engine";
 
 export const runtime="nodejs";
 export const maxDuration=60;
@@ -110,13 +110,13 @@ export async function GET(req:NextRequest){
     if(trace.found){
      const finished=trace.status==="completed";
      const actualExit=/\[exit=(-?\d+)\]/.exec(trace.log);
-     const success=verifiedProjectTest(trace.log,trace.conclusion);
+     const success=verifiedProjectTest(trace.log,trace.conclusion,acceptanceKindForModel(run.model));
      const endedAt=trace.finishedAt?new Date(trace.finishedAt).getTime():Date.now();
      const expired=Boolean(run.deadline_at&&endedAt>new Date(run.deadline_at).getTime());
      const next=finished?(success&&!expired?"completed":
        !expired&&Boolean(actualExit)&&actualExit?.[1]!=="0"&&
        run.attempts<run.max_attempts&&run.model_calls===1?"repairing":"failed"):"testing";
-     const stage=finished?success&&!expired?"اجتاز التطبيق الاختبارات الفعلية في GitHub Actions.":
+     const stage=finished?success&&!expired?(acceptanceKindForModel(run.model)!=="none"?"اجتاز التطبيق اختبارات Node.js واختبارات قبول مستقلة.":"اجتاز اختبارات Node.js؛ لا يوجد اختبار قبول مستقل لهذا النوع بعد."):
        next==="repairing"?"فشلت الاختبارات؛ سيصلحها النموذج المجاني مرة واحدة.":
        "فشلت الاختبارات، أو انتهت المهلة، أو لا يوجد دليل كافٍ على نجاحها.":
        "GitHub Actions: "+trace.status+" (المحاولة "+run.attempts+"/"+run.max_attempts+")";
@@ -162,7 +162,8 @@ async function startApprovedProject(s:AgentSession,run:Build){
  });
  if(!claimed)return {ok:false,status:"testing",error:"Already claimed"};
  try{
-  await dispatchAgentProject({requestId,files:specFrom(run).files});
+  await dispatchAgentProject({requestId,files:specFrom(run).files,
+   acceptanceKind:acceptanceKindForModel(run.model)});
  }catch(e){
   // A timeout could mean an accepted dispatch; never submit twice.
   await note(s,run,{stage_note:
