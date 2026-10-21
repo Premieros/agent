@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {readFileSync} from "node:fs";
 import {parseProjectSpec,validProjectPath,zipProjectFiles,packagedProjectFiles,
- canAdvanceProject,verifiedProjectTest} from "../lib/agent-project-engine.ts";
+ canAdvanceProject,verifiedProjectTest,publicGithubProjectPreflight} from "../lib/agent-project-engine.ts";
 const read=p=>readFileSync(new URL("../"+p,import.meta.url),"utf8");
 const fixture={title:"Task board",steps:["Generate","Test"],files:[
  {path:"server.js",content:"const http=require('node:http'); module.exports={http};\n"},
@@ -124,4 +124,16 @@ test("previously approved successful exact projects can repeat without model or 
  assert.match(api,/previouslyApproved=true/);
  assert.match(api,/const autoStart=\(Boolean\(builtIn\)\|\|previouslyApproved\)/);
  assert.match(api,/const success=verifiedProjectTest\(trace.log,trace.conclusion\)/);
+});
+
+test("public runner preflight protects approval from oversized manifests or secrets",()=>{
+ assert.deepEqual(publicGithubProjectPreflight(fixture.files),{ok:true});
+ const huge=fixture.files.map((f,i)=>i===0?{...f,content:"a".repeat(42000)}:f);
+ assert.deepEqual(publicGithubProjectPreflight(huge),{ok:false,reason:"TOO_LARGE"});
+ const leak=fixture.files.map((f,i)=>i===0?{...f,content:"const k='ghp_"+"x".repeat(32)+"'"}:f);
+ assert.deepEqual(publicGithubProjectPreflight(leak),{ok:false,reason:"POSSIBLE_SECRET"});
+ const code=read("app/api/assistant/projects/route.ts");
+ assert.match(code,/const safety=publicGithubProjectPreflight\(spec.files\)/);
+ assert.match(code,/PROJECT_PREFLIGHT_/);
+ assert.match(code,/const safety=publicGithubProjectPreflight\(specFrom\(run\).files\)/);
 });
