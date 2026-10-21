@@ -44,7 +44,7 @@ test("offline built-in recipe actually passes CRUD and HTTP tests in a trusted C
 
 test("learned reuse only uses owner verified results and new tasks require public consent",()=>{
  const api=read("app/api/assistant/projects/route.ts");
- assert.match(api,/normalizedProjectTask\(item\.task\)===normalizedProjectTask\(body\.task\)/);
+ assert.match(api,/normalizedProjectTask\(item\.task\)===normalizedProjectTask\(requestedTask\)/);
  assert.match(api,/\.eq\("status","completed"\)\.eq\("test_passed",true\)/);
  assert.match(api,/\.not\("approved_at","is",null\)/);
  assert.match(api,/const autoStart=\(Boolean\(builtIn\)\|\|previouslyApproved\)&&githubActionsConfigured\(\)/);
