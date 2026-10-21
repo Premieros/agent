@@ -11,7 +11,15 @@ on:
         type: string
       code_b64:
         description: "Approved demo JavaScript, base64; no private data/secrets"
-        required: true
+        required: false
+        type: string
+      project_b64:
+        description: "Public-safe multi-file JSON manifest; never send private files"
+        required: false
+        type: string
+      acceptance_kind:
+        description: "Trusted built-in project acceptance: inventory, task_board, or none"
+        required: false
         type: string
 
 # No workflow repository permissions. Never checkout source or use secrets.
@@ -32,36 +40,154 @@ jobs:
         env:
           AGENT_REQUEST_ID: ${{ inputs.request_id }}
           AGENT_CODE_B64: ${{ inputs.code_b64 }}
+          AGENT_PROJECT_B64: ${{ inputs.project_b64 }}
+          AGENT_ACCEPTANCE_KIND: ${{ inputs.acceptance_kind }}
         run: |
           python3 - <<'PY'
           import base64, binascii, json, os, pathlib, re
           identifier=os.environ.get("AGENT_REQUEST_ID","")
           if not re.fullmatch(r"[0-9a-fA-F-]{36}",identifier):
               raise ValueError("Invalid experiment ID")
-          encoded=os.environ.get("AGENT_CODE_B64","")
-          if len(encoded)>9000: raise ValueError("Experiment too large")
-          try: code=base64.b64decode(encoded,validate=True)
-          except binascii.Error as exc: raise ValueError("Invalid encoded program") from exc
-          if not (1<=len(code)<=6000): raise ValueError("Invalid program size")
           root=pathlib.Path(os.environ["RUNNER_TEMP"])/"agent-experiment"
           root.mkdir(mode=0o755,exist_ok=True)
-          (root/"work.js").write_bytes(code)
-          (root/"task.json").write_text(json.dumps({
-              "task":"AGENT user-approved synthetic experiment",
-              "steps":[],"materials":""
-          }),encoding="utf-8")
-          os.chmod(root,0o755)
-          os.chmod(root/"work.js",0o644)
-          os.chmod(root/"task.json",0o644)
-          print("Approved JavaScript prepared; no source checkout, no secrets.")
+          project=os.environ.get("AGENT_PROJECT_B64","")
+          code=os.environ.get("AGENT_CODE_B64","")
+          if bool(project)==bool(code):
+              raise ValueError("Exactly one experiment mode is required")
+          if project:
+              if len(project)>56000: raise ValueError("Manifest too large")
+              try: payload=base64.b64decode(project,validate=True)
+              except binascii.Error as exc: raise ValueError("Invalid project data") from exc
+              if not 10<=len(payload)<=40000: raise ValueError("Invalid project size")
+              manifest=json.loads(payload)
+              files=manifest.get("files",[]) if isinstance(manifest,dict) else []
+              if not isinstance(files,list) or not 4<=len(files)<=22:
+                  raise ValueError("Invalid file count")
+              seen=set()
+              found_source=found_tests=False
+              for file in files:
+                  if not isinstance(file,dict): raise ValueError("Invalid project file")
+                  name=file.get("path"); content=file.get("content")
+                  if not isinstance(name,str) or not isinstance(content,str):
+                      raise ValueError("Invalid project file")
+                  parts=name.split("/")
+                  if len(name)>140 or len(parts)>5 or not all(
+                      re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]*",p) and
+                      p not in (".","..") and not p.startswith(".") for p in parts
+                  ): raise ValueError("Unsafe project path")
+                  if any(p.lower() in ("node_modules",".git",".next","vendor") for p in parts):
+                      raise ValueError("Unsafe directory")
+                  if not re.search(r"\.(js|mjs|cjs|json|html|css|md|txt|svg)$",name,re.I):
+                      raise ValueError("Unsupported extension")
+                  if name.lower() in seen or name.lower() in (
+                    "package.json","agent-readme.md","test-results.txt"
+                  ): raise ValueError("Duplicate or reserved file")
+                  seen.add(name.lower())
+                  encoded=content.encode("utf8")
+                  if not 1<=len(encoded)<=24000: raise ValueError("Invalid file size")
+                  found_source|=bool(re.search(r"\.(js|mjs|cjs)$",name))
+                  found_tests|=bool(re.search(r"\.test\.(js|mjs|cjs)$",name))
+                  dest=root.joinpath(*parts)
+                  dest.parent.mkdir(parents=True,mode=0o755,exist_ok=True)
+                  dest.write_bytes(encoded)
+                  dest.chmod(0o644)
+              if not found_source or not found_tests: raise ValueError("No code or test")
+              print("Validated standalone multi-file project; no source checkout or secrets.")
+          else:
+              if len(code)>9000: raise ValueError("Experiment too large")
+              try: program=base64.b64decode(code,validate=True)
+              except binascii.Error as exc: raise ValueError("Invalid encoded program") from exc
+              if not 1<=len(program)<=6000: raise ValueError("Invalid program size")
+              (root/"work.js").write_bytes(program)
+              (root/"task.json").write_text(json.dumps({
+                  "task":"AGENT public-safe experiment",
+                  "steps":[],"materials":""
+              }),encoding="utf8")
+              os.chmod(root/"work.js",0o644)
+              os.chmod(root/"task.json",0o644)
+              print("Approved JavaScript prepared; no source checkout, no secrets.")
           PY
+      - name: Prepare independent AGENT acceptance tests
+        shell: bash
+        env:
+          AGENT_ACCEPTANCE_KIND: ${{ inputs.acceptance_kind }}
+        run: |
+          set -euo pipefail
+          case "$AGENT_ACCEPTANCE_KIND" in ""|none|inventory|task_board) ;; *) exit 1;; esac
+          mkdir -p "$RUNNER_TEMP/agent-acceptance"
+          cat >"$RUNNER_TEMP/agent-acceptance/acceptance.cjs" <<'AGENT_ACCEPTANCE_JS'
+          "use strict";
+          // Trusted AGENT acceptance suite: independent of code and tests in the ZIP.
+          // Mounted outside /workspace by CI and by GitHub's isolated-runner workflow.
+          const test=require("node:test"),assert=require("node:assert/strict");
+          const kind=process.env.AGENT_ACCEPTANCE_KIND;
+          const root=process.env.AGENT_WORKSPACE_ROOT||"/workspace";
+          if(!["inventory","task_board"].includes(kind))throw Error("UNSUPPORTED_ACCEPTANCE_KIND");
+          const serverModule=require(root+"/server.js");
+          const Inventory=kind==="inventory"?require(root+"/src/inventory.js").Inventory:null;
+          function server(){
+           if(kind==="inventory")return serverModule.createServer(new Inventory());
+           return serverModule.server;
+          }
+          test("independent owner acceptance: real Arabic app and HTTP lifecycle",async()=>{
+           const app=server();
+           assert.ok(app&&typeof app.listen==="function");
+           await new Promise((done,reject)=>{app.once("error",reject);app.listen(0,"127.0.0.1",done);});
+           const base="http://127.0.0.1:"+app.address().port;
+           async function req(url,method="GET",data){
+            const reply=await fetch(base+url,{method,...(data?{headers:{"content-type":"application/json"},body:JSON.stringify(data)}:{})});
+            return {status:reply.status,body:await reply.text()};
+           }
+           try{
+            const home=await req("/");
+            assert.equal(home.status,200);
+            assert.match(home.body,kind==="inventory"?/مخزون|إدارة المخزون/:/مهام|إدارة المهام/);
+            const js=await req("/app.js");
+            assert.equal(js.status,200);
+            const css=await req("/style.css");
+            assert.equal(css.status,200);
+            if(kind==="inventory"){
+             let result=await req("/api/products","POST",{name:"مخزون",price:12,quantity:10});
+             assert.equal(result.status,201);const item=JSON.parse(result.body);
+             const id=item.id;assert.ok(id);
+             result=await req("/api/products/"+id+"/sale","POST",{quantity:11});
+             assert.equal(result.status,400);
+             assert.match(result.body,/INSUFFICIENT_STOCK/);
+             result=await req("/api/products/"+id+"/supply","POST",{quantity:5});
+             assert.equal(result.status,200);
+             assert.equal(JSON.parse(result.body).quantity,15);
+             result=await req("/api/products/"+id+"/sale","POST",{quantity:3});
+             assert.equal(result.status,200);assert.equal(JSON.parse(result.body).quantity,12);
+             result=await req("/api/products/"+id+"/supply","POST",{quantity:"3"});
+             assert.notEqual(result.status,200); // Reject coercion to string concatenation
+             result=await req("/api/products");assert.equal(JSON.parse(result.body)[0].quantity,12);
+             result=await req("/api/movements");
+             assert.deepEqual(JSON.parse(result.body).map(x=>x.type),["ADD","SUPPLY","SALE"]);
+            }else{
+             let result=await req("/api/tasks","POST",{title:"اختبار"});
+             assert.equal(result.status,201);
+             const id=JSON.parse(result.body).id;
+             result=await req("/api/tasks");
+             assert.equal(JSON.parse(result.body).length,1);
+             result=await req("/api/tasks/"+id,"PATCH",{done:true});
+             assert.equal(result.status,200);assert.equal(JSON.parse(result.body).done,true);
+             result=await req("/api/tasks/"+id,"DELETE");
+             assert.equal(result.status,200);
+             result=await req("/api/tasks");assert.equal(JSON.parse(result.body).length,0);
+            }
+           }finally{await new Promise(ok=>app.close(ok));}
+          });
+          AGENT_ACCEPTANCE_JS
+          chmod -R a+rX "$RUNNER_TEMP/agent-acceptance"
       - name: Execute without network or GitHub credentials
         shell: bash
+        env:
+          AGENT_ACCEPTANCE_KIND: ${{ inputs.acceptance_kind }}
         run: |
           set -uo pipefail
           root="$RUNNER_TEMP/agent-experiment"
           echo '$ docker run --network none --read-only --user 65534:65534 node:22-alpine'
-          echo '$ node --check /workspace/work.js && node /workspace/work.js'
+          echo '$ node --check generated files; node --test (or legacy work.js)'
           set +e
           timeout --signal=TERM 45s docker run --rm \
             --network none --read-only --cap-drop ALL \
@@ -69,7 +195,23 @@ jobs:
             --memory 256m --cpus 1 --user 65534:65534 \
             --tmpfs /tmp:rw,noexec,nosuid,size=16m \
             --mount "type=bind,src=$root,dst=/workspace,readonly" \
-            node:22-alpine sh -c 'node --check /workspace/work.js && node /workspace/work.js' \
+            --mount "type=bind,src=$RUNNER_TEMP/agent-acceptance,dst=/acceptance,readonly" \
+            -e AGENT_ACCEPTANCE_KIND -e AGENT_WORKSPACE_ROOT=/workspace \
+            node:22-alpine sh -c '
+              set -eu
+              if [ -f /workspace/work.js ]; then
+                node --check /workspace/work.js && node /workspace/work.js
+              else
+                find /workspace -type f \( -name "*.js" -o -name "*.mjs" -o -name "*.cjs" \) | sort |
+                while IFS= read -r file; do node --check "$file"; done
+                cd /workspace
+                node --test
+                if [ -n "$AGENT_ACCEPTANCE_KIND" ] && [ "$AGENT_ACCEPTANCE_KIND" != "none" ]; then
+                  node --test /acceptance/acceptance.cjs
+                  echo "AGENT_INDEPENDENT_ACCEPTANCE_PASSED:$AGENT_ACCEPTANCE_KIND"
+                fi
+              fi
+            ' \
             > "$RUNNER_TEMP/agent-output.txt" 2>&1
           exit_code=$?
           set -e
