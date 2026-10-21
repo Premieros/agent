@@ -137,3 +137,16 @@ test("public runner preflight protects approval from oversized manifests or secr
  assert.match(code,/PROJECT_PREFLIGHT_/);
  assert.match(code,/const safety=publicGithubProjectPreflight\(specFrom\(run\).files\)/);
 });
+
+test("draft owners can download source without public execution or a false test pass",()=>{
+ const dl=read("app/api/assistant/projects/download/route.ts");
+ const ui=read("components/agent-project-builder.tsx");
+ assert.match(dl,/NOT TESTED - DRAFT/);
+ assert.match(dl,/No per-project GitHub Actions tests have completed/);
+ assert.match(dl,/\.eq\("user_id",s\.userId\)/);
+ assert.match(ui,/تنزيل ملفات ZIP \(غير مختبرة بعد\)/);
+ const files=packagedProjectFiles(fixture,"Taskboard","No execution","NOT TESTED - DRAFT");
+ const status=files.find(f=>f.path==="AGENT-README.md");
+ assert.match(status.content,/NOT TESTED - DRAFT/);
+ assert.ok(zipProjectFiles(files).byteLength>100);
+});
