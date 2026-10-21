@@ -87,3 +87,26 @@ test("multi-file jobs select the development workflow and never modify main",()=
  assert.match(workflow,/node --test/);
  assert.match(workflow,/permissions: \{\}/);
 });
+
+test("inventory stock website is an audited zero-model recipe with 9 real tests and a ZIP",()=>{
+ const spec=parseProjectSpec(JSON.stringify(builtInProjectRecipe("ابن تطبيق إدارة مخزون")));
+ assert.equal(spec.files.length,6);
+ assert.equal(builtInProjectRecipe("ابن تطبيق إدارة مخزون لبيانات عملائي"),null);
+ assert.equal(builtInProjectRecipe("build an inventory app")?.title,spec.title);
+ const temp=mkdtempSync(join(tmpdir(),"agent-inventory-"));
+ try{
+  for(const file of packagedProjectFiles(spec,"Build test inventory","UNVERIFIED","NOT RUN")){
+   const full=join(temp,file.path);
+   mkdirSync(dirname(full),{recursive:true});
+   writeFileSync(full,file.content,"utf8");
+  }
+  const result=spawnSync(process.execPath,["--test"],{
+   cwd:temp,timeout:16000,encoding:"utf8",env:{PATH:process.env.PATH||""}
+  });
+  assert.equal(result.status,0,result.stdout+"\n"+result.stderr);
+  assert.match(result.stdout,/pass 9/);
+  assert.match(result.stdout,/fail 0/);
+  const zip=zipProjectFiles(packagedProjectFiles(spec,"Build test inventory",result.stdout,"PASSED"));
+  assert.ok(zip.byteLength>4000);
+ }finally{rmSync(temp,{recursive:true,force:true});}
+});
