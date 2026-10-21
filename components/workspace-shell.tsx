@@ -3,18 +3,20 @@
 import {useEffect,useState,type ReactNode} from "react";
 import Link from "next/link";
 import {usePathname} from "next/navigation";
-import {Menu,MessagesSquare,PlugZap,Library,Plus,X} from "lucide-react";
+import {Menu,MessagesSquare,PlugZap,Library,Plus,X,Film} from "lucide-react";
 
 const sections=[
   {href:"/assistant",label:"المحادثات",icon:MessagesSquare},
   {href:"/assistant/integrations",label:"الربط وإعداداته",icon:PlugZap},
-  {href:"/assistant/library",label:"المكتبة",icon:Library}
+  {href:"/assistant/library",label:"المكتبة",icon:Library},
+  {href:"/video",label:"صناعة الفيديو",icon:Film}
 ] as const;
 
 export default function WorkspaceShell({children}:{children:ReactNode}){
   const pathname=usePathname();
   const isWorkspace=pathname==="/"||pathname==="/studio"||pathname==="/assistant"||
-    pathname.startsWith("/assistant/")||pathname==="/crm"||pathname.startsWith("/crm/");
+    pathname.startsWith("/assistant/")||pathname==="/crm"||pathname.startsWith("/crm/")||
+    pathname==="/video"||pathname.startsWith("/video/");
   const [mobileOpen,setMobileOpen]=useState(false);
   useEffect(()=>{
     const close=()=>setMobileOpen(false);
@@ -28,7 +30,8 @@ export default function WorkspaceShell({children}:{children:ReactNode}){
   },[]);
   useEffect(()=>{setMobileOpen(false);},[pathname]);
   if(!isWorkspace)return <>{children}</>;
-  const active=pathname.startsWith("/assistant/library")?sections[2]:
+  const active=pathname.startsWith("/video")?sections[3]:
+    pathname.startsWith("/assistant/library")?sections[2]:
     pathname.startsWith("/assistant/integrations")?sections[1]:sections[0];
   const title=active.label;
   return <div className="workspace-shell agent-chat-first">
