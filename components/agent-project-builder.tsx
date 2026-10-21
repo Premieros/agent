@@ -29,10 +29,13 @@ export default function AgentProjectBuilder({threadId,refreshKey,authHeaders,api
   try{
    const res=await apiFetch("/api/assistant/projects?threadId="+encodeURIComponent(threadId),
     {headers:await authHeaders(),cache:"no-store"});
-   if(!res.ok)return;
-   const data=await readAssistantApiJson<{project:ProjectBuild|null}>(res);
+   const data=await readAssistantApiJson<{project?:ProjectBuild|null;error?:string}>(res);
+   if(!res.ok)throw new Error(data.error||"تعذر استعادة حالة المشروع.");
    setProject(data.project||null);
-  }catch{/* Main chat stays available independently. */}
+  }catch(e){
+   // Keep chat usable while exposing actionable project API errors.
+   setError(e instanceof Error?e.message:"تعذر استعادة حالة المشروع.");
+  }
  },[threadId,refreshKey,apiFetch,authHeaders]);
  useEffect(()=>{void load();},[load]);
  async function post(action:string,payload:Record<string,unknown>={}){
@@ -101,7 +104,7 @@ export default function AgentProjectBuilder({threadId,refreshKey,authHeaders,api
   catch(e){setError(e instanceof Error?e.message:"تعذر الحفظ.");}
   finally{setBusy(false);}
  }
- if(!project)return null;
+ if(!project)return error?<p role="alert">{error}</p>:null;
  const finished=project.status==="completed"||project.status==="failed";
  return <section className="assistant-work-steps agent-work-terminal" aria-label="مشروع AGENT متعدد الملفات">
   <div className="agent-work-terminal-head">
