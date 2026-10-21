@@ -16,7 +16,7 @@ type Row={
  title:string;steps:string[];task:string;files:ProjectFile[];
  model:string;model_calls:number;github_request_id:string|null;github_run_id:number|null;
  attempts:number;max_attempts:number;approved_at:string|null;deadline_at:string|null;
- execution_log:string;
+ execution_log:string;updated_at:string;
 };
 function workerClient(){
  const projectId=process.env.AGENT_PROJECT_WORKER_PROJECT_ID;
@@ -59,7 +59,21 @@ export async function runOneAgentProjectWorkerTick(){
   return {processed:true,action};
  }
  if(action==="poll"){
-  if(!row.github_request_id)return {processed:false,action:"missing_request_id"};
+  if(!row.github_request_id){
+   // The previous repair request may have timed out before saving its result.
+   // Fail it after a grace period; never resend code without a new run ID.
+   const stuck=Date.now()-new Date(row.updated_at).getTime()>90_000;
+   const {error:e}=await db.from("assistant_project_builds").update({
+    ...(stuck?{status:"failed",test_passed:false,stage_note:
+     "انقطع الإصلاح أو التسجيل قبل إنشاء طلب GitHub جديد."}:{
+     stage_note:"الإصلاح قيد التنفيذ في طلب آخر."}),
+    updated_at:new Date().toISOString()
+   }).eq("id",row.id).eq("user_id",row.user_id)
+    .eq("organization_id",row.organization_id).eq("status","testing")
+    .is("github_request_id",null);
+   if(e)throw e;
+   return {processed:true,action:stuck?"repair_lost":"repair_running"};
+  }
   const trace=await fetchAgentExperiment(row.github_request_id,row.github_run_id);
   if(!trace.found){
    // Rotate queued jobs so one slow GitHub dispatch does not starve others.
