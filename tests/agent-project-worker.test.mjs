@@ -35,7 +35,7 @@ test("worker endpoint disabled without all AGENT-only credentials and cannot acc
  assert.match(driver,/projectId!=="gldlgdycgneadbqftcrj"/);
  assert.match(driver,/AGENT_WORKER_DATABASE_MISMATCH/);
  assert.match(driver,/\.not\("approved_at","is",null\)/);
- assert.match(driver,/acceptanceKind:row.acceptance_kind\\|\\|"none"/);
+ assert.match(driver,/acceptanceKind:row\.acceptance_kind\|\|"none"/);
  assert.doesNotMatch(driver,/\bdelete\(/);
 });
 
