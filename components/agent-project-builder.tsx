@@ -11,6 +11,7 @@ type ProjectBuild={
  github_run_id:number|null;runner_available:boolean;
  stage_note:string;execution_log:string;test_passed:boolean|null;saved_artifact_id:string|null;
 };
+type ProjectHistory={id:string;title:string;status:string;test_passed:boolean|null;model_calls:number;created_at:string};
 type Props={
  threadId:string;refreshKey:number;
  authHeaders:()=>Promise<Record<string,string>>;
@@ -18,6 +19,8 @@ type Props={
 };
 export default function AgentProjectBuilder({threadId,refreshKey,authHeaders,apiFetch}:Props){
  const [project,setProject]=useState<ProjectBuild|null>(null);
+ const [history,setHistory]=useState<ProjectHistory[]>([]);
+ const [selectedProject,setSelectedProject]=useState<string>("");
  const [busy,setBusy]=useState(false),[error,setError]=useState("");
  const [note,setNote]=useState("");
  const [maxAttempts,setMaxAttempts]=useState<1|2>(2);
@@ -27,16 +30,19 @@ export default function AgentProjectBuilder({threadId,refreshKey,authHeaders,api
  const load=useCallback(async()=>{
   if(!threadId)return;
   try{
-   const res=await apiFetch("/api/assistant/projects?threadId="+encodeURIComponent(threadId),
+   const res=await apiFetch("/api/assistant/projects?threadId="+encodeURIComponent(threadId)+
+    (selectedProject?"&projectId="+encodeURIComponent(selectedProject):""),
     {headers:await authHeaders(),cache:"no-store"});
-   const data=await readAssistantApiJson<{project?:ProjectBuild|null;error?:string}>(res);
+   const data=await readAssistantApiJson<{project?:ProjectBuild|null;history?:ProjectHistory[];error?:string}>(res);
    if(!res.ok)throw new Error(data.error||"تعذر استعادة حالة المشروع.");
    setProject(data.project||null);
+   setHistory(data.history||[]);
   }catch(e){
    // Keep chat usable while exposing actionable project API errors.
    setError(e instanceof Error?e.message:"تعذر استعادة حالة المشروع.");
   }
- },[threadId,refreshKey,apiFetch,authHeaders]);
+ },[threadId,refreshKey,selectedProject,apiFetch,authHeaders]);
+ useEffect(()=>{setSelectedProject("");},[threadId,refreshKey]);
  useEffect(()=>{void load();},[load]);
  async function post(action:string,payload:Record<string,unknown>={}){
   const res=await apiFetch("/api/assistant/projects",{
@@ -110,6 +116,14 @@ export default function AgentProjectBuilder({threadId,refreshKey,authHeaders,api
   <div className="agent-work-terminal-head">
    <strong><ShieldCheck size={15}/> بناء تطبيق مستقل · {project.title}</strong>
   </div>
+  {history.length>1&&<label className="agent-work-runner-select">سجل المشاريع في المحادثة
+   <select value={selectedProject||history[0]?.id||project.id}
+    onChange={e=>setSelectedProject(e.target.value===history[0]?.id?"":e.target.value)}>
+    {history.map(item=><option key={item.id} value={item.id}>
+     {item.title} — {item.status} — {item.test_passed?"اجتاز الاختبارات":item.test_passed===false?"فشل الاختبار":"غير مختبر"}
+    </option>)}
+   </select>
+  </label>}
   <div className="agent-work-verdict" role="status" aria-live="polite">
    <strong>{project.status==="planned"?"المشروع جاهز لمراجعتك":
      project.status==="completed"?"اكتمل اختبار التطبيق":
