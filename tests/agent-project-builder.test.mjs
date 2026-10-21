@@ -158,3 +158,15 @@ test("preview without GitHub App credentials gives a draft, never a fake approva
  assert.match(ui,/يمكنك تنزيل ملف ZIP غير المختبر الآن/);
  assert.match(server,/runner_available:githubActionsConfigured\(\)/);
 });
+
+test("approved tasks dispatch from server before browser effects and stale polling is guarded",()=>{
+ const source=read("app/api/assistant/projects/route.ts");
+ assert.match(source,/async function startApprovedProject\(s:AgentSession,run:Build\)/);
+ assert.match(source,/if\(autoStart\)\{[\s\S]*?await startApprovedProject\(s,persisted\)/);
+ assert.match(source,/if\(!ok\)return response\(\{error:"الموافقة مسجّلة بالفعل\."/);
+ assert.match(source,/const started=await startApprovedProject\(s,persisted\)/);
+ assert.match(source,/expectedGithubRequestId/);
+ assert.match(source,/\.eq\("github_request_id",expectedGithubRequestId\)/);
+ assert.match(source,/if\(transitioned&&finished/);
+ assert.match(source,/const claimed=await claim\(s,run,"ready","testing"/);
+});
