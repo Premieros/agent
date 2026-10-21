@@ -13,7 +13,8 @@ if the existing GitHub Actions App is configured, automatically enters the
 bounded test loop.
 
 For other tasks, AGENT first checks for a **previously successful, owner-scoped,
-exact task**. When found, it reuses the full validated source manifest without
+canonically equivalent task** (small Arabic spelling/whitespace variation only).
+When found, it reuses the full validated source manifest without
 calling a model. A new task uses an explicitly identified OpenRouter `:free`
 model; failures may use one further free-model repair attempt.
 
@@ -49,6 +50,14 @@ single-file experiment mode. Runner:
   starting is 12 minutes, including GitHub queue time.
 - GitHub dispatch request IDs are stored **before** the API call, avoiding a
   blind resend if the request times out or the browser disconnects.
+- Approved public-safe projects are dispatched from the server in the
+  plan/approval request, not delayed until the browser performs another step.
+- Poll updates use a workflow request-ID compare-and-set; stale runs cannot
+  overwrite the next attempt or record duplicate completion experience.
+- Existing test files cannot be altered by a model-generated repair to mask
+  failures. The repaired implementation must pass the original tests.
+- New model planning/repair uses **at most one strict :free candidate** per
+  step and a 38-second request timeout to protect the Vercel 60s budget.
 - Authenticated GET polls GitHub, recovers completed result using the
   reported workflow timestamp, verifies exit logs, records progress
   and decides whether a single repair is allowed.
@@ -61,7 +70,7 @@ information. Only public-safe predefined recipes may auto-dispatch.
 ## Learning without AI requests
 
 1. Verified successful projects are saved as evidence scoped to the owner.
-2. A future **identical request** can reuse those files without model API
+2. A future **canonical equivalent request** can reuse those files without model API
    calls; the files are validated again before execution.
 3. Both audited local task-board and inventory recipes need **zero model calls**.
 4. Verified outcomes feed model preference signals when applicable, while
@@ -120,10 +129,11 @@ Identical owner-verified requests can reuse their previous files without AI.
   Other projects may reuse an exact previously tested version.
 - New app creation is still restricted to Node.js built-ins, static UI,
   and bounded JSON files; no arbitrary dependencies or install commands.
-- The chat UI advances repairs when it is open; an in-progress GitHub job
-  continues even after a tab closes, and its result can be reconciled upon
-  reconnect. Fully autonomous cloud scheduling for subsequent repair steps
-  is a future improvement.
+- The **first approved dispatch starts server-side**, and its GitHub job runs
+  after the user closes the tab. Poll/reconciliation and model-generated
+  repair still need an authenticated call (currently from the browser),
+  so the complete repair cycle is **not unattended** after a tab closes.
+  A secure owner-scoped background worker remains necessary for that claim.
 - GitHub APIs, Supabase APIs and web infrastructure are still required
   to coordinate hosted execution; **zero model API calls** does not mean
   zero infrastructure API requests or universal understanding without AI.
