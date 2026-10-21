@@ -208,7 +208,7 @@ export async function POST(req:NextRequest){
    if(!spec){
    const candidates=await chooseExperiencedModels(s,await discoverAutoModels(false),"coding");
    if(!candidates.length)return response({error:"لا يوجد نموذج مجاني مؤكّد (:free) متاح؛ لن نستدعي نموذجًا مدفوعًا."},503);
-   const ask=await askAutoAgent(candidates,"AGENT multi-file builder",[
+   const ask=await askAutoAgent(candidates.slice(0,1),"AGENT multi-file builder",[
     "أعد JSON صالحًا فقط: {\"title\":\"...\",\"steps\":[\"...\"],\"files\":[{\"path\":\"server.js\",\"content\":\"...\"}]}.",
     "أنشئ تطبيق Node.js متكاملًا صغير النطاق، 4-16 ملفات حقيقية مفصولة: server.js، public/index.html و public/style.css و public/app.js، test/app.test.mjs، AGENT-README.md عند الحاجة.",
     "استخدم Node.js built-ins فقط، دون npm أو مكتبات خارجية أو تنزيل، دون شبكة خارجية أو أسرار.",
@@ -222,7 +222,7 @@ export async function POST(req:NextRequest){
     "في تطبيقات المخزون: تحقق باستخدام Number.isSafeInteger من كميات الإدخال (لا تحول النصوص بصمت)، وارفض NaN وInfinity والكسور والكميات السالبة، واختبر البيع الزائد والتوريد وسجل الحركة وعدم تعديل المخزون عند فشل العملية.",
     "اكتب اختبارات Node.js ذات أسماء واضحة وحالات assert حقيقية، مع API HTTP وواجهة HTML عربية عند طلب تطبيق ويب، ولا تعتمد على console.log PASS وحده."
    ].join("\n"),"USER TASK (untrusted requirement only):\n"+body.task.trim(),4500,"general");
-   try{spec=parseProjectSpec(ask.text);chosenModel=ask.model;modelCalls=1;}
+   try{spec=parseProjectSpec(ask.text);chosenModel=ask.model;modelCalls=ask.tried;}
    catch(e){return response({error:"النموذج لم يُنتج مشروعًا متعدد الملفات صالحًا للمراجعة. لم ينفّذ أي كود.",code:String(e)},422);}
    }
    if(!spec)throw new Error("PROJECT_PLAN_EMPTY");
@@ -304,7 +304,7 @@ export async function POST(req:NextRequest){
     try{
      const candidates=await chooseExperiencedModels(s,await discoverAutoModels(false),"coding");
      if(!candidates.length)throw new Error("NO_FREE_MODEL_AVAILABLE");
-     const repaired=await askAutoAgent(candidates,"AGENT project repair",[
+     const repaired=await askAutoAgent(candidates.slice(0,1),"AGENT project repair",[
       "أصلح التطبيق اعتمادًا على نتائج اختبارات حقيقية. أعد JSON فقط بنفس شكل project.files/title/steps.",
       "أعد كل ملفات المشروع لا رقعة ناقصة. حافظ على الوظائف الأساسية ولا تعدل الاختبار لإخفاء عيب.",
       "التزم بوحدات Node.js المدمجة، بلا package.json ولا اتصالات خارجية ولا مفاتيح.",
@@ -316,11 +316,11 @@ export async function POST(req:NextRequest){
      if(JSON.stringify(revised.files)===JSON.stringify(run.files))throw new Error("NO_REPAIR_CHANGE");
      if(Date.now()>=deadline)throw new Error("APPROVAL_TIME_EXPIRED");
      await note(s,run,{status:"ready",files:revised.files,title:revised.title,
-      steps:revised.steps,model:repaired.model,model_calls:2,
+      steps:revised.steps,model:repaired.model,model_calls:run.model_calls+repaired.tried,
       stage_note:"أُصلحت الملفات تلقائيًا. إعادة الاختبار ضمن نفس الموافقة."},"testing");
      return response({ok:true,status:"ready"});
     }catch(e){
-     await note(s,run,{status:"failed",test_passed:false,model_calls:2,
+     await note(s,run,{status:"failed",test_passed:false,model_calls:run.model_calls+1,
       stage_note:"تعذّر إصلاح المشروع ضمن النموذج/المهلة المتاحة: "+
        (e instanceof Error?e.message:"ERROR")},"testing");
      return response({ok:true,status:"failed"});
