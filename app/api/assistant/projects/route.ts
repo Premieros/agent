@@ -29,7 +29,7 @@ type Build={
  files:ProjectFile[];status:string;approved_at:string|null;deadline_at:string|null;
  max_attempts:number;attempts:number;model_calls:number;model:string;
  execution_log:string;stage_note:string;test_passed:boolean|null;saved_artifact_id:string|null;
- github_request_id:string|null;github_run_id:number|null;
+ github_request_id:string|null;github_run_id:number|null;acceptance_kind:"none"|"inventory"|"task_board";
  updated_at:string;
 };
 function specFrom(run:Build):ProjectSpec{
@@ -42,7 +42,7 @@ function publicBuild(run:Build){
   model_calls:run.model_calls,model:run.model,stage_note:run.stage_note,
   execution_log:run.execution_log,test_passed:run.test_passed,
   saved_artifact_id:run.saved_artifact_id,github_run_id:run.github_run_id,
-  runner_available:githubActionsConfigured()};
+  runner_available:githubActionsConfigured(),acceptance_kind:run.acceptance_kind};
 }
 async function ownerRun(s:AgentSession,id:string):Promise<Build|null>{
  const x=await s.db.from("assistant_project_builds").select("*")
@@ -120,13 +120,13 @@ export async function GET(req:NextRequest){
     if(trace.found){
      const finished=trace.status==="completed";
      const actualExit=/\[exit=(-?\d+)\]/.exec(trace.log);
-     const success=verifiedProjectTest(trace.log,trace.conclusion,acceptanceKindForModel(run.model));
+     const success=verifiedProjectTest(trace.log,trace.conclusion,run.acceptance_kind||"none");
      const endedAt=trace.finishedAt?new Date(trace.finishedAt).getTime():Date.now();
      const expired=Boolean(run.deadline_at&&endedAt>new Date(run.deadline_at).getTime());
      const next=finished?(success&&!expired?"completed":
        !expired&&Boolean(actualExit)&&actualExit?.[1]!=="0"&&
        run.attempts<run.max_attempts&&run.model_calls===1?"repairing":"failed"):"testing";
-     const stage=finished?success&&!expired?(acceptanceKindForModel(run.model)!=="none"?"اجتاز التطبيق اختبارات Node.js واختبارات قبول مستقلة.":"اجتاز اختبارات Node.js؛ لا يوجد اختبار قبول مستقل لهذا النوع بعد."):
+     const stage=finished?success&&!expired?((run.acceptance_kind||"none")!=="none"?"اجتاز التطبيق اختبارات Node.js واختبارات قبول مستقلة.":"اجتاز اختبارات Node.js؛ لا يوجد اختبار قبول مستقل لهذا النوع بعد."):
        next==="repairing"?"فشلت الاختبارات؛ سيصلحها النموذج المجاني مرة واحدة.":
        "فشلت الاختبارات، أو انتهت المهلة، أو لا يوجد دليل كافٍ على نجاحها.":
        "GitHub Actions: "+trace.status+" (المحاولة "+run.attempts+"/"+run.max_attempts+")";
@@ -173,7 +173,7 @@ async function startApprovedProject(s:AgentSession,run:Build){
  if(!claimed)return {ok:false,status:"testing",error:"Already claimed"};
  try{
   await dispatchAgentProject({requestId,files:specFrom(run).files,
-   acceptanceKind:acceptanceKindForModel(run.model)});
+   acceptanceKind:run.acceptance_kind||"none"});
  }catch(e){
   // A timeout could mean an accepted dispatch; never submit twice.
   await note(s,run,{stage_note:
@@ -209,9 +209,10 @@ export async function POST(req:NextRequest){
    let spec:ProjectSpec|null=builtIn;
    let chosenModel=builtIn?(builtIn.title.includes("مخزون")?"recipe:inventory":"recipe:task-board"):"",modelCalls=0;
    let previouslyApproved=false;
+   let verifiedAcceptanceKind:"none"|"inventory"|"task_board"=builtIn?acceptanceKindForModel(chosenModel):"none";
    if(!spec){
     const past=await s.db.from("assistant_project_builds")
-     .select("task,title,steps,files")
+     .select("task,title,steps,files,acceptance_kind")
      .eq("organization_id",s.organizationId).eq("user_id",s.userId)
      .eq("status","completed").eq("test_passed",true)
      .not("approved_at","is",null).order("created_at",{ascending:false})
@@ -223,6 +224,7 @@ export async function POST(req:NextRequest){
      spec=parseProjectSpec(JSON.stringify(candidate));
      chosenModel="recipe:verified-reuse";
      previouslyApproved=true;
+     verifiedAcceptanceKind=candidate.acceptance_kind||"none";
     }catch{/* Previous data cannot bypass current validation. */}
    }
    if(!spec){
@@ -256,6 +258,7 @@ export async function POST(req:NextRequest){
     organization_id:s.organizationId,user_id:s.userId,thread_id:body.threadId,
     task:body.task.trim(),title:spec.title,steps:spec.steps,files:spec.files,
     status:autoStart?"ready":"planned",model:chosenModel,model_calls:modelCalls,max_attempts:2,
+    acceptance_kind:verifiedAcceptanceKind,
     ...(autoStart?{approved_at:new Date().toISOString(),
       deadline_at:new Date(Date.now()+TTL_MS).toISOString()}:{}),
     stage_note:autoStart?
