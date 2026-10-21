@@ -118,7 +118,8 @@ export async function askAutoAgent(
   instructions: string,
   context: string,
   tokenLimit: number,
-  style: "marketing" | "general" = "marketing"
+  style: "marketing" | "general" = "marketing",
+  timeoutMs=50000
 ): Promise<{ text: string; model: string; tried: number }> {
   if (!candidates.length) throw new Error("AUTO_NO_FREE_MODELS");
   const retriable = new Set([
@@ -135,7 +136,7 @@ export async function askAutoAgent(
     catch { continue; }
     tried++;
     try {
-      const answer = await askSelectedAgent(ai, role, instructions, context, tokenLimit, style);
+      const answer = await askSelectedAgent(ai, role, instructions, context, tokenLimit, style, timeoutMs);
       return { ...answer, tried };
     } catch (error) {
       const code = error instanceof AIProviderError ? error.code : error instanceof Error ? error.message : "";
