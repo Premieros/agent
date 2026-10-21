@@ -153,7 +153,7 @@ export async function POST(req:NextRequest){
    if((recent.count||0)>=2)return response({error:"الحد الآمن: مشروعان خلال 10 دقائق."},429);
    const builtIn=builtInProjectRecipe(body.task);
    let spec:ProjectSpec|null=builtIn;
-   let chosenModel=builtIn?"recipe:task-board":"",modelCalls=0;
+   let chosenModel=builtIn?(builtIn.title.includes("مخزون")?"recipe:inventory":"recipe:task-board"):"",modelCalls=0;
    let previouslyApproved=false;
    if(!spec){
     const past=await s.db.from("assistant_project_builds")
