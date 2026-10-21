@@ -38,7 +38,8 @@ function publicBuild(run:Build){
   deadline_at:run.deadline_at,max_attempts:run.max_attempts,attempts:run.attempts,
   model_calls:run.model_calls,model:run.model,stage_note:run.stage_note,
   execution_log:run.execution_log,test_passed:run.test_passed,
-  saved_artifact_id:run.saved_artifact_id,github_run_id:run.github_run_id};
+  saved_artifact_id:run.saved_artifact_id,github_run_id:run.github_run_id,
+  runner_available:githubActionsConfigured()};
 }
 async function ownerRun(s:AgentSession,id:string):Promise<Build|null>{
  const x=await s.db.from("assistant_project_builds").select("*")
