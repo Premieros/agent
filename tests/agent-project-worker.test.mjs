@@ -35,6 +35,13 @@ test("worker endpoint disabled without all AGENT-only credentials and cannot acc
  assert.match(driver,/projectId!=="gldlgdycgneadbqftcrj"/);
  assert.match(driver,/AGENT_WORKER_DATABASE_MISMATCH/);
  assert.match(driver,/\.not\("approved_at","is",null\)/);
- assert.match(driver,/\bacceptanceKindForModel\(row.model\)/);
+ assert.match(driver,/acceptanceKind:row.acceptance_kind\\|\\|"none"/);
  assert.doesNotMatch(driver,/\bdelete\(/);
+});
+
+test("an in-progress repair cannot be kept alive indefinitely by polling",()=>{
+ const driver=file("lib/agent-project-background.ts");
+ assert.match(driver,/const stuck=Date\.now\(\)-new Date\(row\.updated_at\)\.getTime\(\)>90_000/);
+ assert.match(driver,/if\(!stuck\)return \{processed:false,action:"repair_running"\}/);
+ assert.doesNotMatch(driver,/stage_note:"الإصلاح قيد التنفيذ في طلب آخر\."/);
 });
