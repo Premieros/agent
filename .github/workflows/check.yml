@@ -72,6 +72,9 @@ jobs:
               -e AGENT_ACCEPTANCE_KIND="$kind" -e AGENT_WORKSPACE_ROOT=/workspace \
               node:22-alpine sh -ec 'cd /workspace; node --check server.js; node --test; node --test /acceptance/acceptance.cjs'
           done
+      - name: Execute exact isolated AGENT workflow scripts without API tokens
+        shell: bash
+        run: node --experimental-strip-types scripts/verify-agent-runner.mjs
       - name: Build without external credentials
         run: npm run build
       - name: Check TypeScript
