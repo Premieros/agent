@@ -5,7 +5,7 @@ import {requireAgentSession,errorResponse,type AgentSession} from "@/lib/agent-s
 import {discoverAutoModels,askAutoAgent} from "@/lib/auto-ai";
 import {chooseExperiencedModels,recordSandboxExperience} from "@/lib/agent-experience";
 import {parseProjectSpec,packagedProjectFiles,zipProjectFiles,
-  canAdvanceProject,verifiedProjectTest,type ProjectFile,type ProjectSpec} from "@/lib/agent-project-engine";
+  canAdvanceProject,verifiedProjectTest,publicGithubProjectPreflight,type ProjectFile,type ProjectSpec} from "@/lib/agent-project-engine";
 
 export const runtime="nodejs";
 export const maxDuration=60;
@@ -190,6 +190,11 @@ export async function POST(req:NextRequest){
    catch(e){return response({error:"النموذج لم يُنتج مشروعًا متعدد الملفات صالحًا للمراجعة. لم ينفّذ أي كود.",code:String(e)},422);}
    }
    if(!spec)throw new Error("PROJECT_PLAN_EMPTY");
+   const safety=publicGithubProjectPreflight(spec.files);
+   if(!safety.ok)return response({error:
+    safety.reason==="TOO_LARGE"?"المشروع أكبر من الحد الآمن المسموح بنقله إلى GitHub Actions (40KB).":
+    safety.reason==="POSSIBLE_SECRET"?"الملفات تحتوي نمطًا قد يكون مفتاحًا خاصًا؛ لن يُرسل إلى GitHub العام.":
+    "ملفات المشروع غير صالحة للتنفيذ.",code:"PROJECT_PREFLIGHT_"+safety.reason},422);
    const autoStart=(Boolean(builtIn)||previouslyApproved)&&githubActionsConfigured();
    const inserted=await s.db.from("assistant_project_builds").insert({
     organization_id:s.organizationId,user_id:s.userId,thread_id:body.threadId,
@@ -216,6 +221,8 @@ export async function POST(req:NextRequest){
 
   if(body.action==="approve"){
    if(run.status!=="planned")return response({error:"المشروع لم يعد في انتظار الموافقة."},409);
+   const safety=publicGithubProjectPreflight(specFrom(run).files);
+   if(!safety.ok)return response({error:"لا يمكن إرسال ملفات غير آمنة: "+safety.reason},422);
    if(!githubActionsConfigured())
     return response({error:"GitHub Actions غير مهيأ بالصلاحيات السابقة."},409);
    const maxAttempts=body.maxAttempts===1?1:2;
@@ -273,6 +280,8 @@ export async function POST(req:NextRequest){
      return response({ok:true,status:"failed"});
     }
    }
+   const safety=publicGithubProjectPreflight(specFrom(run).files);
+   if(!safety.ok)return response({error:"رفض إرسال ملفات غير آمنة إلى GitHub: "+safety.reason},422);
    const attempts=run.attempts+1;
    const requestId=crypto.randomUUID();
    const claimed=await claim(s,run,"ready","testing",{
