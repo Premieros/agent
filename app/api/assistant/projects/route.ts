@@ -55,12 +55,17 @@ async function claim(s:AgentSession,run:Build,status:string,next:string,extra:Re
  if(x.error)throw x.error;
  return Boolean(x.data);
 }
-async function note(s:AgentSession,run:Build,fields:Record<string,unknown>,onlyStatus:string){
- const x=await s.db.from("assistant_project_builds").update({
+async function note(s:AgentSession,run:Build,fields:Record<string,unknown>,onlyStatus:string,
+ expectedGithubRequestId?:string){
+ let q=s.db.from("assistant_project_builds").update({
    ...fields,updated_at:new Date().toISOString()
  }).eq("id",run.id).eq("organization_id",s.organizationId).eq("user_id",s.userId)
  .eq("status",onlyStatus);
+ // Polls for an old workflow must not overwrite a newer repair/retest run.
+ if(expectedGithubRequestId)q=q.eq("github_request_id",expectedGithubRequestId);
+ const x=await q.select("id").maybeSingle();
  if(x.error)throw x.error;
+ return Boolean(x.data);
 }
 async function finishExperience(s:AgentSession,run:Build,succeeded:boolean){
  await recordSandboxExperience(s,{id:run.id,task:run.task,model:run.model,
@@ -112,11 +117,11 @@ export async function GET(req:NextRequest){
        next==="repairing"?"فشلت الاختبارات؛ سيصلحها النموذج المجاني مرة واحدة.":
        "فشلت الاختبارات، أو انتهت المهلة، أو لا يوجد دليل كافٍ على نجاحها.":
        "GitHub Actions: "+trace.status+" (المحاولة "+run.attempts+"/"+run.max_attempts+")";
-     await note(s,run,{status:next,github_run_id:trace.runId,
+     const transitioned=await note(s,run,{status:next,github_run_id:trace.runId,
        ...(finished?{test_passed:success&&!expired}:{}),
        execution_log:(run.execution_log+"\n"+trace.log).slice(-14000),
-       stage_note:stage},"testing");
-     if(finished&&actualExit&&["completed","failed"].includes(next))
+       stage_note:stage},"testing",run.github_request_id);
+     if(transitioned&&finished&&actualExit&&["completed","failed"].includes(next))
       await finishExperience(s,run,success&&!expired);
      run=await ownerRun(s,run.id);
     }
@@ -127,7 +132,8 @@ export async function GET(req:NextRequest){
   if(run?.status==="testing"&&run.deadline_at&&
     Date.now()>new Date(run.deadline_at).getTime()){
    await note(s,run,{status:"failed",test_passed:false,
-    stage_note:"انتهت مهلة التشغيل؛ لا إعادة إرسال تلقائية إلى GitHub."},"testing");
+    stage_note:"انتهت مهلة التشغيل؛ لا إعادة إرسال تلقائية إلى GitHub."},"testing",
+    run.github_request_id||undefined);
    run=await ownerRun(s,run.id);
   }
   return response({project:run?publicBuild(run):null});
