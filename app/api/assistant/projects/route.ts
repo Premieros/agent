@@ -201,7 +201,7 @@ export async function POST(req:NextRequest){
      .limit(25);
     if(past.error)throw past.error;
     const candidate=(past.data||[]).find(item=>
-     normalizedProjectTask(item.task)===normalizedProjectTask(body.task));
+     normalizedProjectTask(item.task)===normalizedProjectTask(body.task!));
     if(candidate)try{
      spec=parseProjectSpec(JSON.stringify(candidate));
      chosenModel="recipe:verified-reuse";
