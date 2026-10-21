@@ -13,11 +13,15 @@ export async function GET(req:NextRequest){
    .eq("id",id).eq("organization_id",s.organizationId).eq("user_id",s.userId).maybeSingle();
   if(q.error)throw q.error;
   if(!q.data)return NextResponse.json({error:"Project not found"},{status:404});
-  if(!["completed","failed"].includes(q.data.status))
-   return NextResponse.json({error:"Project has not completed its bounded run"},{status:409});
+  // Owners may inspect a portable draft ZIP without approving remote code
+  // execution. Never label a draft or interrupted test as verified.
+  const finished=["completed","failed"].includes(q.data.status);
   const spec:ProjectSpec={title:q.data.title,steps:q.data.steps,files:q.data.files};
-  const bytes=zipProjectFiles(packagedProjectFiles(spec,q.data.task,q.data.execution_log,
-    q.data.test_passed?"PASSED":"FAILED OR UNVERIFIED"));
+  const result=finished?q.data.execution_log:
+   "No per-project GitHub Actions tests have completed. This is a draft project.\n";
+  const status=finished?(q.data.test_passed?"PASSED":"FAILED OR UNVERIFIED"):
+    "NOT TESTED - DRAFT";
+  const bytes=zipProjectFiles(packagedProjectFiles(spec,q.data.task,result,status));
   const responseBytes=new Uint8Array(new ArrayBuffer(bytes.byteLength));responseBytes.set(bytes);
   return new NextResponse(responseBytes,{headers:{
    "Content-Type":"application/zip",
