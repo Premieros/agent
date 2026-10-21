@@ -123,3 +123,16 @@ export function verifiedProjectTest(log:string,conclusion:string|null):boolean{
  return conclusion==="success"&&exit===0&&count!==null&&count>0&&
   passed===count&&failed===0;
 }
+
+/** Reject unsupported public-runner payloads before claiming the user task. */
+export function publicGithubProjectPreflight(files:readonly ProjectFile[]):{ok:true}|{ok:false;reason:"TOO_LARGE"|"POSSIBLE_SECRET"|"INVALID_FILES"}{
+ if(!Array.isArray(files)||files.length<4||files.length>22||
+    files.some(f=>!f||typeof f.path!=="string"||typeof f.content!=="string"||!validProjectPath(f.path)))
+  return {ok:false,reason:"INVALID_FILES"};
+ const raw=new TextEncoder().encode(JSON.stringify({files}));
+ if(raw.length>40000||Math.ceil(raw.length/3)*4>56000)
+  return {ok:false,reason:"TOO_LARGE"};
+ const secret=/-----BEGIN (?:RSA |OPENSSH |EC )?PRIVATE KEY-----|\b(?:ghp_|ghs_|sk-)[A-Za-z0-9_-]{18,}/;
+ if(files.some(f=>secret.test(f.content)))return {ok:false,reason:"POSSIBLE_SECRET"};
+ return {ok:true};
+}
