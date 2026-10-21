@@ -178,6 +178,7 @@ export async function POST(req:NextRequest){
    if(!body.threadId||!uuid.test(body.threadId)||typeof body.task!=="string"||
       body.task.trim().length<8||body.task.length>4500)
      return response({error:"صف تطبيقًا مطلوبًا وحدوده في 8–4500 حرف."},400);
+   const requestedTask=body.task.trim();
    const thread=await s.db.from("assistant_threads").select("id,title")
     .eq("id",body.threadId).eq("organization_id",s.organizationId)
     .eq("user_id",s.userId).maybeSingle();
@@ -201,7 +202,7 @@ export async function POST(req:NextRequest){
      .limit(25);
     if(past.error)throw past.error;
     const candidate=(past.data||[]).find(item=>
-     normalizedProjectTask(item.task)===normalizedProjectTask(body.task!));
+     normalizedProjectTask(item.task)===normalizedProjectTask(requestedTask));
     if(candidate)try{
      spec=parseProjectSpec(JSON.stringify(candidate));
      chosenModel="recipe:verified-reuse";
