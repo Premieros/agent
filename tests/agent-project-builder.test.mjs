@@ -123,7 +123,7 @@ test("previously approved successful exact projects can repeat without model or 
  const api=read("app/api/assistant/projects/route.ts");
  assert.match(api,/previouslyApproved=true/);
  assert.match(api,/const autoStart=\(Boolean\(builtIn\)\|\|previouslyApproved\)/);
- assert.match(api,/const success=verifiedProjectTest\(trace.log,trace.conclusion,acceptanceKindForModel\(run\.model\)\)/);
+ assert.match(api,/const success=verifiedProjectTest\(trace.log,trace.conclusion,run\.acceptance_kind\|\|"none"\)/);
 });
 
 test("public runner preflight protects approval from oversized manifests or secrets",()=>{
@@ -202,5 +202,17 @@ test("immutable trusted acceptance cannot be bypassed by generated PASS text",()
  const dispatcher=read("lib/agent-github-actions.ts");
  assert.match(dispatcher,/acceptance_kind:input\.acceptanceKind\|\|"none"/);
  const api=read("app/api/assistant/projects/route.ts");
- assert.match(api,/acceptanceKind:acceptanceKindForModel\(run\.model\)/);
+ assert.match(api,/acceptanceKind:run\.acceptance_kind\|\|"none"/);
+});
+
+test("independent acceptance remains attached to reused and repaired projects",()=>{
+ const api=read("app/api/assistant/projects/route.ts");
+ const worker=read("lib/agent-project-background.ts");
+ const migration=read("supabase/migrations/20261021_agent_project_acceptance_kind.sql");
+ assert.match(migration,/add column if not exists acceptance_kind/);
+ assert.match(api,/acceptance_kind:verifiedAcceptanceKind/);
+ assert.match(api,/verifiedAcceptanceKind=candidate.acceptance_kind\|\|"none"/);
+ assert.match(api,/const success=verifiedProjectTest\(trace.log,trace.conclusion,run.acceptance_kind\|\|"none"\)/);
+ assert.match(worker,/verifiedProjectTest\(trace.log,trace.conclusion,row.acceptance_kind\|\|"none"\)/);
+ assert.match(worker,/acceptanceKind:row.acceptance_kind\|\|"none"/);
 });
