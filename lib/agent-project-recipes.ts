@@ -1,4 +1,4 @@
-import {INVENTORY_RECIPE} from "./agent-inventory-recipe";
+import {INVENTORY_RECIPE} from "./agent-inventory-recipe.ts";
 /** Audited deterministic recipe for exact generic requests. No AI call, no user content embedded. */
 import type {ProjectSpec} from "./agent-project-engine";
 export function normalizedProjectTask(task:string):string{
