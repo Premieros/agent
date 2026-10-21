@@ -104,7 +104,12 @@ export function canAdvanceProject(status:string,approved:boolean,attempts:number
 }
 
 /** Require genuine node --test TAP totals, not a generated 'PASS' line. */
-export function verifiedProjectTest(log:string,conclusion:string|null):boolean{
+export type ProjectAcceptanceKind="none"|"inventory"|"task_board";
+export function acceptanceKindForModel(model:string):ProjectAcceptanceKind{
+ return model==="recipe:inventory"?"inventory":
+  model==="recipe:task-board"?"task_board":"none";
+}
+export function verifiedProjectTest(log:string,conclusion:string|null,kind:ProjectAcceptanceKind="none"):boolean{
  const lines=log.replace(/\x1b\[[0-9;]*m/g,"").split(/\r?\n/);
  let count:number|null=null,passed:number|null=null,failed:number|null=null;
  let exit:number|null=null;
@@ -121,7 +126,8 @@ export function verifiedProjectTest(log:string,conclusion:string|null):boolean{
   if(status)exit=Number(status[1]);
  }
  return conclusion==="success"&&exit===0&&count!==null&&count>0&&
-  passed===count&&failed===0;
+  passed===count&&failed===0&&
+  (kind==="none"||log.includes("AGENT_INDEPENDENT_ACCEPTANCE_PASSED:"+kind));
 }
 
 /** Reject unsupported public-runner payloads before claiming the user task. */
