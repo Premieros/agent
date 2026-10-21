@@ -123,7 +123,7 @@ test("previously approved successful exact projects can repeat without model or 
  const api=read("app/api/assistant/projects/route.ts");
  assert.match(api,/previouslyApproved=true/);
  assert.match(api,/const autoStart=\(Boolean\(builtIn\)\|\|previouslyApproved\)/);
- assert.match(api,/const success=verifiedProjectTest\(trace.log,trace.conclusion\)/);
+ assert.match(api,/const success=verifiedProjectTest\(trace.log,trace.conclusion,acceptanceKindForModel\(run\.model\)\)/);
 });
 
 test("public runner preflight protects approval from oversized manifests or secrets",()=>{
