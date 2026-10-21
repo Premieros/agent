@@ -118,8 +118,8 @@ function classifyProviderError(status: number, body: unknown): AIProviderError {
   return new AIProviderError(code, status, safeStatus);
 }
 
-async function providerFetch(url: string, options: RequestInit) {
-  const response = await fetch(url, { ...options, cache: "no-store", signal: AbortSignal.timeout(50000) });
+async function providerFetch(url: string, options: RequestInit, timeoutMs=50000) {
+  const response = await fetch(url, { ...options, cache: "no-store", signal: AbortSignal.timeout(timeoutMs) });
   if (!response.ok) {
     let payload: unknown = null;
     try { payload = await response.json(); } catch { /* fallback to status */ }
@@ -180,7 +180,8 @@ export async function askSelectedAgent(
   instructions: string,
   context: string,
   tokenLimit = 900,
-  style: "marketing" | "general" = "marketing"
+  style: "marketing" | "general" = "marketing",
+  timeoutMs=50000
 ): Promise<{ text: string; model: string }> {
   const taskInstructions = style === "general"
     ? instructions
@@ -206,7 +207,7 @@ export async function askSelectedAgent(
             maxOutputTokens: Math.min(4096, Math.max(850, tokenLimit + 350))
           }
         })
-      }
+      },timeoutMs
     ) as { candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }> };
     text = result.candidates?.[0]?.content?.parts?.map(p => p.text || "").join("\n") || "";
   } else if (config.provider === "anthropic") {
@@ -217,7 +218,7 @@ export async function askSelectedAgent(
         model: config.model, max_tokens: tokenLimit, system: sys,
         messages: [{ role: "user", content: context }]
       })
-    }) as { content?: Array<{ type?: string; text?: string }> };
+    },timeoutMs) as { content?: Array<{ type?: string; text?: string }> };
     text = result.content?.filter(part => part.type === "text").map(part => part.text || "").join("\n") || "";
   } else {
     // All URLs are preapproved, static provider hosts. Do not accept arbitrary user endpoints (SSRF).
@@ -231,7 +232,7 @@ export async function askSelectedAgent(
         messages: [{ role: "system", content: sys }, { role: "user", content: context }],
         max_tokens: tokenLimit
       })
-    }) as { choices?: Array<{ message?: { content?: string | Array<{ text?: string }> } }> };
+    },timeoutMs) as { choices?: Array<{ message?: { content?: string | Array<{ text?: string }> } }> };
     const content = result.choices?.[0]?.message?.content;
     text = typeof content === "string" ? content : Array.isArray(content) ? content.map(p => p.text || "").join("\n") : "";
   }
