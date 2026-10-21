@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {readFileSync} from "node:fs";
 import {parseProjectSpec,validProjectPath,zipProjectFiles,packagedProjectFiles,
- canAdvanceProject,verifiedProjectTest,publicGithubProjectPreflight,repairPreservesTests} from "../lib/agent-project-engine.ts";
+ canAdvanceProject,verifiedProjectTest,acceptanceKindForModel,publicGithubProjectPreflight,repairPreservesTests} from "../lib/agent-project-engine.ts";
 const read=p=>readFileSync(new URL("../"+p,import.meta.url),"utf8");
 const fixture={title:"Task board",steps:["Generate","Test"],files:[
  {path:"server.js",content:"const http=require('node:http'); module.exports={http};\n"},
@@ -183,4 +183,24 @@ test("repair cannot delete or weaken the owner's original tests",()=>{
  repaired.files.find(f=>f.path==="server.js").content+="\n// Valid bug fix\n";
  assert.equal(repairPreservesTests(original,repaired),true);
  assert.match(read("app/api/assistant/projects/route.ts"),/REPAIR_CHANGED_OR_REMOVED_TESTS/);
+});
+
+test("immutable trusted acceptance cannot be bypassed by generated PASS text",()=>{
+ assert.equal(acceptanceKindForModel("recipe:inventory"),"inventory");
+ assert.equal(acceptanceKindForModel("recipe:task-board"),"task_board");
+ assert.equal(acceptanceKindForModel("recipe:verified-reuse"),"none");
+ const tap="# tests 9\n# pass 9\n# fail 0\n[exit=0]";
+ assert.equal(verifiedProjectTest(tap,"success"),true);
+ assert.equal(verifiedProjectTest(tap,"success","inventory"),false);
+ assert.equal(verifiedProjectTest(tap+"\nAGENT_INDEPENDENT_ACCEPTANCE_PASSED:inventory","success","inventory"),true);
+ assert.equal(verifiedProjectTest(tap+"\nAGENT_INDEPENDENT_ACCEPTANCE_PASSED:task_board","success","inventory"),false);
+ const wf=read(".github/workflows/agent-experiment.yml");
+ assert.match(wf,/acceptance_kind:/);
+ assert.match(wf,/--mount "type=bind,src=\$RUNNER_TEMP\/agent-acceptance,dst=\/acceptance,readonly"/);
+ assert.match(wf,/node --test \/acceptance\/acceptance\.cjs/);
+ assert.match(wf,/AGENT_INDEPENDENT_ACCEPTANCE_PASSED/);
+ const dispatcher=read("lib/agent-github-actions.ts");
+ assert.match(dispatcher,/acceptance_kind:input\.acceptanceKind\|\|"none"/);
+ const api=read("app/api/assistant/projects/route.ts");
+ assert.match(api,/acceptanceKind:acceptanceKindForModel\(run\.model\)/);
 });
