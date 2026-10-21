@@ -5,7 +5,7 @@ import {requireAgentSession,errorResponse,type AgentSession} from "@/lib/agent-s
 import {discoverAutoModels,askAutoAgent} from "@/lib/auto-ai";
 import {chooseExperiencedModels,recordSandboxExperience} from "@/lib/agent-experience";
 import {parseProjectSpec,packagedProjectFiles,zipProjectFiles,
-  canAdvanceProject,verifiedProjectTest,publicGithubProjectPreflight,type ProjectFile,type ProjectSpec} from "@/lib/agent-project-engine";
+  canAdvanceProject,verifiedProjectTest,publicGithubProjectPreflight,repairPreservesTests,type ProjectFile,type ProjectSpec} from "@/lib/agent-project-engine";
 
 export const runtime="nodejs";
 export const maxDuration=60;
@@ -313,6 +313,7 @@ export async function POST(req:NextRequest){
       JSON.stringify(run.files).slice(0,18500)+"\nACTUAL TEST LOG:\n"+
       run.execution_log.slice(-4300),3000,"general");
      const revised=parseProjectSpec(repaired.text);
+     if(!repairPreservesTests(specFrom(run),revised))throw new Error("REPAIR_CHANGED_OR_REMOVED_TESTS");
      if(JSON.stringify(revised.files)===JSON.stringify(run.files))throw new Error("NO_REPAIR_CHANGE");
      if(Date.now()>=deadline)throw new Error("APPROVAL_TIME_EXPIRED");
      await note(s,run,{status:"ready",files:revised.files,title:revised.title,
