@@ -136,3 +136,12 @@ export function publicGithubProjectPreflight(files:readonly ProjectFile[]):{ok:t
  if(files.some(f=>secret.test(f.content)))return {ok:false,reason:"POSSIBLE_SECRET"};
  return {ok:true};
 }
+
+/** A repair may change implementation, but never weaken or replace tests that failed. */
+export function repairPreservesTests(original:ProjectSpec,next:ProjectSpec):boolean{
+ const isTest=(path:string)=>/(?:^|\/)[A-Za-z0-9_.-]+\.test\.(?:js|mjs|cjs)$/i.test(path);
+ const previousTests=original.files.filter(f=>isTest(f.path));
+ if(!previousTests.length)return false;
+ const target=new Map(next.files.filter(f=>isTest(f.path)).map(f=>[f.path.toLowerCase(),f.content]));
+ return previousTests.every(f=>target.get(f.path.toLowerCase())===f.content);
+}
