@@ -1,3 +1,4 @@
+import {publicGithubProjectPreflight} from "@/lib/agent-project-engine";
 import "server-only";
 import {createSign} from "node:crypto";
 
@@ -70,8 +71,10 @@ export async function dispatchAgentExperiment(input:{requestId:string;code:strin
  * The revised workflow must be on GitHub's default branch before it can run.
  */
 export async function dispatchAgentProject(input:{requestId:string;files:{path:string;content:string}[]}){
-  if(!/^[0-9a-f-]{36}$/i.test(input.requestId)||!Array.isArray(input.files))
+  if(!/^[0-9a-f-]{36}$/i.test(input.requestId))
     throw new Error("GITHUB_PROJECT_INVALID_INPUT");
+  const preflight=publicGithubProjectPreflight(input.files);
+  if(!preflight.ok)throw new Error("GITHUB_PROJECT_"+preflight.reason);
   const raw=Buffer.from(JSON.stringify({files:input.files}),"utf8");
   const b64=raw.toString("base64");
   if(raw.byteLength>40_000||b64.length>56_000)throw new Error("GITHUB_PROJECT_INPUT_TOO_LARGE");
