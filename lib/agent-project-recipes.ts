@@ -1,3 +1,4 @@
+import {INVENTORY_RECIPE} from "./agent-inventory-recipe";
 /** Audited deterministic recipe for exact generic requests. No AI call, no user content embedded. */
 import type {ProjectSpec} from "./agent-project-engine";
 export function normalizedProjectTask(task:string):string{
@@ -12,8 +13,17 @@ const exact=new Set([
  "build a todo app","create a todo app","build a task manager app",
  "create a task manager app"
 ]);
+const inventoryExact=new Set([
+ "ابن تطبيق اداره مخزون","ابني تطبيق اداره مخزون","انشئ تطبيق اداره مخزون",
+ "اصنع تطبيق اداره مخزون","اعمل تطبيق اداره مخزون",
+ "ابن تطبيق مخزون متجر","انشئ تطبيق مخزون متجر",
+ "build an inventory app","create an inventory app","build a stock management app"
+]);
 export function builtInProjectRecipe(task:string):ProjectSpec|null{
- return exact.has(normalizedProjectTask(task))?JSON.parse(JSON.stringify(TASK_BOARD)) as ProjectSpec:null;
+ const normalized=normalizedProjectTask(task);
+ if(exact.has(normalized))return structuredClone(TASK_BOARD);
+ if(inventoryExact.has(normalized))return structuredClone(INVENTORY_RECIPE);
+ return null;
 }
 const TASK_BOARD:ProjectSpec={
   "title": "تطبيق إدارة مهام مستقل",
