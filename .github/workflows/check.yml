@@ -57,13 +57,20 @@ jobs:
           }
           JS
           chmod -R a+rX "$root"
+          mkdir -p "$RUNNER_TEMP/agent-independent-acceptance"
+          cp tests/agent-independent-acceptance.cjs "$RUNNER_TEMP/agent-independent-acceptance/acceptance.cjs"
+          chmod -R a+rX "$RUNNER_TEMP/agent-independent-acceptance"
           for job in tasks inventory; do
+            kind=task_board
+            if [ "$job" = inventory ]; then kind=inventory; fi
             timeout 45s docker run --rm \
               --network none --read-only --cap-drop ALL --security-opt no-new-privileges \
               --pids-limit 64 --memory 256m --cpus 1 --user 65534:65534 \
               --tmpfs /tmp:rw,noexec,nosuid,size=16m \
               --mount "type=bind,src=$root/$job,dst=/workspace,readonly" \
-              node:22-alpine sh -ec 'cd /workspace; node --check server.js; node --test'
+              --mount "type=bind,src=$RUNNER_TEMP/agent-independent-acceptance,dst=/acceptance,readonly" \
+              -e AGENT_ACCEPTANCE_KIND="$kind" -e AGENT_WORKSPACE_ROOT=/workspace \
+              node:22-alpine sh -ec 'cd /workspace; node --check server.js; node --test; node --test /acceptance/acceptance.cjs'
           done
       - name: Build without external credentials
         run: npm run build
