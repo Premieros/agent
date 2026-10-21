@@ -150,3 +150,11 @@ test("draft owners can download source without public execution or a false test 
  assert.match(status.content,/NOT TESTED - DRAFT/);
  assert.ok(zipProjectFiles(files).byteLength>100);
 });
+
+test("preview without GitHub App credentials gives a draft, never a fake approval",()=>{
+ const ui=read("components/agent-project-builder.tsx");
+ const server=read("app/api/assistant/projects/route.ts");
+ assert.match(ui,/disabled=\{busy\|\|!project.runner_available\}/);
+ assert.match(ui,/يمكنك تنزيل ملف ZIP غير المختبر الآن/);
+ assert.match(server,/runner_available:githubActionsConfigured\(\)/);
+});
