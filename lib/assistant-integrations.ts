@@ -49,10 +49,14 @@ const definitions:Definition[]=[
     requiredKeys:["META_APP_ID","META_APP_SECRET"],envKeys:["META_APP_ID","META_APP_SECRET"],
     docsUrl:"https://developers.facebook.com/docs/facebook-login/",implementation:"planned"},
   {id:"whatsapp",title:"WhatsApp Business",category:"social",
-    description:"WhatsApp Cloud API والـWebhooks وقوالب الرسائل وموافقات الإرسال.",
-    capability:"لا إرسال رسائل حقيقي حتى اكتمال تهيئة Meta والموافقات",
-    requiredKeys:["WHATSAPP_ACCESS_TOKEN","WHATSAPP_PHONE_NUMBER_ID"],
-    envKeys:["WHATSAPP_ACCESS_TOKEN","WHATSAPP_PHONE_NUMBER_ID"],
+    description:"Webhook رسمي للتحقق من توقيع Meta وتسجيل الرسائل في CRM الخاص بـ AGENT، مع تجربة كلمة #مساعد.",
+    capability:"مُعد برمجيًا · استقبال وتسجيل فقط افتراضيًا؛ رد الاختبار يتطلب تفعيلًا صريحًا ومفاتيح Meta وقاعدة AGENT.",
+    requiredKeys:["AGENT_WHATSAPP_VERIFY_TOKEN","AGENT_WHATSAPP_META_APP_SECRET",
+      "AGENT_WHATSAPP_PHONE_NUMBER_ID","AGENT_WHATSAPP_ACCESS_TOKEN",
+      "AGENT_WHATSAPP_DB_KEY","AGENT_WHATSAPP_ORGANIZATION_ID"],
+    envKeys:["AGENT_WHATSAPP_VERIFY_TOKEN","AGENT_WHATSAPP_META_APP_SECRET",
+      "AGENT_WHATSAPP_PHONE_NUMBER_ID","AGENT_WHATSAPP_ACCESS_TOKEN",
+      "AGENT_WHATSAPP_DB_KEY","AGENT_WHATSAPP_ORGANIZATION_ID"],
     docsUrl:"https://developers.facebook.com/docs/whatsapp/cloud-api/",implementation:"planned"}
 ];
 
