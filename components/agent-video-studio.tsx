@@ -784,12 +784,14 @@ export default function AgentVideoStudio(){
        <input type="file" accept="audio/*" disabled={playing}
         onChange={e=>onSceneVoice(clip.id,e)}/>
        <span className={s.small}>{sceneVoiceNames[clip.id]||"لم يرفع حوار لهذا المشهد. صوت المتصفح معاينة فقط."}</span>
+      </label>
+      <div className={s.wide}>
        <button type="button" className={recordingSceneId===clip.id?s.danger:s.secondary}
         disabled={playing||(recordingVoice&&recordingSceneId!==clip.id)}
         onClick={()=>void recordVoice(clip.id)}>
         <Mic size={14}/> {recordingSceneId===clip.id?"إيقاف تسجيل حوار المشهد":"تسجيل حوار المشهد من الميكروفون"}
        </button>
-      </label>
+      </div>
       <label className={s.field}>لون المشهد
        <input type="color" value={clip.color} disabled={playing}
         onChange={e=>update(clip.id,{color:e.target.value})}/></label>

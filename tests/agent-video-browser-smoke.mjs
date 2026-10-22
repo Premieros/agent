@@ -85,7 +85,16 @@ try{
  });
  // Exercise the microphone path, then use deterministic WAV for mux verification.
  await page.getByRole("button",{name:"تسجيل حوار المشهد من الميكروفون"}).first().click();
- await page.getByRole("button",{name:"إيقاف تسجيل حوار المشهد"}).first().waitFor();
+ try{
+  await page.getByRole("button",{name:"إيقاف تسجيل حوار المشهد"}).first().waitFor({timeout:6000});
+ }catch{
+  const errors=await page.locator('[role="alert"]').allTextContents();
+  const controls=await page.getByRole("button",{name:/تسجيل حوار|إيقاف تسجيل/}).allTextContents();
+  throw Error("MIC_CAPTURE_NOT_READY: "+JSON.stringify({errors,controls,
+   media:await page.evaluate(()=>({secure:window.isSecureContext,
+    mediaDevices:!!navigator.mediaDevices?.getUserMedia,
+    mediaRecorder:typeof window.MediaRecorder}))}));
+ }
  await pause(1100);
  await page.getByRole("button",{name:"إيقاف تسجيل حوار المشهد"}).first().click();
  await page.getByText("حوار مسجّل: المشهد 1").first().waitFor();
