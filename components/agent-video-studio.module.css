@@ -38,3 +38,14 @@
 .footer{margin:18px 0 0;text-align:center;color:#8c9bb0;font-size:11px;line-height:1.9}
 @media(max-width:980px){.layout{grid-template-columns:1fr}.panel{padding:15px}.frame canvas{max-height:70vh}}
 @media(max-width:540px){.studio{padding:12px 10px 45px}.hero{padding:17px 15px}.clipForm{grid-template-columns:1fr}.clipForm .wide{grid-column:auto}}
+
+/* Automated storyboard production and source attribution */
+.sourceLink{display:inline-flex;margin-inline-start:12px;font-size:11px;color:#c5a7fd;text-decoration:underline;overflow-wrap:anywhere;max-width:100%;line-height:1.65}
+.sourceLink:hover{color:#fff}
+.clipForm input[type=checkbox]{width:auto;min-height:0;margin-inline-end:8px;accent-color:#a66be7;vertical-align:middle}
+.clipForm .secondary{margin-top:6px}
+.studio textarea:focus-visible,.studio input:focus-visible{outline:2px solid #ba82ef;outline-offset:2px}
+.studio button{display:inline-flex;gap:6px;align-items:center;justify-content:center}
+.studio .success{overflow-wrap:anywhere}
+.studio a{color:#d5adff}
+.studio .button{color:#fff}
