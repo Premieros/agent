@@ -6,6 +6,7 @@ export type VideoTransition="fade"|"slide"|"cut";
 export type VideoScene={
  id:number;title:string;subtitle:string;speaker:string;
  duration:number;color:string;transition:VideoTransition;imageUrl?:string;
+ imageQuery?:string;imageCredit?:string;imageLicense?:string;imageSource?:string;
 };
 export type VideoDraft={
  version:2;name:string;aspect:VideoAspect;scenes:Omit<VideoScene,"imageUrl">[];
@@ -47,17 +48,58 @@ export function splitVideoScript(text:string):string[]{
  }
  return merged;
 }
-export function storyboardFromScript(text:string,targetSeconds=180):VideoScene[]{
+/** Exact user-selected number of shots. Long sentences are split evenly; short
+ * scripts may intentionally have repeated image beats without inventing dialogue. */
+export function storyboardFromScript(text:string,targetSeconds=180,sceneCount=8):VideoScene[]{
  const beats=splitVideoScript(text);
- const requested=Number.isFinite(targetSeconds)?Math.max(30,Math.min(420,Math.round(targetSeconds))):180;
- const targetPerScene=Math.round(requested/beats.length);
- return beats.map((line,i)=>({
-  id:i+1,title:"المشهد "+(i+1),
-  subtitle:line.slice(0,450),
-  speaker:"راوي",duration:clampSceneDuration(Math.max(
-    Math.min(45,targetPerScene),Math.min(22,Math.ceil(line.length/13)+4))),
-  color:palette[i%palette.length],transition:i===0?"cut":"fade"
+ const requested=Math.max(12,Math.min(720,Math.round(Number(targetSeconds)||180)));
+ const count=Math.max(1,Math.min(MAX_VIDEO_SCENES,Math.round(Number(sceneCount)||8)));
+ const result:string[]=Array.from({length:count},()=> "");
+ if(beats.length>=count){
+  for(let i=0;i<count;i++){
+   const a=Math.floor(i*beats.length/count),b=Math.floor((i+1)*beats.length/count);
+   result[i]=beats.slice(a,b).join(" ");
+  }
+ }else{
+  // Map consecutive phrases to scene beats without dropping any words.
+  for(let i=0;i<count;i++){
+   const source=Math.min(beats.length-1,Math.floor(i*beats.length/count));
+   const segments=beats[source].split(/\s+/);
+   const before=Math.ceil(source*count/beats.length);
+   const after=Math.ceil((source+1)*count/beats.length);
+   const subIndex=i-before;
+   const allocated=Math.max(1,after-before);
+   const from=Math.floor(subIndex*segments.length/allocated);
+   const to=Math.floor((subIndex+1)*segments.length/allocated);
+   result[i]=segments.slice(from,to).join(" ")||beats[source];
+  }
+ }
+ const safeTotal=Math.max(count*3,Math.min(count*45,requested));
+ const per=Math.floor(safeTotal/count),extra=safeTotal%count;
+ return result.map((line,i)=>({
+  id:i+1,title:"المشهد "+(i+1),subtitle:line.slice(0,450),
+  speaker:"الراوي",duration:clampSceneDuration(per+(i<extra?1:0)),
+  color:palette[i%palette.length],transition:i===0?"cut":"fade",
+  imageQuery:guessImageQuery(line)
  }));
+}
+const imageKeywords:[RegExp,string][]=[
+ [/مستشف|طبيب|دكتور|مرض/u,"hospital doctor"],[/مدرس|جامع|طالب/u,"school classroom"],
+ [/قهو|كافيه|قهوه/u,"coffee cafe"],[/مطعم|اكل|طعام/u,"restaurant dining"],
+ [/شاطئ|بحر|ساحل/u,"sea beach"],[/سفر|مطار|طائر/u,"airport travel"],
+ [/سيار|عربيه|طريق|مرور/u,"city road traffic"],[/حديق|شجر|غاب/u,"green garden trees"],
+ [/ليل|قمر|نجوم/u,"night city"],[/اسكندري/u,"Alexandria Egypt"],
+ [/قاهر|مصر|شارع/u,"Cairo Egypt street"],[/طفل|مدرسي/u,"child school"],
+ [/موظف|شرك|مكتب/u,"office work"],[/حفل|فرح|زفاف/u,"wedding celebration"],
+ [/عائل|اسر|ام/u,"family home"],[/منزل|بيت|شقه/u,"house interior"]
+];
+export function guessImageQuery(text:string):string{
+ const original=String(text||"").trim().slice(0,220);
+ const matched=imageKeywords.find(([re])=>re.test(original));
+ if(matched)return matched[1];
+ const latin=(original.match(/[A-Za-z][A-Za-z0-9 -]{2,}/g)||[])
+   .join(" ").trim().slice(0,70);
+ return latin||original.split(/\s+/).filter(x=>x.length>=4).slice(0,4).join(" ")||"Egypt city";
 }
 export function serializeVideoDraft(name:string,aspect:VideoAspect,scenes:readonly VideoScene[]):string{
  if(!scenes.length||scenes.length>MAX_VIDEO_SCENES)throw Error("INVALID_SCENE_COUNT");
@@ -90,7 +132,9 @@ export function parseVideoDraft(json:string):VideoDraft{
     throw Error("INVALID_VIDEO_SCENE");
   return {id:i+1,title:safeText(item.title,110),subtitle:safeText(item.subtitle,500),
    speaker:safeText(item.speaker,100),duration:clampSceneDuration(item.duration),
-   color:item.color,transition:item.transition} satisfies Omit<VideoScene,"imageUrl">;
+   color:item.color,transition:item.transition,
+   imageQuery:safeText(item.imageQuery,100),imageCredit:safeText(item.imageCredit,280),
+   imageLicense:safeText(item.imageLicense,80),imageSource:safeText(item.imageSource,400)} satisfies Omit<VideoScene,"imageUrl">;
  });
  return {version:2,name:safeText(value.name,100)||"فيديو AGENT",
   aspect:value.aspect as VideoAspect,scenes};
