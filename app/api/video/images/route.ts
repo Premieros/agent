@@ -52,6 +52,10 @@ export async function GET(req:NextRequest){
    allowedLicense:pages.filter(x=>allowedCommonsLicense(
     clean(x.imageinfo?.[0]?.extmetadata?.LicenseShortName?.value,80))).length,
    withSource:pages.filter(x=>typeof x.imageinfo?.[0]?.descriptionurl==="string").length,
+   allowedThumb:pages.filter(x=>allowThumb(x.imageinfo?.[0]?.thumburl)).length,
+   sourceMatches:pages.filter(x=>String(x.imageinfo?.[0]?.descriptionurl||"").startsWith("https://commons.wikimedia.org/wiki/File:")).length,
+   firstThumb:String(pages[0]?.imageinfo?.[0]?.thumburl||"").slice(0,260),
+   firstSource:String(pages[0]?.imageinfo?.[0]?.descriptionurl||"").slice(0,200),
    firstLicense:clean(pages[0]?.imageinfo?.[0]?.extmetadata?.LicenseShortName?.value,80)
   };
   const images=pages.sort((a,b)=>(a.index||0)-(b.index||0)).flatMap(p=>{
