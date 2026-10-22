@@ -18,7 +18,7 @@ jobs:
   verify:
     name: Verify Next.js and TypeScript
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 25
     env:
       NEXT_TELEMETRY_DISABLED: "1"
     steps:
@@ -77,5 +77,11 @@ jobs:
         run: node --experimental-strip-types scripts/verify-agent-runner.mjs
       - name: Build without external credentials
         run: npm run build
+      - name: Install Chromium for video export smoke test
+        run: |
+          npm install --no-save --no-audit --no-fund playwright@1.56.1
+          npx playwright install --with-deps chromium
+      - name: Browser smoke test of real motion and Arabic-scene audio export
+        run: node tests/agent-video-browser-smoke.mjs
       - name: Check TypeScript
         run: npm run typecheck
