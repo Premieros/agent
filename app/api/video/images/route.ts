@@ -6,14 +6,24 @@ type CommonsInfo={
  extmetadata?:Record<string,{value?:unknown}>;
 };
 type CommonsPage={title?:unknown;index?:number;imageinfo?:CommonsInfo[]};
-function allowThumb(value:unknown):value is string{
- if(typeof value!=="string"||value.length>1000)return false;
+function safeCommonsAsset(value:unknown):string|null{
+ if(typeof value!=="string"||value.length>1400)return null;
  try{
   const u=new URL(value);
-  return u.protocol==="https:"&&u.hostname==="upload.wikimedia.org"&&
-   u.pathname.startsWith("/wikipedia/commons/thumb/")&&
-   /\.(jpe?g|png|webp)$/i.test(u.pathname)&&!u.search&&!u.hash;
- }catch{return false;}
+  if(u.protocol!=="https:"||u.hostname!=="upload.wikimedia.org"||u.hash||
+   /%2f|%5c|%2e%2e/i.test(u.pathname))return null;
+  const parts=u.pathname.split("/").filter(Boolean);
+  if(parts[0]!=="wikipedia"||parts[1]!=="commons")return null;
+  const thumb=parts[2]==="thumb",offset=thumb?3:2;
+  if(parts.length!==offset+(thumb?4:3)||
+   !/^[0-9a-f]$/i.test(parts[offset])||
+   !/^[0-9a-f]{2}$/i.test(parts[offset+1])||
+   !/\.(jpe?g|png|webp)$/i.test(parts[parts.length-1]))
+   return null;
+  // Wikimedia may add analytics/query parameters to "unscaled" thumbs.
+  // Strip all query parameters before forwarding to the image proxy.
+  return u.origin+u.pathname;
+ }catch{return null;}
 }
 function clean(value:unknown,max=200){
  return typeof value==="string"?value.replace(/<[^>]*>/g,"").replace(/\s+/g," ").trim().slice(0,max):"";
@@ -52,7 +62,7 @@ export async function GET(req:NextRequest){
    allowedLicense:pages.filter(x=>allowedCommonsLicense(
     clean(x.imageinfo?.[0]?.extmetadata?.LicenseShortName?.value,80))).length,
    withSource:pages.filter(x=>typeof x.imageinfo?.[0]?.descriptionurl==="string").length,
-   allowedThumb:pages.filter(x=>allowThumb(x.imageinfo?.[0]?.thumburl)).length,
+   allowedThumb:pages.filter(x=>Boolean(safeCommonsAsset(x.imageinfo?.[0]?.thumburl))).length,
    sourceMatches:pages.filter(x=>String(x.imageinfo?.[0]?.descriptionurl||"").startsWith("https://commons.wikimedia.org/wiki/File:")).length,
    firstThumb:String(pages[0]?.imageinfo?.[0]?.thumburl||"").slice(0,260),
    firstSource:String(pages[0]?.imageinfo?.[0]?.descriptionurl||"").slice(0,200),
@@ -60,9 +70,9 @@ export async function GET(req:NextRequest){
   };
   const images=pages.sort((a,b)=>(a.index||0)-(b.index||0)).flatMap(p=>{
    const info=p.imageinfo?.[0],meta=info?.extmetadata||{};
-   const thumb=info?.thumburl;
+   const thumb=safeCommonsAsset(info?.thumburl);
    const license=clean(meta.LicenseShortName?.value,80);
-   if(!allowThumb(thumb)||!allowedCommonsLicense(license)||
+   if(!thumb||!allowedCommonsLicense(license)||
     !["image/jpeg","image/png","image/webp"].includes(String(info?.mime)))return [];
    const source=info?.descriptionurl;
    const src=typeof source==="string"&&source.startsWith("https://commons.wikimedia.org/wiki/File:")?source:"";
