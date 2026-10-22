@@ -9,12 +9,18 @@ export type VideoScene={
  imageQuery?:string;imageCredit?:string;imageLicense?:string;imageSource?:string;
 };
 export type VideoDraft={
- version:2;name:string;aspect:VideoAspect;scenes:Omit<VideoScene,"imageUrl">[];
+ version:2;name:string;aspect:VideoAspect;scenes:VideoScene[];
 };
 export const MAX_VIDEO_SCENES=32;
 export const MAX_VIDEO_SCRIPT_CHARS=9000;
 const palette=["#7548aa","#b05b60","#177f85","#8f5a39","#315f94","#9960aa"];
 const safeText=(x:unknown,limit:number)=>typeof x==="string"?x.trim().slice(0,limit):"";
+export function safeCommonsUrl(value:unknown):value is string{
+ if(typeof value!=="string"||value.length>1100)return false;
+ try{const u=new URL(value);return u.protocol==="https:"&&u.hostname==="upload.wikimedia.org"&&
+  u.pathname.startsWith("/wikipedia/commons/thumb/")&&/\.(jpe?g|png|webp)$/i.test(u.pathname)&&
+  !u.search&&!u.hash;}catch{return false;}
+}
 export const clampSceneDuration=(value:number)=>Number.isFinite(value)
  ?Math.max(3,Math.min(45,Math.round(value))):8;
 export const videoDuration=(scenes:readonly VideoScene[])=>
@@ -106,8 +112,9 @@ export function serializeVideoDraft(name:string,aspect:VideoAspect,scenes:readon
  const draft:VideoDraft={
   version:2,name:safeText(name,100)||"فيديو AGENT",
   aspect,
-  scenes:scenes.map(({imageUrl:__imageUrl,...scene})=>({
+  scenes:scenes.map(scene=>({
    ...scene,
+   imageUrl:safeCommonsUrl(scene.imageUrl)?scene.imageUrl:undefined,
    title:safeText(scene.title,110),
    subtitle:safeText(scene.subtitle,500),
    speaker:safeText(scene.speaker,100),
@@ -134,7 +141,8 @@ export function parseVideoDraft(json:string):VideoDraft{
    speaker:safeText(item.speaker,100),duration:clampSceneDuration(item.duration),
    color:item.color,transition:item.transition,
    imageQuery:safeText(item.imageQuery,100),imageCredit:safeText(item.imageCredit,280),
-   imageLicense:safeText(item.imageLicense,80),imageSource:safeText(item.imageSource,400)} satisfies Omit<VideoScene,"imageUrl">;
+   imageLicense:safeText(item.imageLicense,80),imageSource:safeText(item.imageSource,400),
+   imageUrl:safeCommonsUrl(item.imageUrl)?item.imageUrl:undefined} satisfies VideoScene;
  });
  return {version:2,name:safeText(value.name,100)||"فيديو AGENT",
   aspect:value.aspect as VideoAspect,scenes};
