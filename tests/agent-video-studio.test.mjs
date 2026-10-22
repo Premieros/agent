@@ -41,7 +41,7 @@ test("image search is restricted to licensed Commons assets behind the AGENT API
  assert.match(search,/allowedCommonsLicense/);
  assert.match(search,/CC BY/);
  assert.match(search,/descriptionurl/);
- assert.match(image,/hostname==="upload\.wikimedia\.org"/);
+ assert.match(image,/hostname!=="upload\.wikimedia\.org"/);
  assert.match(image,/redirect:"error"/);
  assert.match(image,/MAX_IMAGE_BYTES=8\*1024\*1024/);
  assert.doesNotMatch(image,/process\.env\.(?!NODE_ENV)/);
