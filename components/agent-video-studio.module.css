@@ -49,3 +49,13 @@
 .studio .success{overflow-wrap:anywhere}
 .studio a{color:#d5adff}
 .studio .button{color:#fff}
+
+.modeGrid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin:12px 0 18px}
+.modeButton,.modeActive{display:flex;flex-direction:column;align-items:flex-start;text-align:right;gap:7px;min-height:78px;padding:14px 13px;border-radius:13px;color:#f4e9ff;background:#19243b;border:1px solid #465170;cursor:pointer}
+.modeButton:hover{border-color:#aa74d7}
+.modeActive{border:2px solid #b880ff;background:linear-gradient(120deg,#5e337c,#283052)}
+.modeButton strong,.modeActive strong{font-size:13px}
+.modeButton span,.modeActive span{font-size:11px;color:#c7bfdc;line-height:1.6}
+.castCard{border:1px solid #48516d;border-radius:14px;padding:13px;margin:12px 0;background:#17243b}
+.castCard input[type=file]{font-size:12px}
+@media(max-width:620px){.modeGrid{grid-template-columns:1fr}}
