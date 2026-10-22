@@ -324,6 +324,11 @@ export default function AgentVideoStudio(){
    // Input audio is local. Mix it into exported video through a browser-owned
    // Web Audio destination. No files, audio or frames are sent to a server.
    let audioTracks:MediaStreamTrack[]=[];
+   if(audioUrl){
+    const audio=new Audio(audioUrl);
+    audio.preload="auto";audio.loop=false;
+    run.audio=audio;
+   }
    if(audioUrl||musicEnabled){
     const context=new AudioContext();run.audioContext=context;
     const destination=exportVideo?context.createMediaStreamDestination():null;
@@ -361,10 +366,11 @@ export default function AgentVideoStudio(){
    }
    running.current=run;
    setPlaying(true);setRecording(exportVideo);setProgress(0);
-   const started=performance.now();
+   paint(canvas,scenes,images.current,0);
    if(run.audio){try{await run.audio.play();}catch{
     setError("المتصفح منع تشغيل الصوت. اضغط السماح بالصوت، وأعد المحاولة لو لزم.");
    }}
+   const started=performance.now();
    const frame=(now:number)=>{
     if(!run.playing)return;
     const seconds=Math.min(total,(now-started)/1000);
