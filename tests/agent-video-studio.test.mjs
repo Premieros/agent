@@ -56,3 +56,13 @@ test("the exported video contains an original audio track or user narration",()=
  assert.match(soundtrack,/oscillator\.connect\(envelope\)/);
  assert.doesNotMatch(soundtrack,/https?:\/\/|fetch\s*\(|supabase/);
 });
+
+test("narration from uploaded file or microphone is connected and played during export",()=>{
+ const studio=read("components/agent-video-studio.tsx");
+ assert.match(studio,/if\(audioUrl\)\{\s*const audio=new Audio\(audioUrl\)/);
+ assert.match(studio,/run\.audio=audio/);
+ assert.match(studio,/createMediaElementSource\(run\.audio\)/);
+ assert.match(studio,/voiceGain\.connect\(audioMix\)/);
+ assert.match(studio,/await run\.audio\.play\(\)/);
+ assert.match(studio,/paint\(canvas,scenes,images\.current,0\)/);
+});
