@@ -101,7 +101,8 @@ const imageKeywords:[RegExp,string][]=[
 ];
 export function guessImageQuery(text:string):string{
  const original=String(text||"").trim().slice(0,220);
- const matched=imageKeywords.find(([re])=>re.test(original));
+ const normalized=original.replace(/[إأآ]/g,"ا").replace(/ة/g,"ه").replace(/[\u064b-\u065f\u0670]/g,"");
+ const matched=imageKeywords.find(([re])=>re.test(normalized));
  if(matched)return matched[1];
  const latin=(original.match(/[A-Za-z][A-Za-z0-9 -]{2,}/g)||[])
    .join(" ").trim().slice(0,70);
