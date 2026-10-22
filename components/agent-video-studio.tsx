@@ -6,6 +6,7 @@ import {storyboardFromScript,serializeVideoDraft,parseVideoDraft,videoSrt,
  videoScriptDocument,guessImageQuery,safeCommonsUrl,MAX_VIDEO_SCENES,
  type VideoScene} from "@/lib/agent-video-storyboard";
 import {startAmbientSoundtrack} from "@/lib/agent-video-soundtrack";
+import {createShotPlan,audioCueSheet,elapsedSceneAt} from "@/lib/agent-video-pipeline";
 import {AGENT_VIDEO_MODES,getCastForScenes,castBibleAsJson,parseCastBible,
  type AgentVideoCharacter,type AgentVideoMode} from "@/lib/agent-video-production";
 import s from "./agent-video-studio.module.css";
@@ -13,7 +14,8 @@ import s from "./agent-video-studio.module.css";
 type Ratio="16:9"|"9:16";
 type Scene=VideoScene;
 type Run={frame:number;recorder:MediaRecorder|null;stream:MediaStream|null;
- audioContext:AudioContext|null;audio:HTMLAudioElement|null;playing:boolean};
+ audioContext:AudioContext|null;audio:HTMLAudioElement|null;playing:boolean;completed:boolean;
+ voiceNodes:AudioBufferSourceNode[]};
 const defaults:Scene[]=[
  {id:1,title:"مش من مستوانا",subtitle:"حكاية مصرية تبدأ بلحظة غير متوقعة",speaker:"المشهد الأول",duration:6,color:"#9b4dbb",transition:"cut",imageQuery:"Egypt drama"},
  {id:2,title:"القرار",subtitle:"في لحظة واحدة، كل شيء اتغير.",speaker:"المشهد الثاني",duration:6,color:"#b45358",transition:"fade",imageQuery:"Egypt city"},
@@ -36,7 +38,8 @@ function wrap(ctx:CanvasRenderingContext2D,value:string,maxWidth:number,maxLines
 }
 function paint(canvas:HTMLCanvasElement,scenes:readonly Scene[],images:Map<number,HTMLImageElement>,
  seconds:number,characterPhotos:Map<string,HTMLImageElement>,
- casting:Record<number,string>,characters:readonly AgentVideoCharacter[]){
+ casting:Record<number,string>,characters:readonly AgentVideoCharacter[],
+ shotVideos?:Map<number,HTMLVideoElement>){
  const ctx=canvas.getContext("2d");
  if(!ctx||!scenes.length)return;
  const w=canvas.width,h=canvas.height;
@@ -52,8 +55,17 @@ function paint(canvas:HTMLCanvasElement,scenes:readonly Scene[],images:Map<numbe
  gradient.addColorStop(0,"#080d1e");gradient.addColorStop(.52,clip.color);
  gradient.addColorStop(1,"#111426");
  ctx.fillStyle=gradient;ctx.fillRect(0,0,w,h);
+ const video=shotVideos?.get(clip.id);
+ const movingFrame=!!(video&&video.readyState>=2&&video.videoWidth>0);
+ if(movingFrame&&video){
+  ctx.save();
+  const scale=Math.max(w/video.videoWidth,h/video.videoHeight);
+  const vw=video.videoWidth*scale,vh=video.videoHeight*scale;
+  ctx.drawImage(video,(w-vw)/2,(h-vh)/2,vw,vh);
+  ctx.restore();
+ }
  const photo=images.get(clip.id);
- if(photo&&photo.complete&&photo.naturalWidth>0){
+ if(!movingFrame&&photo&&photo.complete&&photo.naturalWidth>0){
   ctx.save();
   const scale=(1+fraction*.055)*Math.max(w/photo.naturalWidth,h/photo.naturalHeight);
   const sw=photo.naturalWidth*scale,sh=photo.naturalHeight*scale;
@@ -65,7 +77,7 @@ function paint(canvas:HTMLCanvasElement,scenes:readonly Scene[],images:Map<numbe
  // Commons background search is NEVER used to invent or replace actors.
  const actorId=casting[clip.id],actor=characters.find(c=>c.id===actorId);
  const actorPhoto=actorId?characterPhotos.get(actorId):undefined;
- if(actorPhoto&&actorPhoto.complete&&actorPhoto.naturalWidth>0){
+ if(!movingFrame&&actorPhoto&&actorPhoto.complete&&actorPhoto.naturalWidth>0){
   ctx.save();
   const aw=vertical?w*.67:w*.32,ah=vertical?h*.56:h*.71;
   const ax=vertical?(w-aw)/2:w*.60,ay=vertical?h*.18:h*.11;
@@ -144,6 +156,10 @@ export default function AgentVideoStudio(){
  const [imageTick,setImageTick]=useState(0);
  const canvasRef=useRef<HTMLCanvasElement|null>(null);
  const images=useRef<Map<number,HTMLImageElement>>(new Map());
+ const shotVideos=useRef<Map<number,HTMLVideoElement>>(new Map());
+ const [shotVideoNames,setShotVideoNames]=useState<Record<number,string>>({});
+ const sceneVoices=useRef<Map<number,{url:string;name:string}>>(new Map());
+ const [sceneVoiceNames,setSceneVoiceNames]=useState<Record<number,string>>({});
  const urls=useRef<string[]>([]);
  const nextId=useRef(4);
  const running=useRef<Run|null>(null);
@@ -151,7 +167,7 @@ export default function AgentVideoStudio(){
 
  const draw=useCallback((second:number)=>{
   if(canvasRef.current)paint(canvasRef.current,scenes,images.current,second,
-   photos.current,casting,cast);
+   photos.current,casting,cast,shotVideos.current);
  },[scenes,cast,casting]);
  useEffect(()=>{
   const canvas=canvasRef.current;if(!canvas)return;
@@ -160,6 +176,7 @@ export default function AgentVideoStudio(){
   draw(0);
  },[ratio,draw,imageTick]);
  useEffect(()=>()=>{for(const url of urls.current)URL.revokeObjectURL(url);
+  shotVideos.current.forEach(video=>{video.pause();video.removeAttribute("src");video.load();});
   const mic=micSession.current;if(mic){if(mic.recorder.state!=="inactive")mic.recorder.stop();mic.stream.getTracks().forEach(t=>t.stop());}
   const run=running.current;if(run){cancelAnimationFrame(run.frame);
    if(run.recorder&&run.recorder.state!=="inactive")run.recorder.stop();
@@ -240,6 +257,44 @@ export default function AgentVideoStudio(){
   image.src=url;images.current.set(id,image);
   update(id,{imageUrl:url,imageCredit:undefined,imageLicense:undefined,imageSource:undefined});setError("");
  };
+ const onShotVideo=(id:number,event:ChangeEvent<HTMLInputElement>)=>{
+  const file=event.target.files?.[0];if(!file)return;
+  if(!["video/mp4","video/webm"].includes(file.type)||file.size>120*1024*1024){
+   setError("لقطة الحركة يجب أن تكون MP4 أو WebM وأقل من 120 ميجابايت.");return;
+  }
+  shotVideos.current.get(id)?.pause();
+  const url=URL.createObjectURL(file);urls.current.push(url);
+  const video=document.createElement("video");
+  video.src=url;video.muted=true;video.playsInline=true;video.preload="auto";
+  video.onloadeddata=()=>setImageTick(t=>t+1);
+  video.onerror=()=>setError("اللقطة غير قابلة للتشغيل في متصفحك، جرّب ترميز H.264/VP9.");
+  video.load();shotVideos.current.set(id,video);
+  setShotVideoNames(old=>({...old,[id]:file.name.slice(0,100)}));
+  setDownloadUrl(null);setError("");
+  event.target.value="";
+ };
+ const onSceneVoice=(id:number,event:ChangeEvent<HTMLInputElement>)=>{
+  const file=event.target.files?.[0];if(!file)return;
+  if(!file.type.startsWith("audio/")||file.size>25*1024*1024){
+   setError("حوار المشهد يجب أن يكون صوتًا بصيغة مدعومة وأقل من 25 ميجابايت.");return;
+  }
+  const url=URL.createObjectURL(file);urls.current.push(url);
+  sceneVoices.current.set(id,{url,name:file.name.slice(0,100)});
+  setSceneVoiceNames(old=>({...old,[id]:file.name.slice(0,100)}));
+  setDownloadUrl(null);setError("");event.target.value="";
+ };
+ const syncShotVideos=(second:number,active:boolean)=>{
+  const cue=elapsedSceneAt(scenes,second);
+  shotVideos.current.forEach((video,id)=>{
+   if(!cue||id!==cue.sceneId){if(!video.paused)video.pause();return;}
+   if(!Number.isFinite(video.duration)||video.duration<=0)return;
+   const target=Math.min(Math.max(0,cue.offset),Math.max(0,video.duration-.06));
+   if(Math.abs(video.currentTime-target)>.45)try{video.currentTime=target;}catch{}
+   if(active&&video.paused&&target<video.duration-.08)
+    void video.play().catch(()=>{});
+   if(!active&&!video.paused)video.pause();
+  });
+ };
  const onAudio=(event:ChangeEvent<HTMLInputElement>)=>{
   const file=event.target.files?.[0];if(!file)return;
   if(!file.type.startsWith("audio/")||file.size>25*1024*1024){
@@ -281,6 +336,8 @@ export default function AgentVideoStudio(){
   try{planned=storyboardFromScript(script,requestedSeconds,requestedCount);}
   catch{setError("اكتب قصة من 12 إلى 9000 حرف، وحدد عدد المشاهد والمدة.");return;}
   setScenes(planned);
+  shotVideos.current.forEach(v=>v.pause());shotVideos.current.clear();setShotVideoNames({});
+  sceneVoices.current.clear();setSceneVoiceNames({});
   setCasting(getCastForScenes(planned,cast,cast[0]?.id));
   images.current.clear();setProgress(0);
   setDownloadUrl(null);setImagesBusy(true);
@@ -347,6 +404,8 @@ export default function AgentVideoStudio(){
    const draft=parseVideoDraft(await file.text());
    if(running.current)stop();
    setScenes(draft.scenes);setName(draft.name);
+   shotVideos.current.forEach(v=>v.pause());shotVideos.current.clear();setShotVideoNames({});
+   sceneVoices.current.clear();setSceneVoiceNames({});
    setCasting(getCastForScenes(draft.scenes,cast,cast[0]?.id));
    setRatio(draft.aspect==="1:1"?"9:16":draft.aspect);
    setProgress(0);setDownloadUrl(null);images.current.clear();
@@ -391,7 +450,8 @@ export default function AgentVideoStudio(){
   const run=running.current;
   if(!run)return;
   run.playing=false;cancelAnimationFrame(run.frame);
-  run.audio?.pause();
+  run.audio?.pause();shotVideos.current.forEach(video=>video.pause());
+  for(const node of run.voiceNodes)try{node.stop();}catch{}
   if(run.recorder&&run.recorder.state!=="inactive")run.recorder.stop();
   else run.stream?.getTracks().forEach(track=>track.stop());
   if(!run.recorder)void run.audioContext?.close();
@@ -406,11 +466,11 @@ export default function AgentVideoStudio(){
    setError("المتصفح لا يدعم تصدير الفيديو. جرّب Chrome أو Edge على الكمبيوتر.");return;
   }
   if(exportVideo&&downloadUrl){URL.revokeObjectURL(downloadUrl);setDownloadUrl(null);}
-  if(exportVideo&&!musicEnabled&&!audioUrl){
+  if(exportVideo&&!musicEnabled&&!audioUrl&&!sceneVoices.current.size){
    setError("فعّل الموسيقى الأصلية أو ارفع تعليقًا صوتيًا لتصدير فيديو بالصوت.");return;
   }
   const run:Run={frame:0,recorder:null,stream:null,audioContext:null,
-   audio:null,playing:true};
+   audio:null,playing:true,completed:false,voiceNodes:[]};
   try{
    // Input audio is local. Mix it into exported video through a browser-owned
    // Web Audio destination. No files, audio or frames are sent to a server.
@@ -420,20 +480,42 @@ export default function AgentVideoStudio(){
     audio.preload="auto";audio.loop=false;
     run.audio=audio;
    }
-   if(audioUrl||musicEnabled){
+   if(audioUrl||musicEnabled||sceneVoices.current.size){
     const context=new AudioContext();run.audioContext=context;
     const destination=exportVideo?context.createMediaStreamDestination():null;
     const audioMix=context.createGain();
     audioMix.gain.value=1;
     audioMix.connect(context.destination);
     if(destination)audioMix.connect(destination);
-    if(musicEnabled)startAmbientSoundtrack(context,audioMix,total);
+    // Schedule the soundtrack only after local dialogue is decoded.
     if(run.audio){
      const source=context.createMediaElementSource(run.audio);
      const voiceGain=context.createGain();voiceGain.gain.value=.85;
      source.connect(voiceGain);voiceGain.connect(audioMix);
     }
     await context.resume();
+    // Decode local dialogue files; sources are queued for precise scene-aligned playback.
+    const decoded=(await Promise.all(scenes.map(async clip=>{
+     const voice=sceneVoices.current.get(clip.id);
+     if(!voice)return [] as {clip:Scene;buffer:AudioBuffer}[];
+     const response=await fetch(voice.url);
+     const buffer=await context.decodeAudioData(await response.arrayBuffer());
+     return [{clip,buffer}];
+    }))).flat();
+    if(musicEnabled)startAmbientSoundtrack(context,audioMix,total);
+    const base=context.currentTime+.08;
+    let cursor=0;
+    for(const clip of scenes){
+     const voice=decoded.find(v=>v.clip.id===clip.id);
+     if(voice){
+      const node=context.createBufferSource();node.buffer=voice.buffer;
+      const gain=context.createGain();gain.gain.value=.95;
+      node.connect(gain);gain.connect(audioMix);
+      node.start(base+cursor,0,Math.min(voice.buffer.duration,clip.duration));
+      run.voiceNodes.push(node);
+     }
+     cursor+=clip.duration;
+    }
     if(destination)audioTracks=destination.stream.getAudioTracks();
    }
    if(exportVideo){
@@ -447,6 +529,7 @@ export default function AgentVideoStudio(){
     recorder.onstop=()=>{
      run.stream?.getTracks().forEach(track=>track.stop());
      void run.audioContext?.close();
+     if(!run.completed)return;
      if(!chunks.length){setError("لم يُنتج المتصفح ملف فيديو، جرّب Chrome.");return;}
      const blob=new Blob(chunks,{type:mime});
      if(blob.size<500){setError("الفيديو المُنتج غير مكتمل.");return;}
@@ -457,7 +540,8 @@ export default function AgentVideoStudio(){
    }
    running.current=run;
    setPlaying(true);setRecording(exportVideo);setProgress(0);
-   paint(canvas,scenes,images.current,0,photos.current,casting,cast);
+   paint(canvas,scenes,images.current,0,photos.current,casting,cast,shotVideos.current);
+   syncShotVideos(0,true);
    if(run.audio){try{await run.audio.play();}catch{
     setError("المتصفح منع تشغيل الصوت. اضغط السماح بالصوت، وأعد المحاولة لو لزم.");
    }}
@@ -465,14 +549,16 @@ export default function AgentVideoStudio(){
    const frame=(now:number)=>{
     if(!run.playing)return;
     const seconds=Math.min(total,(now-started)/1000);
-    paint(canvas,scenes,images.current,seconds,photos.current,casting,cast);
+    syncShotVideos(seconds,true);
+    paint(canvas,scenes,images.current,seconds,photos.current,casting,cast,shotVideos.current);
     setProgress(seconds);
-    if(seconds>=total){stop();return;}
+    if(seconds>=total){run.completed=true;stop();return;}
     run.frame=requestAnimationFrame(frame);
    };
    run.frame=requestAnimationFrame(frame);
   }catch{
-   run.audio?.pause();
+   run.audio?.pause();shotVideos.current.forEach(video=>video.pause());
+   for(const node of run.voiceNodes)try{node.stop();}catch{}
    if(run.recorder&&run.recorder.state!=="inactive")run.recorder.stop();
    run.stream?.getTracks().forEach(t=>t.stop());
    void run.audioContext?.close();
@@ -480,6 +566,11 @@ export default function AgentVideoStudio(){
    setError("تعذّر بدء تصدير الفيديو؛ تأكد من دعم المتصفح وملف الصوت.");
   }
  };
+ const productionPlan=()=>createShotPlan(scenes,cast,casting,productionMode,episode,ratio);
+ const downloadShotPlan=()=>downloadText(JSON.stringify(productionPlan(),null,2),
+  "agent-video-shot-plan.json","application/json;charset=utf-8");
+ const downloadCueSheet=()=>downloadText(JSON.stringify(audioCueSheet(productionPlan()),null,2),
+  "agent-arabic-dialogue-cues.json","application/json;charset=utf-8");
  const downloadScript=()=>downloadText(videoScriptDocument(name,scenes),
   "agent-video-script.txt");
  const downloadSubtitles=()=>downloadText(videoSrt(scenes),"agent-video-captions.srt",
@@ -626,12 +717,18 @@ export default function AgentVideoStudio(){
      <button type="button" className={s.secondary} onClick={downloadScript}><FileText size={14}/> السيناريو</button>
      <button type="button" className={s.secondary} onClick={downloadSubtitles}><FileText size={14}/> ترجمة SRT</button>
      <button type="button" className={s.secondary} onClick={downloadCredits}><FileText size={14}/> حقوق الصور</button>
+     <button type="button" className={s.secondary} onClick={downloadShotPlan}><FileText size={14}/> خطة توليد صور وحركة متسقة JSON</button>
+     <button type="button" className={s.secondary} onClick={downloadCueSheet}><FileText size={14}/> توقيت حوارات الشخصيات JSON</button>
     </div>
     {scenes.map((clip,index)=><div key={clip.id} className={s.clip}>
      <div className={s.clipTop}><strong>المشهد {index+1} · {clip.duration} ثوانٍ</strong>
       <button type="button" className={s.danger} disabled={playing||scenes.length<=1}
        aria-label={"حذف المشهد "+(index+1)}
-       onClick={()=>{images.current.delete(clip.id);setScenes(old=>old.filter(c=>c.id!==clip.id));}}>
+       onClick={()=>{images.current.delete(clip.id);shotVideos.current.get(clip.id)?.pause();
+        shotVideos.current.delete(clip.id);sceneVoices.current.delete(clip.id);
+        setShotVideoNames(old=>{const next={...old};delete next[clip.id];return next;});
+        setSceneVoiceNames(old=>{const next={...old};delete next[clip.id];return next;});
+        setScenes(old=>old.filter(c=>c.id!==clip.id));}}>
        <Trash2 size={14}/></button>
      </div>
      <div className={s.clipForm}>
@@ -658,6 +755,16 @@ export default function AgentVideoStudio(){
        <button type="button" className={s.secondary} disabled={playing}
         onClick={()=>previewArabicVoice(clip.subtitle)}><Mic size={14}/> سماع النص (معاينة فقط)</button>
       </div>
+      <label className={s.field+" "+s.wide}>لقطة فيديو متحركة حقيقية للمشهد (MP4 / WebM)
+       <input type="file" accept="video/mp4,video/webm" disabled={playing}
+        onChange={e=>onShotVideo(clip.id,e)}/>
+       <span className={s.small}>{shotVideoNames[clip.id]||"لا توجد لقطة حركة؛ سيُستخدم رسم الخلفية والشخصية الثابتة."}</span>
+      </label>
+      <label className={s.field+" "+s.wide}>حوار عربي مسجّل للشخصية في هذا المشهد
+       <input type="file" accept="audio/*" disabled={playing}
+        onChange={e=>onSceneVoice(clip.id,e)}/>
+       <span className={s.small}>{sceneVoiceNames[clip.id]||"لم يرفع حوار لهذا المشهد. صوت المتصفح معاينة فقط."}</span>
+      </label>
       <label className={s.field}>لون المشهد
        <input type="color" value={clip.color} disabled={playing}
         onChange={e=>update(clip.id,{color:e.target.value})}/></label>
@@ -689,7 +796,8 @@ export default function AgentVideoStudio(){
      </div>
      <input className={s.progress} aria-label="تقدم تشغيل الفيديو" type="range"
       min={0} max={Math.max(1,total)} step={.1} value={Math.min(progress,total)}
-      disabled={playing} onChange={e=>{const time=Number(e.target.value);setProgress(time);draw(time);}}/>
+      disabled={playing} onChange={e=>{const time=Number(e.target.value);setProgress(time);
+       syncShotVideos(time,false);draw(time);}}/>
      <span className={s.previewMeta}>{Math.round(progress)} / {total} ثانية</span>
      <div className={s.buttonRow}>
       <button type="button" className={s.secondary} onClick={()=>playing?stop():void start(false)}>
@@ -710,13 +818,14 @@ export default function AgentVideoStudio(){
     </div>}
     {error&&<div className={s.error} role="alert">{error}</div>}
     <div className={s.notice}>تحتاج عملية التصدير نفس مدة الفيديو تقريبًا؛ مثال: فيديو 3 دقائق يستغرق حوالي 3 دقائق.
-     الصوت الناتج موسيقى أصلية، ويمكن إضافة تعليق صوتي مسجل أو مرفوع. النص وحده لا يتحول إلى كلام مسموع تلقائيًا.
+     الصوت الناتج موسيقى أصلية وحوارات المشاهد التي رفعتها (إن وجدت)، ويمكن إضافة تعليق صوتي مسجل أو مرفوع. النص وحده لا يتحول إلى كلام مسموع تلقائيًا.
+     الصوت الأصلي داخل ملفات الفيديو المرفوعة لا يُمزج تلقائيًا؛ ارفع صوت الحوار كملف منفصل. تأكد من جودة الحركة وتزامن الصوت قبل النشر.
      هذه الصور من مصادر مرخّصة مستقلة؛ راجع ملف نسب الحقوق قبل النشر.
      التصدير يستخدم MediaRecorder ودعم الصيغ يختلف حسب المتصفح.
      Chrome وEdge على الكمبيوتر أفضل للتجربة. جودة المخرجات تعتمد على الصور والصوت
      المرفوعين. لا يوجد توليد فيديو AI مدفوع أو نشر تلقائي.</div>
    </div>
   </div>
-  <p className={s.footer}>نسخة AGENT التجريبية · صور الشخصيات والصوت محلية · البحث على الإنترنت للخلفيات المرخّصة فقط · لا يوجد حاليًا توليد فيديو تمثيلي</p>
+  <p className={s.footer}>AGENT Preview · لقطات الحركة والصوت والصور المرفوعة محلية · خطة التوليد جاهزة للتسليم لمزوّد معتمد لكن لا توجد خدمة AI فيديو أو TTS مدفوعة مفعّلة</p>
  </section>;
 }

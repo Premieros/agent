@@ -1,4 +1,4 @@
-# AGENT Video Studio — free script-to-video experiment
+# AGENT Video Studio — free script-to-video experiment and motion clip editing
 
 **Project scope:** only `Premieros/agent`, dev branch
 `dev/multifile-work-engine-20261020`. No external project's repository,
@@ -18,15 +18,15 @@ database, storage, Meta assets or production credentials are used.
    gradient scene or manual image replaces the missing photo.
 5. Each scene can be edited, given an individual local image, or re-searched
    using editable image keywords.
-6. By default the exported video contains an **original ambient instrumental
+6. Each scene can receive a local MP4/WebM motion clip and a separate voice file for its Arabic character. The motion footage is rendered as actual moving frames; voice cues start on their scene boundary and cannot spill into the following scene. Uploaded video audio is not automatically transferred into the canvas export. The source files stay in the browser. Download the provider-neutral shot plan and dialogue cues for an external rendering workflow. See [production pipeline](AGENT_VIDEO_PIPELINE.md).\n7. By default the exported video contains an **original ambient instrumental
    soundtrack** synthesized inside the browser via Web Audio API, not a silent
    MP4. Optionally upload or record spoken narration and mix it into the export.
    There is **no automatic Arabic spoken TTS in the export**. Browser speech
    synthesis is not a reliable recorded MediaRecorder audio source.
-7. Preview. Export the real video in WebM or MP4 (as supported by the browser),
+8. Preview. Export the real video in WebM or MP4 (as supported by the browser),
    then download after the recording finishes. Export is performed **in real
    time**, so a 3-minute video normally takes at least 3 minutes to finish.
-8. Download the .srt captions, script and Commons image attribution .txt,
+9. Download the .srt captions, script and Commons image attribution .txt,
    and save a restorable JSON project file.
 
 **Important limitations:**
@@ -36,7 +36,7 @@ database, storage, Meta assets or production credentials are used.
 - Photo relevance is a best-effort keyword search; it is not artistic model
   understanding. The operator should review all images, author credits,
   license conditions and accuracy before publishing.
-- Images from the user's device and uploaded/recorded audio are retained
+- Images, uploaded motion clips and uploaded/recorded audio are retained
   only inside the browser. A JSON draft does **not** embed these private
   media blobs, so they must be uploaded again after restoring.
 - Export relies on Canvas.captureStream and MediaRecorder; Chrome/Edge
