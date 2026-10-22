@@ -104,7 +104,7 @@ try{
  assert.ok(size>5000,"Export is empty or missing, size="+size);
  assert.match(download.suggestedFilename(),/\.webm$|\.mp4$/);
  const streams=execFileSync("ffprobe",["-v","error","-show_entries","stream=codec_type",
-  "-of","default=noprint_wrappers=1:nokey=1",file],{encoding:"utf8"}).trim().split(/\\s+/);
+  "-of","default=noprint_wrappers=1:nokey=1",file],{encoding:"utf8"}).trim().split(/\s+/);
  assert.ok(streams.includes("video"),"Export contains no decodable video stream");
  assert.ok(streams.includes("audio"),"Export contains no decodable audio stream");
  console.log("AGENT VIDEO BROWSER PASS: real frames and dialogue export",{
