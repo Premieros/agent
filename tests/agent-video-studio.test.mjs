@@ -66,3 +66,20 @@ test("narration from uploaded file or microphone is connected and played during 
  assert.match(studio,/await run\.audio\.play\(\)/);
  assert.match(studio,/paint\(canvas,scenes,images\.current,0\)/);
 });
+
+test("three real production profiles and per-scene locked reference portraits",()=>{
+ const studio=read("components/agent-video-studio.tsx");
+ const production=read("lib/agent-video-production.ts");
+ assert.match(production,/reel:\{name:"ريل سريع"/);
+ assert.match(production,/"short-series":\{name:"مسلسل قصير"/);
+ assert.match(production,/episodes:\{name:"مسلسل متعدد الحلقات"/);
+ assert.match(studio,/const \[cast,setCast\]=useState<AgentVideoCharacter\[\]>/);
+ assert.match(studio,/const \[casting,setCasting\]=useState<Record<number,string>>/);
+ assert.match(studio,/photos\.current\.get\(actorId\)/);
+ assert.match(studio,/actorPhoto\.naturalWidth/);
+ assert.match(studio,/getCastForScenes\(planned,cast,cast\[0\]\?\.id\)/);
+ assert.match(studio,/uploadCastPhoto\(character.id,e\)/);
+ assert.match(studio,/previewArabicVoice\(clip.subtitle\)/);
+ assert.match(studio,/توليد ممثلين متحركين/);
+ assert.doesNotMatch(production,/fetch\s*\(|createClient|supabase|https?:\/\//);
+});
