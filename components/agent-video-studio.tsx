@@ -172,12 +172,11 @@ export default function AgentVideoStudio(){
   image.src=safeCommonsUrl(url)?
    "/api/video/image?src="+encodeURIComponent(url):url;
  });
- async function findImage(query:string,seen:Set<string>):Promise<ImageCandidate|null>{
+ async function findImages(query:string):Promise<ImageCandidate[]>{
   const response=await fetch("/api/video/images?q="+encodeURIComponent(query),{cache:"no-store"});
-  if(!response.ok)return null;
+  if(!response.ok)return [];
   const result=await response.json() as {images?:ImageCandidate[]};
-  const options=(result.images||[]).filter(x=>safeCommonsUrl(x.imageUrl));
-  return options.find(x=>!seen.has(x.imageUrl))||options[0]||null;
+  return (result.images||[]).filter(x=>safeCommonsUrl(x.imageUrl));
  }
  async function generateFromStory(){
   if(playing||imagesBusy)return;
@@ -190,16 +189,18 @@ export default function AgentVideoStudio(){
   let loaded=0;const used=new Set<string>(),updated=[...planned];
   for(let offset=0;offset<planned.length;offset+=3){
    const current=planned.slice(offset,offset+3);
+   setImageNotice("جارٍ البحث عن صور المشاهد "+(offset+1)+" إلى "+
+    Math.min(planned.length,offset+3)+" من "+planned.length+"...");
    const results=await Promise.all(current.map(async clip=>{
     try{
      const query=clip.imageQuery||guessImageQuery(clip.subtitle);
-     const image=await findImage(query,used);
-     if(!image)return {clip,asset:null};
-     return {clip,asset:image};
-    }catch{return {clip,asset:null};}
+     const options=await findImages(query);
+     return {clip,options};
+    }catch{return {clip,options:[] as ImageCandidate[]};}
    }));
-   for(const {clip,asset} of results){
-    if(!asset||used.has(asset.imageUrl))continue;
+   for(const {clip,options} of results){
+    const asset=options.find(image=>!used.has(image.imageUrl))||options[0];
+    if(!asset)continue;
     const okay=await loadExternalImage(clip.id,asset.imageUrl);
     if(!okay)continue;
     used.add(asset.imageUrl);loaded++;
@@ -218,8 +219,9 @@ export default function AgentVideoStudio(){
   setImagesBusy(true);setError("");
   try{
    const query=clip.imageQuery||guessImageQuery(clip.subtitle);
-   const asset=await findImage(query,new Set(
-    scenes.filter(s=>s.id!==clip.id).map(s=>s.imageUrl||"")));
+   const options=await findImages(query);
+   const taken=new Set(scenes.filter(s=>s.id!==clip.id).map(s=>s.imageUrl||""));
+   const asset=options.find(x=>!taken.has(x.imageUrl))||options[0];
    if(!asset||!await loadExternalImage(clip.id,asset.imageUrl)){
     setError("لم تُعثر صورة مناسبة للبحث الحالي؛ عدّل كلمات البحث أو ارفع صورة.");
    }else{
