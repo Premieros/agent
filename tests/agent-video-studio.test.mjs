@@ -31,7 +31,7 @@ test("video studio is editable, multiclip and defaults to a local, non-AI experi
  assert.match(studio,/setScenes\(old=>old\.map/);
  assert.match(studio,/type="file"/);
  assert.match(studio,/بدون مفتاح API أو رسوم توليد/);
- assert.match(studio,/لا يتم رفع صورك أو صوتك إلى الخادم/);
+ assert.match(studio,/صور الشخصيات والصوت محلية/);
 });
 
 test("image search is restricted to licensed Commons assets behind the AGENT API",()=>{
@@ -64,7 +64,7 @@ test("narration from uploaded file or microphone is connected and played during 
  assert.match(studio,/createMediaElementSource\(run\.audio\)/);
  assert.match(studio,/voiceGain\.connect\(audioMix\)/);
  assert.match(studio,/await run\.audio\.play\(\)/);
- assert.match(studio,/paint\(canvas,scenes,images\.current,0\)/);
+ assert.match(studio,/paint\(canvas,scenes,images\.current,0,photos\.current,casting,cast\)/);
 });
 
 test("three real production profiles and per-scene locked reference portraits",()=>{
