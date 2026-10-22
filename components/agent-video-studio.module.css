@@ -1,5 +1,4 @@
-:root{color-scheme:dark}
-.studio{--surface:#111722;--surface2:#171e2b;--stroke:#2b3445;--soft:#a7b1c3;
+.studio{color-scheme:dark;--surface:#111722;--surface2:#171e2b;--stroke:#2b3445;--soft:#a7b1c3;
  max-width:1680px;margin:0 auto;padding:18px clamp(12px,2vw,30px) 48px;
  color:#eaf0fc;direction:rtl;font:14px/1.7 "Cairo","Segoe UI",Tahoma,sans-serif;min-width:0}
 .studio *{box-sizing:border-box}

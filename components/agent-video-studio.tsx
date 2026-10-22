@@ -47,21 +47,6 @@ function paint(canvas:HTMLCanvasElement,scenes:readonly Scene[],images:Map<numbe
  if(!ctx||!scenes.length)return;
  const w=canvas.width,h=canvas.height;
  const total=scenes.reduce((n,c)=>n+c.duration,0);
- const selectedScene=scenes.find(clip=>clip.id===selectedSceneId)||scenes[0];
- const fmt=(n:number)=>String(Math.floor(Math.max(0,n)/60)).padStart(2,"0")+":"+
-  String(Math.floor(Math.max(0,n)%60)).padStart(2,"0");
- const seekTo=(second:number)=>{
-  if(playing)return;
-  const at=Math.max(0,Math.min(total,second));
-  previewSecond.current=at;setProgress(at);syncShotVideos(at,false);draw(at);
- };
- const selectScene=(id:number)=>{
-  if(playing)return;
-  setSelectedSceneId(id);
-  const seconds=scenes.slice(0,Math.max(0,scenes.findIndex(c=>c.id===id)))
-   .reduce((sum,c)=>sum+c.duration,0);
-  seekTo(seconds);setStep("editor");
- };
  const time=Math.max(0,Math.min(total,seconds));
  let remaining=time,index=0;
  for(;index<scenes.length-1&&remaining>=scenes[index].duration;index++)
@@ -196,6 +181,21 @@ export default function AgentVideoStudio(){
  const nextId=useRef(4);
  const running=useRef<Run|null>(null);
  const total=scenes.reduce((n,c)=>n+c.duration,0);
+ const selectedScene=scenes.find(clip=>clip.id===selectedSceneId)||scenes[0];
+ const fmt=(n:number)=>String(Math.floor(Math.max(0,n)/60)).padStart(2,"0")+":"+
+  String(Math.floor(Math.max(0,n)%60)).padStart(2,"0");
+ const seekTo=(second:number)=>{
+  if(playing)return;
+  const at=Math.max(0,Math.min(total,second));
+  previewSecond.current=at;setProgress(at);syncShotVideos(at,false);draw(at);
+ };
+ const selectScene=(id:number)=>{
+  if(playing)return;
+  setSelectedSceneId(id);
+  const seconds=scenes.slice(0,Math.max(0,scenes.findIndex(c=>c.id===id)))
+   .reduce((sum,c)=>sum+c.duration,0);
+  seekTo(seconds);setStep("editor");
+ };
 
  const draw=useCallback((second:number)=>{
   if(canvasRef.current)paint(canvasRef.current,scenes,images.current,second,

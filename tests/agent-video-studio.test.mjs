@@ -79,7 +79,7 @@ test("three real production profiles and per-scene locked reference portraits",(
  assert.match(studio,/actorPhoto\.naturalWidth/);
  assert.match(studio,/getCastForScenes\(planned,cast,cast\[0\]\?\.id\)/);
  assert.match(studio,/uploadCastPhoto\(character.id,e\)/);
- assert.match(studio,/previewArabicVoice\(clip.subtitle\)/);
+ assert.match(studio,/previewArabicVoice\(selectedScene.subtitle\)/);
  assert.match(studio,/هذه النسخة لا تولّد ممثلين فوتوغرافيين/);
  assert.doesNotMatch(production,/fetch\s*\(|createClient|supabase|https?:\/\//);
 });
