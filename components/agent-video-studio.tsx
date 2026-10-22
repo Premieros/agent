@@ -173,10 +173,18 @@ export default function AgentVideoStudio(){
    "/api/video/image?src="+encodeURIComponent(url):url;
  });
  async function findImages(query:string):Promise<ImageCandidate[]>{
-  const response=await fetch("/api/video/images?q="+encodeURIComponent(query),{cache:"no-store"});
-  if(!response.ok)return [];
-  const result=await response.json() as {images?:ImageCandidate[]};
-  return (result.images||[]).filter(x=>safeCommonsUrl(x.imageUrl));
+  const lookup=async(text:string)=>{
+   const response=await fetch("/api/video/images?q="+encodeURIComponent(text),{cache:"no-store"});
+   if(!response.ok)return [] as ImageCandidate[];
+   const result=await response.json() as {images?:ImageCandidate[]};
+   return (result.images||[]).filter(x=>safeCommonsUrl(x.imageUrl));
+  };
+  let items=await lookup(query);
+  // Some searches have only unsupported formats or licenses. Keep an honest
+  // Commons-licensed stock-image fallback, never claim a generated actor/photo.
+  if(!items.length&&query!=="Cairo Egypt street")
+   items=await lookup("Cairo Egypt street");
+  return items;
  }
  async function generateFromStory(){
   if(playing||imagesBusy)return;
