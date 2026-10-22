@@ -81,6 +81,7 @@ jobs:
         run: |
           npm install --no-save --no-audit --no-fund playwright@1.56.1
           npx playwright install --with-deps chromium
+          sudo apt-get install -y --no-install-recommends ffmpeg
       - name: Browser smoke test of real motion and Arabic-scene audio export
         run: node tests/agent-video-browser-smoke.mjs
       - name: Check TypeScript
