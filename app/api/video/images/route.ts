@@ -54,20 +54,6 @@ export async function GET(req:NextRequest){
   if(!response.ok)throw Error("IMAGE_PROVIDER_UNAVAILABLE");
   const body=await response.json() as {query?:{pages?:CommonsPage[]}};
   const pages=body.query?.pages||[];
-  const metrics={pages:pages.length,
-   withInfo:pages.filter(x=>Boolean(x.imageinfo?.[0])).length,
-   withThumb:pages.filter(x=>typeof x.imageinfo?.[0]?.thumburl==="string").length,
-   withMime:pages.filter(x=>["image/jpeg","image/png","image/webp"].includes(String(x.imageinfo?.[0]?.mime))).length,
-   withLicense:pages.filter(x=>Boolean(x.imageinfo?.[0]?.extmetadata?.LicenseShortName?.value)).length,
-   allowedLicense:pages.filter(x=>allowedCommonsLicense(
-    clean(x.imageinfo?.[0]?.extmetadata?.LicenseShortName?.value,80))).length,
-   withSource:pages.filter(x=>typeof x.imageinfo?.[0]?.descriptionurl==="string").length,
-   allowedThumb:pages.filter(x=>Boolean(safeCommonsAsset(x.imageinfo?.[0]?.thumburl))).length,
-   sourceMatches:pages.filter(x=>String(x.imageinfo?.[0]?.descriptionurl||"").startsWith("https://commons.wikimedia.org/wiki/File:")).length,
-   firstThumb:String(pages[0]?.imageinfo?.[0]?.thumburl||"").slice(0,260),
-   firstSource:String(pages[0]?.imageinfo?.[0]?.descriptionurl||"").slice(0,200),
-   firstLicense:clean(pages[0]?.imageinfo?.[0]?.extmetadata?.LicenseShortName?.value,80)
-  };
   const images=pages.sort((a,b)=>(a.index||0)-(b.index||0)).flatMap(p=>{
    const info=p.imageinfo?.[0],meta=info?.extmetadata||{};
    const thumb=safeCommonsAsset(info?.thumburl);
@@ -81,7 +67,7 @@ export async function GET(req:NextRequest){
     sourceUrl:src,license,author:clean(meta.Artist?.value,160)||"Wikimedia Commons",
     credit:clean(meta.Credit?.value,220)}];
   }).slice(0,8);
-  return NextResponse.json({query:q,images,diagnostic:metrics},{
+  return NextResponse.json({query:q,images},{
    headers:{"Cache-Control":"public, s-maxage=3600, stale-while-revalidate=86400"}
   });
  }catch{
