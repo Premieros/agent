@@ -4,7 +4,7 @@
  * Browser and Next server remain local; there are no image provider / AI calls.
  */
 import assert from "node:assert/strict";
-import {spawn} from "node:child_process";
+import {spawn,execFileSync} from "node:child_process";
 import {mkdtempSync,statSync,rmSync} from "node:fs";
 import {tmpdir} from "node:os";
 import {join} from "node:path";
@@ -83,6 +83,12 @@ try{
  await page.locator('input[type="file"][accept="video/mp4,video/webm"]').first().setInputFiles({
   name:"motion.webm",mimeType:"video/webm",buffer:Buffer.from(bytes)
  });
+ // Exercise the microphone path, then use deterministic WAV for mux verification.
+ await page.getByRole("button",{name:"تسجيل حوار المشهد من الميكروفون"}).first().click();
+ await page.getByRole("button",{name:"إيقاف تسجيل حوار المشهد"}).first().waitFor();
+ await pause(1100);
+ await page.getByRole("button",{name:"إيقاف تسجيل حوار المشهد"}).first().click();
+ await page.getByText("حوار مسجّل: المشهد 1").first().waitFor();
  const firstVoice=page.locator('input[type="file"][accept="audio/*"]').nth(1);
  await firstVoice.setInputFiles({name:"dialogue.wav",mimeType:"audio/wav",buffer:wavTone()});
  await page.getByText("مقاطع حركة فعلية: 1 / 3").waitFor();
@@ -97,8 +103,12 @@ try{
  const size=statSync(file).size;
  assert.ok(size>5000,"Export is empty or missing, size="+size);
  assert.match(download.suggestedFilename(),/\.webm$|\.mp4$/);
+ const streams=execFileSync("ffprobe",["-v","error","-show_entries","stream=codec_type",
+  "-of","default=noprint_wrappers=1:nokey=1",file],{encoding:"utf8"}).trim().split(/\\s+/);
+ assert.ok(streams.includes("video"),"Export contains no decodable video stream");
+ assert.ok(streams.includes("audio"),"Export contains no decodable audio stream");
  console.log("AGENT VIDEO BROWSER PASS: real frames and dialogue export",{
-  bytes:size,file:download.suggestedFilename(),inputBytes:bytes.length
+  bytes:size,file:download.suggestedFilename(),inputBytes:bytes.length,streams
  });
 }catch(err){
  console.error("AGENT BROWSER SMOKE FAILED",err,serverOutput.slice(-3000));
