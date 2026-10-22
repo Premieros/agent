@@ -791,7 +791,7 @@ export default function AgentVideoStudio(){
 
   {error&&<div className={s.error} role="alert">{error}</div>}
   <div className={s.editorShell}>
-   <main className={s.workArea}>
+   <div className={s.workArea}>
     {step==="story"&&<section className={s.panel} aria-label="كتابة القصة">
      <div className={s.panelHead}>
       <span className={s.sectionKicker}>01 / CREATE</span>
@@ -1152,7 +1152,7 @@ export default function AgentVideoStudio(){
       </div>
      </details>
     </section>}
-   </main>
+   </div>
 
    <aside className={s.playerRail} aria-label="معاينة الفيديو والتصدير">
     <div className={s.playerHeader}>
@@ -1173,11 +1173,12 @@ export default function AgentVideoStudio(){
     </div>
     <div className={s.playerActions}>
      <button type="button" className={s.secondary}
+      disabled={!playing&&(imagesBusy||imageEngineBusy!==null)}
       onClick={()=>playing?stop():void start(false)}>
       {playing?<Pause size={16}/>:<Play size={16}/>}
       {playing?"إيقاف":"تشغيل المعاينة"}
      </button>
-     <button type="button" className={s.button} disabled={playing}
+     <button type="button" className={s.button} disabled={playing||imagesBusy||imageEngineBusy!==null}
       onClick={()=>{setStep("export");void start(true);}}>
       <Video size={16}/>{recording?"جارٍ التسجيل...":"تصدير الفيديو"}
      </button>

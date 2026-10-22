@@ -96,12 +96,13 @@ try{
  await page.getByText("أوافق على إرسال وصف المشهد").locator('input[type="checkbox"]').check();
  await page.locator('[data-step="editor"]').click();
  await page.getByRole("button",{name:"إنشاء صورة للمشهد (AI)"}).first().click();
+ // The editor intentionally hides the design settings: review result on design step.
+ await page.locator('[data-step="design"]').click();
  await page.getByText("تم إنشاء الصورة وإضافتها للمشهد", {exact:false}).waitFor();
  assert.equal(requests,1);
+ await page.getByText("خيارات إنشاء الصور الخارجية (اختيارية وقد تكون مدفوعة)").click();
  assert.equal(await page.getByText("أوافق على إرسال وصف المشهد").locator('input[type="checkbox"]').isChecked(),false);
  // Return to the no-cost default for all remaining video testing.
- await page.locator('[data-step="design"]').click();
- await page.getByText("خيارات إنشاء الصور الخارجية (اختيارية وقد تكون مدفوعة)").click();
  await page.locator("select").filter({has:page.locator('option[value="ai"]')}).selectOption("local");
  await page.locator('[data-step="editor"]').click();
  // Produce genuine moving video frames in Chromium without an API or file server.
