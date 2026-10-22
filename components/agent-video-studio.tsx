@@ -6,6 +6,8 @@ import {storyboardFromScript,serializeVideoDraft,parseVideoDraft,videoSrt,
  videoScriptDocument,guessImageQuery,safeCommonsUrl,MAX_VIDEO_SCENES,
  type VideoScene} from "@/lib/agent-video-storyboard";
 import {startAmbientSoundtrack} from "@/lib/agent-video-soundtrack";
+import {AGENT_VIDEO_MODES,getCastForScenes,castBibleAsJson,parseCastBible,
+ type AgentVideoCharacter,type AgentVideoMode} from "@/lib/agent-video-production";
 import s from "./agent-video-studio.module.css";
 
 type Ratio="16:9"|"9:16";
@@ -33,7 +35,8 @@ function wrap(ctx:CanvasRenderingContext2D,value:string,maxWidth:number,maxLines
  return result;
 }
 function paint(canvas:HTMLCanvasElement,scenes:readonly Scene[],images:Map<number,HTMLImageElement>,
- seconds:number){
+ seconds:number,characterPhotos:Map<string,HTMLImageElement>,
+ casting:Record<number,string>,characters:readonly AgentVideoCharacter[]){
  const ctx=canvas.getContext("2d");
  if(!ctx||!scenes.length)return;
  const w=canvas.width,h=canvas.height;
@@ -58,6 +61,24 @@ function paint(canvas:HTMLCanvasElement,scenes:readonly Scene[],images:Map<numbe
   ctx.drawImage(photo,(w-sw)/2,(h-sh)/2,sw,sh);
   ctx.restore();
  }
+ // An actor reference is reused verbatim for every scene featuring this character.
+ // Commons background search is NEVER used to invent or replace actors.
+ const actorId=casting[clip.id],actor=characters.find(c=>c.id===actorId);
+ const actorPhoto=actorId?characterPhotos.get(actorId):undefined;
+ if(actorPhoto&&actorPhoto.complete&&actorPhoto.naturalWidth>0){
+  ctx.save();
+  const aw=vertical?w*.67:w*.32,ah=vertical?h*.56:h*.71;
+  const ax=vertical?(w-aw)/2:w*.60,ay=vertical?h*.18:h*.11;
+  const scale=Math.max(aw/actorPhoto.naturalWidth,ah/actorPhoto.naturalHeight);
+  const cropW=aw/scale,cropH=ah/scale;
+  const sx=(actorPhoto.naturalWidth-cropW)/2,sy=(actorPhoto.naturalHeight-cropH)/2;
+  ctx.fillStyle="#12182b";ctx.fillRect(ax-7,ay-7,aw+14,ah+14);
+  ctx.globalAlpha=.94;
+  ctx.drawImage(actorPhoto,sx,sy,cropW,cropH,ax,ay,aw,ah);
+  ctx.globalAlpha=1;ctx.strokeStyle="#e8b9ff";ctx.lineWidth=3;
+  ctx.strokeRect(ax,ay,aw,ah);
+  ctx.restore();
+ }
  const overlay=ctx.createLinearGradient(0,0,0,h);
  overlay.addColorStop(0,"rgba(3,8,24,.67)");
  overlay.addColorStop(.48,"rgba(2,7,16,.22)");
@@ -78,7 +99,7 @@ function paint(canvas:HTMLCanvasElement,scenes:readonly Scene[],images:Map<numbe
  subtitleLines.forEach((line,i)=>ctx.fillText(line,w/2,subtitleTop+i*unit*.072,w*.87));
  ctx.fillStyle="#f9bbee";
  ctx.font="700 "+Math.round(unit*.036)+"px Cairo,Arial,sans-serif";
- ctx.fillText(clip.speaker,w/2,h*.91);
+ ctx.fillText(actor?.name||clip.speaker,w/2,h*.91);
  ctx.fillStyle="#ffffff55";ctx.fillRect(w*.075,h*.963,w*.85,Math.max(3,h*.006));
  ctx.fillStyle="#e8b9ff";ctx.fillRect(w*.075,h*.963,w*.85*(total?time/total:0),Math.max(3,h*.006));
  ctx.direction="inherit";
@@ -90,10 +111,21 @@ function recorderMime(){
 }
 export default function AgentVideoStudio(){
  const [scenes,setScenes]=useState<Scene[]>(defaults);
+ const [productionMode,setProductionMode]=useState<AgentVideoMode>("reel");
+ const [episode,setEpisode]=useState(1);
+ const [cast,setCast]=useState<AgentVideoCharacter[]>([
+  {id:"cast-1",name:"مريم",appearance:"شابة مصرية في منتصف العشرينات",wardrobe:"ملابس واقعية مناسبة للمشهد",voiceLabel:"صوت مصري هادئ"}
+ ]);
+ const [casting,setCasting]=useState<Record<number,string>>({1:"cast-1",2:"cast-1",3:"cast-1"});
+ const [castNotice,setCastNotice]=useState("");
+ const photos=useRef<Map<string,HTMLImageElement>>(new Map());
+ const castFileRef=useRef<HTMLInputElement|null>(null);
+ const nextCastId=useRef(2);
+ const currentMode=AGENT_VIDEO_MODES[productionMode];
  const [name,setName]=useState("مش من مستوانا");
  const [script,setScript]=useState("في شارع مصري هادئ، بدأت حكاية مريم لما سمعت خبراً غير متوقع.\nقررت مريم أن تواجه الحقيقة رغم اعتراض أسرتها.\nكل خطوة كانت تكشف سرًا جديدًا، ولم يكن أحد يتوقع النهاية.");
- const [requestedCount,setRequestedCount]=useState(8);
- const [requestedSeconds,setRequestedSeconds]=useState(180);
+ const [requestedCount,setRequestedCount]=useState(6);
+ const [requestedSeconds,setRequestedSeconds]=useState(45);
  const [imagesBusy,setImagesBusy]=useState(false);
  const [imageNotice,setImageNotice]=useState("");
  const [musicEnabled,setMusicEnabled]=useState(true);
@@ -118,8 +150,9 @@ export default function AgentVideoStudio(){
  const total=scenes.reduce((n,c)=>n+c.duration,0);
 
  const draw=useCallback((second:number)=>{
-  if(canvasRef.current)paint(canvasRef.current,scenes,images.current,second);
- },[scenes]);
+  if(canvasRef.current)paint(canvasRef.current,scenes,images.current,second,
+   photos.current,casting,cast);
+ },[scenes,cast,casting]);
  useEffect(()=>{
   const canvas=canvasRef.current;if(!canvas)return;
   canvas.width=ratio==="9:16"?540:960;
@@ -135,6 +168,61 @@ export default function AgentVideoStudio(){
   }
  },[]);
 
+ const chooseMode=(mode:AgentVideoMode)=>{
+  if(playing||imagesBusy)return;
+  setProductionMode(mode);
+  setRequestedCount(AGENT_VIDEO_MODES[mode].defaultCount);
+  setRequestedSeconds(AGENT_VIDEO_MODES[mode].defaultDuration);
+  setError("");setDownloadUrl(null);
+ };
+ const addCastMember=()=>{
+  if(cast.length>=15||playing)return;
+  const id="cast-"+nextCastId.current++;
+  setCast(old=>[...old,{id,name:"شخصية جديدة",appearance:"",wardrobe:"",voiceLabel:"صوت عربي"}]);
+ };
+ const editCast=(id:string,patch:Partial<AgentVideoCharacter>)=>{
+  if(playing)return;
+  setCast(old=>old.map(item=>item.id===id?{...item,...patch}:item));
+  setDownloadUrl(null);
+ };
+ const uploadCastPhoto=(id:string,event:ChangeEvent<HTMLInputElement>)=>{
+  const file=event.target.files?.[0];if(!file)return;
+  if(!["image/png","image/jpeg","image/webp"].includes(file.type)||file.size>10*1024*1024){
+   setError("صورة الشخصية يجب أن تكون PNG أو JPEG أو WebP وأقل من 10 ميجابايت.");return;
+  }
+  const url=URL.createObjectURL(file);urls.current.push(url);
+  const img=new Image();
+  img.onload=()=>{photos.current.set(id,img);setImageTick(t=>t+1);
+   setCastNotice("تم تثبيت صورة الشخصية، وستظهر نفسها في كل مشهد مرتبط بها.");};
+  img.onerror=()=>setError("تعذر قراءة الصورة المرجعية للشخصية.");
+  img.src=url;
+ };
+ const importCast=async(event:ChangeEvent<HTMLInputElement>)=>{
+  const file=event.target.files?.[0];
+  if(!file)return;
+  try{
+   if(file.size>30000)throw Error("too large");
+   const result=parseCastBible(await file.text());
+   setCast(result);photos.current.clear();setCasting({});
+   nextCastId.current=result.length+1;
+   setCastNotice("تم استعادة أوصاف الشخصيات. أعد رفع صورة كل شخصية لضمان ثبات الوجه.");
+   setImageTick(t=>t+1);
+  }catch{setError("ملف الشخصيات غير صالح.");}
+  event.target.value="";
+ };
+ const previewArabicVoice=(text:string)=>{
+  if(typeof window==="undefined"||!("speechSynthesis" in window)){
+   setError("المتصفح لا يدعم القراءة الآلية؛ استخدم تسجيل الصوت أو ارفع ملفًا.");return;
+  }
+  window.speechSynthesis.cancel();
+  const utterance=new SpeechSynthesisUtterance(text.slice(0,450));
+  utterance.lang="ar-EG";utterance.rate=.93;
+  const voices=window.speechSynthesis.getVoices();
+  const voice=voices.find(v=>v.lang.toLowerCase().startsWith("ar"));
+  if(voice)utterance.voice=voice;
+  window.speechSynthesis.speak(utterance);
+  setCastNotice("دي معاينة صوت فقط. صوت المتصفح الآلي لا يُدمج في ملف الفيديو؛ للتصدير ارفع أو سجّل التعليق.");
+ };
  const update=(id:number,patch:Partial<Scene>)=>{
   if(playing)return;
   setScenes(old=>old.map(c=>c.id===id?{...c,...patch}:c));
@@ -192,7 +280,9 @@ export default function AgentVideoStudio(){
   let planned:Scene[];
   try{planned=storyboardFromScript(script,requestedSeconds,requestedCount);}
   catch{setError("اكتب قصة من 12 إلى 9000 حرف، وحدد عدد المشاهد والمدة.");return;}
-  setScenes(planned);images.current.clear();setProgress(0);
+  setScenes(planned);
+  setCasting(getCastForScenes(planned,cast,cast[0]?.id));
+  images.current.clear();setProgress(0);
   setDownloadUrl(null);setImagesBusy(true);
   let loaded=0;const used=new Set<string>(),updated=[...planned];
   for(let offset=0;offset<planned.length;offset+=3){
@@ -257,6 +347,7 @@ export default function AgentVideoStudio(){
    const draft=parseVideoDraft(await file.text());
    if(running.current)stop();
    setScenes(draft.scenes);setName(draft.name);
+   setCasting(getCastForScenes(draft.scenes,cast,cast[0]?.id));
    setRatio(draft.aspect==="1:1"?"9:16":draft.aspect);
    setProgress(0);setDownloadUrl(null);images.current.clear();
    for(const scene of draft.scenes){
@@ -366,7 +457,7 @@ export default function AgentVideoStudio(){
    }
    running.current=run;
    setPlaying(true);setRecording(exportVideo);setProgress(0);
-   paint(canvas,scenes,images.current,0);
+   paint(canvas,scenes,images.current,0,photos.current,casting,cast);
    if(run.audio){try{await run.audio.play();}catch{
     setError("المتصفح منع تشغيل الصوت. اضغط السماح بالصوت، وأعد المحاولة لو لزم.");
    }}
@@ -374,7 +465,7 @@ export default function AgentVideoStudio(){
    const frame=(now:number)=>{
     if(!run.playing)return;
     const seconds=Math.min(total,(now-started)/1000);
-    paint(canvas,scenes,images.current,seconds);
+    paint(canvas,scenes,images.current,seconds,photos.current,casting,cast);
     setProgress(seconds);
     if(seconds>=total){stop();return;}
     run.frame=requestAnimationFrame(frame);
@@ -409,16 +500,83 @@ export default function AgentVideoStudio(){
    <span className={s.status}>كل الملفات تُعالج محليًا داخل المتصفح · لا يُستخدم أي مشروع أو قاعدة بيانات أخرى</span>
   </div>
   <section className={s.panel} style={{marginBottom:16}}>
-   <h2>1. اكتب القصة واختر عدد المشاهد</h2>
+   <h2>اختر نوع الإنتاج</h2>
+   <div className={s.modeGrid}>
+    {(Object.keys(AGENT_VIDEO_MODES) as AgentVideoMode[]).map(mode=>
+     <button key={mode} type="button" disabled={playing||imagesBusy}
+      className={productionMode===mode?s.modeActive:s.modeButton}
+      onClick={()=>chooseMode(mode)}>
+      <strong>{AGENT_VIDEO_MODES[mode].name}</strong>
+      <span>{mode==="episodes"?"حلقة واحدة في كل تصدير، مع إمكانية إعادة استخدام الشخصيات":
+       mode==="short-series"?"قصة قصيرة متعددة المشاهد":"فيديو سريع عمودي أو أفقي"}</span>
+     </button>)}
+   </div>
+   {productionMode==="episodes"&&<label className={s.field}>رقم الحلقة
+    <input type="number" value={episode} min={1} max={999}
+     disabled={playing} onChange={e=>setEpisode(Math.max(1,Math.min(999,Number(e.target.value)||1)))}/>
+   </label>}
+   <div className={s.notice}>الأوضاع تنظّم المونتاج والمشاهد. تحويل الصور إلى ممثلين متحركين يتكلمون
+    يحتاج محرك فيديو توليدي خارجي غير مفعّل في هذه النسخة؛ ولن ندّعي أنه تم.</div>
+  </section>
+  <section className={s.panel} style={{marginBottom:16}}>
+   <h2>1. مكتبة الشخصيات الثابتة</h2>
+   <p>حمّل صورة مرجعية واحدة لكل شخصية. ستظهر الصورة نفسها في جميع المشاهد المرتبطة بها.
+    البحث على الإنترنت مخصص للخلفيات فقط، وليس لجلب صور وجوه مختلفة لنفس الشخصية.</p>
+   {cast.map((character)=><div key={character.id} className={s.castCard}>
+    <div className={s.clipTop}><strong>{character.name||"شخصية بلا اسم"}</strong>
+     <button type="button" className={s.danger} disabled={playing||cast.length===1}
+      onClick={()=>{setCast(old=>old.filter(c=>c.id!==character.id));
+       photos.current.delete(character.id);
+       setCasting(old=>Object.fromEntries(Object.entries(old).map(([k,v])=>
+        [k,v===character.id?"":v])));
+      }}><Trash2 size={14}/> حذف</button>
+    </div>
+    <div className={s.clipForm}>
+     <label className={s.field}>اسم الشخصية
+      <input value={character.name} maxLength={80} disabled={playing}
+       onChange={e=>editCast(character.id,{name:e.target.value})}/></label>
+     <label className={s.field}>نوع الصوت المطلوب (وصف)
+      <input value={character.voiceLabel} maxLength={90} disabled={playing}
+       onChange={e=>editCast(character.id,{voiceLabel:e.target.value})}/></label>
+     <label className={s.field+" "+s.wide}>الملامح الثابتة
+      <textarea value={character.appearance} maxLength={300} disabled={playing}
+       onChange={e=>editCast(character.id,{appearance:e.target.value})}/></label>
+     <label className={s.field+" "+s.wide}>الملابس الثابتة
+      <input value={character.wardrobe} maxLength={200} disabled={playing}
+       onChange={e=>editCast(character.id,{wardrobe:e.target.value})}/></label>
+     <label className={s.field+" "+s.wide}>صورة الشخصية الثابتة
+      <input type="file" accept="image/png,image/jpeg,image/webp"
+       disabled={playing} onChange={e=>uploadCastPhoto(character.id,e)}/>
+      <span className={s.small}>{photos.current.has(character.id)?"تم تثبيت الصورة محليًا للمشاهد المرتبطة":"لم ترفع صورة مرجعية بعد"}</span>
+     </label>
+    </div>
+   </div>)}
+   <div className={s.buttonRow}>
+    <button type="button" className={s.secondary} disabled={playing||cast.length>=15}
+     onClick={addCastMember}><Plus size={14}/> إضافة شخصية</button>
+    <button type="button" className={s.secondary} disabled={playing}
+     onClick={()=>downloadText(castBibleAsJson(cast),"agent-character-bible.json","application/json")}>
+     <Save size={14}/> حفظ الشخصيات</button>
+    <button type="button" className={s.secondary} disabled={playing}
+     onClick={()=>castFileRef.current?.click()}><RefreshCw size={14}/> استعادة الشخصيات</button>
+    <input ref={castFileRef} type="file" hidden accept=".json,application/json"
+     onChange={e=>void importCast(e)}/>
+   </div>
+   {castNotice&&<div className={s.success} role="status">{castNotice}</div>}
+   <div className={s.notice}>صور الشخصيات لا تخرج من متصفحك ولا تُحفظ في ملف JSON.
+    بعد فتح مشروع جديد أعد رفعها. يتم تثبيت الصورة نفسها، وليس توليد حركة وجه أو تمثيل شفاه.</div>
+  </section>
+  <section className={s.panel} style={{marginBottom:16}}>
+   <h2>2. اكتب القصة واختر عدد المشاهد</h2>
    <p>AGENT يقسم القصة إلى المشاهد المحددة، ويبحث عن صور مناسبة من Wikimedia Commons المرخصة.
     التنفيذ هنا لتركيب الفيديو من صور حقيقية على الإنترنت، وليس توليد ممثلين أو فيديو سينمائي بالذكاء الاصطناعي.</p>
    <div className={s.clipForm}>
     <label className={s.field}>اسم الفيديو
      <input value={name} maxLength={100} disabled={playing||imagesBusy}
       onChange={e=>setName(e.target.value)}/></label>
-    <label className={s.field}>عدد المشاهد (1 إلى 32)
-     <input type="number" min={1} max={32} value={requestedCount} disabled={playing||imagesBusy}
-      onChange={e=>setRequestedCount(Math.max(1,Math.min(32,Number(e.target.value)||1)))}/></label>
+    <label className={s.field}>عدد المشاهد حسب نوع الإنتاج
+     <input type="number" min={currentMode.minCount} max={currentMode.maxCount} value={requestedCount} disabled={playing||imagesBusy}
+      onChange={e=>setRequestedCount(Math.max(currentMode.minCount,Math.min(currentMode.maxCount,Number(e.target.value)||1)))}/></label>
     <label className={s.field}>مدة الفيديو المستهدفة بالثواني
      <input type="number" min={12} max={720} step={15} value={requestedSeconds}
       disabled={playing||imagesBusy} onChange={e=>setRequestedSeconds(
@@ -443,7 +601,7 @@ export default function AgentVideoStudio(){
   </section>
   <div className={s.layout}>
    <div className={s.panel}>
-    <h2>2. عدّل المشاهد والصوت</h2>
+    <h2>3. حدّد الشخصيات وعدّل المشاهد والصوت</h2>
     <p>الصور المُحضّرة تظهر تلقائيًا، ويمكنك استبدال أي صورة أو تسجيل التعليق الصوتي.</p>
     <div className={s.segment} role="group" aria-label="أبعاد الفيديو">
      <button type="button" className={ratio==="9:16"?s.active:""} disabled={playing}
@@ -477,6 +635,13 @@ export default function AgentVideoStudio(){
        <Trash2 size={14}/></button>
      </div>
      <div className={s.clipForm}>
+      <label className={s.field+" "+s.wide}>الشخصية التي تظهر في هذا المشهد
+       <select value={casting[clip.id]||""} disabled={playing}
+        onChange={e=>{setCasting(old=>({...old,[clip.id]:e.target.value}));setDownloadUrl(null);}}>
+        <option value="">بدون شخصية · خلفية فقط</option>
+        {cast.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}
+       </select>
+      </label>
       <label className={s.field}>العنوان
        <input maxLength={80} value={clip.title} disabled={playing}
         onChange={e=>update(clip.id,{title:e.target.value})}/></label>
@@ -489,6 +654,10 @@ export default function AgentVideoStudio(){
       <label className={s.field}>الشخصية / الوصف
        <input maxLength={70} value={clip.speaker} disabled={playing}
         onChange={e=>update(clip.id,{speaker:e.target.value})}/></label>
+      <div className={s.wide}>
+       <button type="button" className={s.secondary} disabled={playing}
+        onClick={()=>previewArabicVoice(clip.subtitle)}><Mic size={14}/> سماع النص (معاينة فقط)</button>
+      </div>
       <label className={s.field}>لون المشهد
        <input type="color" value={clip.color} disabled={playing}
         onChange={e=>update(clip.id,{color:e.target.value})}/></label>
@@ -511,7 +680,7 @@ export default function AgentVideoStudio(){
     </div>)}
    </div>
    <div className={s.panel}>
-    <h2><Film size={16}/> 3. معاينة وتصدير الفيديو النهائي</h2>
+    <h2><Film size={16}/> 4. معاينة وتصدير الفيديو النهائي</h2>
     <p>{scenes.length} مشاهد · المدة الإجمالية: {total} ثانية · {ratio==="9:16"?"عمودي":"أفقي"}</p>
     <div className={s.preview}>
      <div className={s.frame}>
@@ -535,7 +704,7 @@ export default function AgentVideoStudio(){
      تم تجهيز الفيديو على جهازك. حمّله قبل إغلاق الصفحة.
      <div className={s.buttonRow} style={{marginTop:9}}>
       <a className={s.button} href={downloadUrl}
-       download={"agent-video."+(downloadType.includes("mp4")?"mp4":"webm")}>
+       download={"agent-"+(productionMode==="episodes"?"episode-"+episode+"-":"video-")+(downloadType.includes("mp4")?"video.mp4":"video.webm")}>
        <Download size={16}/> تحميل الفيديو</a>
      </div>
     </div>}
@@ -548,6 +717,6 @@ export default function AgentVideoStudio(){
      المرفوعين. لا يوجد توليد فيديو AI مدفوع أو نشر تلقائي.</div>
    </div>
   </div>
-  <p className={s.footer}>نسخة AGENT التجريبية · الفيديو يُصنع محليًا · لا يتم رفع صورك أو صوتك إلى الخادم</p>
+  <p className={s.footer}>نسخة AGENT التجريبية · صور الشخصيات والصوت محلية · البحث على الإنترنت للخلفيات المرخّصة فقط · لا يوجد حاليًا توليد فيديو تمثيلي</p>
  </section>;
 }
