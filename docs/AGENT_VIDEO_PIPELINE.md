@@ -63,3 +63,15 @@ AGENT now has a **working image engine** for scene storyboards:
 - Privacy and identity: in real AI mode **only character descriptions, not reference portraits** are sent; therefore identical AI-generated faces across episodes cannot be guaranteed. Local mode uses the exact private uploaded portrait and has stable facial identity. To gain AI face consistency a separately approved reference-image edit workflow would be required.
 - No file is automatically posted to YouTube or sent to a database. Media created in the browser is not embedded in saved JSON and must be regenerated or re-uploaded after restore. Provider results must be reviewed for appropriateness and publication rights.
 - AGENT browser CI uses a mocked AI endpoint to test the explicit-consent request contract without provider charges; it also generates and verifies a real PNG. Tests do not claim real-provider acceptance of a key or account access.
+
+## Guided creator workflow and visual editor (Oct 22, 2026)
+
+The /video interface is now a focused, creator-style studio with four top-level steps:
+1. **Story:** choose video mode, write/edit the script, scene count, duration, and click **Create Scenes & Free Images**. All keyframes are drawn locally without a Commons lookup or model billing.
+2. **Design:** choose cinematic/comic/noir local keyframe styles; regenerate all scenes for free; optionally expand character portraits or a clearly labeled external BYOK setting.
+3. **Editor:** choose one scene from the persistent horizontal storyboard, edit text/duration/character, produce a local PNG, attach actual footage and record/upload per-scene dialogue. The preview stays visible; unselected scene input panels are hidden.
+4. **Export:** choose 9:16 or 16:9, add music/voice, export to WebM (or browser-supported MP4), download subtitles/project assets.
+
+The preview is always visible on desktop, alongside a timeline with media cues. All primary actions work locally. AI photo generation is **not** automatically enabled or billed: its user-key option is tucked into advanced design details and still requires a separate checkbox per call. Local original illustrations are **not** photorealistic AI and reference portraits are unchanged.
+
+The Chromium E2E test now covers the free story→design→editor workflow, timeline navigation and duration edits, real PNG download, mocked explicitly-consented API mode, microphone recording, moving footage, and muxed WebM audio/video streams.

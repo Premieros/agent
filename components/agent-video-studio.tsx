@@ -18,6 +18,7 @@ type Scene=VideoScene;
 type Run={frame:number;recorder:MediaRecorder|null;stream:MediaStream|null;
  audioContext:AudioContext|null;audio:HTMLAudioElement|null;playing:boolean;completed:boolean;
  voiceNodes:AudioBufferSourceNode[]};
+type StudioStep="story"|"design"|"editor"|"export";
 const defaults:Scene[]=[
  {id:1,title:"مش من مستوانا",subtitle:"حكاية مصرية تبدأ بلحظة غير متوقعة",speaker:"المشهد الأول",duration:6,color:"#9b4dbb",transition:"cut",imageQuery:"Egypt drama"},
  {id:2,title:"القرار",subtitle:"في لحظة واحدة، كل شيء اتغير.",speaker:"المشهد الثاني",duration:6,color:"#b45358",transition:"fade",imageQuery:"Egypt city"},
@@ -46,6 +47,21 @@ function paint(canvas:HTMLCanvasElement,scenes:readonly Scene[],images:Map<numbe
  if(!ctx||!scenes.length)return;
  const w=canvas.width,h=canvas.height;
  const total=scenes.reduce((n,c)=>n+c.duration,0);
+ const selectedScene=scenes.find(clip=>clip.id===selectedSceneId)||scenes[0];
+ const fmt=(n:number)=>String(Math.floor(Math.max(0,n)/60)).padStart(2,"0")+":"+
+  String(Math.floor(Math.max(0,n)%60)).padStart(2,"0");
+ const seekTo=(second:number)=>{
+  if(playing)return;
+  const at=Math.max(0,Math.min(total,second));
+  previewSecond.current=at;setProgress(at);syncShotVideos(at,false);draw(at);
+ };
+ const selectScene=(id:number)=>{
+  if(playing)return;
+  setSelectedSceneId(id);
+  const seconds=scenes.slice(0,Math.max(0,scenes.findIndex(c=>c.id===id)))
+   .reduce((sum,c)=>sum+c.duration,0);
+  seekTo(seconds);setStep("editor");
+ };
  const time=Math.max(0,Math.min(total,seconds));
  let remaining=time,index=0;
  for(;index<scenes.length-1&&remaining>=scenes[index].duration;index++)
@@ -161,6 +177,9 @@ export default function AgentVideoStudio(){
  const [audioUrl,setAudioUrl]=useState<string|null>(null);
  const [audioName,setAudioName]=useState("");
  const [progress,setProgress]=useState(0);
+ const [step,setStep]=useState<StudioStep>("story");
+ const [selectedSceneId,setSelectedSceneId]=useState(1);
+ const previewSecond=useRef(0);
  const [playing,setPlaying]=useState(false);
  const [recording,setRecording]=useState(false);
  const [downloadUrl,setDownloadUrl]=useState<string|null>(null);
@@ -186,7 +205,7 @@ export default function AgentVideoStudio(){
   const canvas=canvasRef.current;if(!canvas)return;
   canvas.width=ratio==="9:16"?540:960;
   canvas.height=ratio==="9:16"?960:540;
-  draw(0);
+  draw(previewSecond.current);
  },[ratio,draw,imageTick]);
  useEffect(()=>()=>{for(const url of urls.current)URL.revokeObjectURL(url);
   shotVideos.current.forEach(video=>{video.pause();video.removeAttribute("src");video.load();});
@@ -317,16 +336,33 @@ export default function AgentVideoStudio(){
   }
  };
  const createAllLocalImages=async()=>{
-  if(playing||imagesBusy||imageEngineBusy!==null||imageEngine!=="local")return;
-  setError("");setImageEngineNotice("يتم تجهيز صور المشاهد تباعًا داخل متصفحك...");
-  // Serial browser composition avoids large concurrent canvas memory allocations.
-  let count=0;
-  for(const clip of scenes){
-   // The helper owns the busy flag, but state updates are asynchronous.
-   const ok=await createSceneImage(clip,true);
-   if(ok)count++;
-  }
-  setImageEngineNotice("تم إنشاء "+count+" من "+scenes.length+" صورة محلية وربطها بالمشاهد.");
+  if(playing||imagesBusy||imageEngineBusy!==null)return;
+  setError("");setImagesBusy(true);
+  let count=0;const made:Record<number,string>={};
+  const updated=[...scenes];
+  try{
+   for(let i=0;i<scenes.length;i++){
+    const clip=scenes[i];setImageNotice("تجهيز الصور مجانًا: "+(i+1)+" / "+scenes.length);
+    try{
+     const reference=photos.current.get(casting[clip.id]||"");
+     const blob=await renderSceneArtwork({sceneId:clip.id,title:clip.title,
+      subtitle:(imageDescriptions[clip.id]||"").trim()||clip.subtitle,
+      style:imageStyle,aspect:ratio,seed:imageVariation.current++},reference);
+     const url=URL.createObjectURL(blob);urls.current.push(url);
+     const image=new Image();
+     await new Promise<void>((resolve,reject)=>{
+      image.onload=()=>resolve();image.onerror=()=>reject(Error("IMAGE_LOAD_FAILED"));image.src=url;
+     });
+     images.current.set(clip.id,image);
+     updated[i]={...clip,imageUrl:url,imageCredit:"رسوم أصلية محلية داخل AGENT",
+      imageLicense:reference?"AGENT_LOCAL_ART_WITH_CAST":"AGENT_LOCAL_ART",imageSource:undefined};
+     made[clip.id]="agent-scene-"+clip.id+".png";count++;
+     setScenes([...updated]);setImageTick(v=>v+1);
+    }catch{setError("تعذر إنشاء صورة أحد المشاهد، أعد المحاولة لهذا المشهد فقط.");}
+   }
+   setCreatedImageNames(made);
+   setImageEngineNotice("تم إنشاء "+count+" من "+scenes.length+" صورة مجانًا وحفظها داخل المشاهد.");
+  }finally{setImagesBusy(false);}
  };
  const downloadCreatedImage=(clip:Scene)=>{
   const url=clip.imageUrl;
@@ -397,9 +433,14 @@ export default function AgentVideoStudio(){
   const url=URL.createObjectURL(file);urls.current.push(url);
   setAudioUrl(url);setAudioName(file.name.slice(0,100));setDownloadUrl(null);setError("");
  };
- const addScene=()=>setScenes(old=>old.length>=MAX_SCENES?old:
-  [...old,{id:nextId.current++,title:"مشهد جديد",subtitle:"اكتب النص هنا",
-   speaker:"تعليق أو وصف",duration:6,color:"#7345a6",transition:"fade",imageQuery:"Egypt street"}]);
+ const addScene=()=>{
+  if(playing||scenes.length>=MAX_SCENES)return;
+  const id=nextId.current++;
+  setScenes(old=>old.length>=MAX_SCENES?old:
+   [...old,{id,title:"مشهد جديد",subtitle:"اكتب النص هنا",
+    speaker:"تعليق أو وصف",duration:6,color:"#7345a6",transition:"fade",imageQuery:"Egypt street"}]);
+  setSelectedSceneId(id);setStep("editor");setDownloadUrl(null);
+ };
 
  type ImageCandidate={title:string;imageUrl:string;sourceUrl:string;license:string;author:string;credit:string};
  const loadExternalImage=(id:number,url:string):Promise<boolean>=>new Promise(resolve=>{
@@ -431,38 +472,43 @@ export default function AgentVideoStudio(){
   catch{setError("اكتب قصة من 12 إلى 9000 حرف، وحدد عدد المشاهد والمدة.");return;}
   setScenes(planned);nextId.current=planned.length+1;
   setCreatedImageNames({});setImageDescriptions({});
+  setSelectedSceneId(planned[0]?.id||1);previewSecond.current=0;
   shotVideos.current.forEach(v=>v.pause());shotVideos.current.clear();setShotVideoNames({});
   sceneVoices.current.clear();setSceneVoiceNames({});
   setCasting(getCastForScenes(planned,cast,cast[0]?.id));
   images.current.clear();setProgress(0);
   setDownloadUrl(null);setImagesBusy(true);
-  let loaded=0;const used=new Set<string>(),updated=[...planned];
-  for(let offset=0;offset<planned.length;offset+=3){
-   const current=planned.slice(offset,offset+3);
-   setImageNotice("جارٍ البحث عن صور المشاهد "+(offset+1)+" إلى "+
-    Math.min(planned.length,offset+3)+" من "+planned.length+"...");
-   const results=await Promise.all(current.map(async clip=>{
+  let created=0;
+  const updated=[...planned],made:Record<number,string>={};
+  const assigned=getCastForScenes(planned,cast,cast[0]?.id);
+  try{
+   // The primary "story to storyboard" flow runs entirely in the browser.
+   for(let i=0;i<planned.length;i++){
+    const clip=planned[i];setImageNotice("إنشاء صور المشاهد مجانًا: "+(i+1)+" / "+planned.length);
     try{
-     const query=clip.imageQuery||guessImageQuery(clip.subtitle);
-     const options=await findImages(query);
-     return {clip,options};
-    }catch{return {clip,options:[] as ImageCandidate[]};}
-   }));
-   for(const {clip,options} of results){
-    const asset=options.find(image=>!used.has(image.imageUrl))||options[0];
-    if(!asset)continue;
-    const okay=await loadExternalImage(clip.id,asset.imageUrl);
-    if(!okay)continue;
-    used.add(asset.imageUrl);loaded++;
-    updated[clip.id-1]={...clip,imageUrl:asset.imageUrl,
-     imageCredit:asset.author+(asset.credit?" · "+asset.credit:""),
-     imageLicense:asset.license,imageSource:asset.sourceUrl};
+     const reference=photos.current.get(assigned[clip.id]||"");
+     const blob=await renderSceneArtwork({sceneId:clip.id,title:clip.title,subtitle:clip.subtitle,
+      style:imageStyle,aspect:ratio,seed:imageVariation.current++},reference);
+     const url=URL.createObjectURL(blob);urls.current.push(url);
+     const img=new Image();
+     await new Promise<void>((resolve,reject)=>{
+      img.onload=()=>resolve();img.onerror=()=>reject(Error("INVALID_STORY_IMAGE"));img.src=url;
+     });
+     images.current.set(clip.id,img);created++;
+     made[clip.id]="agent-scene-"+clip.id+".png";
+     updated[i]={...clip,imageUrl:url,imageCredit:"رسوم أصلية محلية داخل AGENT",
+      imageLicense:reference?"AGENT_LOCAL_ART_WITH_CAST":"AGENT_LOCAL_ART",
+      imageSource:undefined};
+     setScenes([...updated]);setImageTick(v=>v+1);
+    }catch{
+     // A single failed canvas render must not lose the story or other scenes.
+    }
    }
-   setScenes([...updated]);
-  }
-  setImagesBusy(false);
-  setImageNotice("تم تجهيز "+planned.length+" مشهدًا. تم العثور على "+loaded+
-   " صورة مرخّصة. يمكنك تغيير أي صورة أو رفع صورك بدلًا منها.");
+   setCreatedImageNames(made);
+   setImageNotice("تم تجهيز "+planned.length+" مشهدًا وإنشاء "+created+" صورة محلية مجانًا. اختر مشهدًا للتعديل.");
+   setStep("design");
+  }finally{setImagesBusy(false);}
+
  }
  async function replaceImage(clip:Scene){
   if(imagesBusy||playing)return;
@@ -500,6 +546,7 @@ export default function AgentVideoStudio(){
    const draft=session.draft;
    if(running.current)stop();
    setScenes(draft.scenes);nextId.current=Math.max(...draft.scenes.map(s=>s.id))+1;setName(draft.name);
+   setSelectedSceneId(draft.scenes[0].id);setStep("editor");previewSecond.current=0;
    setCreatedImageNames({});setImageDescriptions({});
    shotVideos.current.forEach(v=>v.pause());shotVideos.current.clear();setShotVideoNames({});
    sceneVoices.current.clear();setSceneVoiceNames({});
@@ -650,7 +697,7 @@ export default function AgentVideoStudio(){
     recorder.start(300);
    }
    running.current=run;
-   setPlaying(true);setRecording(exportVideo);setProgress(0);
+   previewSecond.current=0;setPlaying(true);setRecording(exportVideo);setProgress(0);
    paint(canvas,scenes,images.current,0,photos.current,casting,cast,shotVideos.current);
    syncShotVideos(0,true);
    if(run.audio){try{await run.audio.play();}catch{
@@ -665,7 +712,7 @@ export default function AgentVideoStudio(){
     const seconds=Math.min(total,Math.max(0,(now-started)/1000));
     syncShotVideos(seconds,true);
     paint(canvas,scenes,images.current,seconds,photos.current,casting,cast,shotVideos.current);
-    setProgress(seconds);
+    previewSecond.current=seconds;setProgress(seconds);
     if(seconds>=total){run.completed=true;stop();return;}
     run.frame=requestAnimationFrame(frame);
    };
@@ -696,324 +743,486 @@ export default function AgentVideoStudio(){
   "agent-video-image-credits.txt");
 
  return <section className={s.studio} aria-label="استوديو صناعة الفيديو">
-  <div className={s.hero}>
-   <span className={s.eyebrow}>AGENT VIDEO STUDIO · نسخة تجريبية</span>
-   <h1>صناعة فيديو من السيناريو إلى المشاهد</h1>
-   <p>مستوحى من استوديو «مش من مستوانا». اكتب مشاهدك وارفع صورًا وصوتًا اختياريًا،
-    وشاهدها ثم صدّر فيديو من المتصفح بدون مفتاح API أو رسوم توليد.
-    هذه النسخة تحرّك الصور والنصوص ولا تولّد ممثلين أو لقطات فوتوغرافية بالذكاء الاصطناعي.</p>
-   <span className={s.status}>كل الملفات تُعالج محليًا داخل المتصفح · لا يُستخدم أي مشروع أو قاعدة بيانات أخرى</span>
-  </div>
-  <section className={s.panel} style={{marginBottom:16}}>
-   <h2>اختر نوع الإنتاج</h2>
-   <div className={s.modeGrid}>
-    {(Object.keys(AGENT_VIDEO_MODES) as AgentVideoMode[]).map(mode=>
-     <button key={mode} type="button" disabled={playing||imagesBusy}
-      className={productionMode===mode?s.modeActive:s.modeButton}
-      onClick={()=>chooseMode(mode)}>
-      <strong>{AGENT_VIDEO_MODES[mode].name}</strong>
-      <span>{mode==="episodes"?"حلقة واحدة في كل تصدير، مع إمكانية إعادة استخدام الشخصيات":
-       mode==="short-series"?"قصة قصيرة متعددة المشاهد":"فيديو سريع عمودي أو أفقي"}</span>
-     </button>)}
-   </div>
-   {productionMode==="episodes"&&<label className={s.field}>رقم الحلقة
-    <input type="number" value={episode} min={1} max={999}
-     disabled={playing} onChange={e=>setEpisode(Math.max(1,Math.min(999,Number(e.target.value)||1)))}/>
-   </label>}
-   <div className={s.notice}>الأوضاع تنظّم المونتاج والمشاهد. تحويل الصور إلى ممثلين متحركين يتكلمون
-    يحتاج محرك فيديو توليدي خارجي غير مفعّل في هذه النسخة؛ ولن ندّعي أنه تم.</div>
-  </section>
-  <section className={s.panel} style={{marginBottom:16}}>
-   <h2>1. مكتبة الشخصيات الثابتة</h2>
-   <p>حمّل صورة مرجعية واحدة لكل شخصية. ستظهر الصورة نفسها في جميع المشاهد المرتبطة بها.
-    البحث على الإنترنت مخصص للخلفيات فقط، وليس لجلب صور وجوه مختلفة لنفس الشخصية.</p>
-   {cast.map((character)=><div key={character.id} className={s.castCard}>
-    <div className={s.clipTop}><strong>{character.name||"شخصية بلا اسم"}</strong>
-     <button type="button" className={s.danger} disabled={playing||cast.length===1}
-      onClick={()=>{setCast(old=>old.filter(c=>c.id!==character.id));
-       photos.current.delete(character.id);
-       setCasting(old=>Object.fromEntries(Object.entries(old).map(([k,v])=>
-        [k,v===character.id?"":v])));
-      }}><Trash2 size={14}/> حذف</button>
+  <header className={s.topbar}>
+   <div className={s.brand}>
+    <div className={s.brandMark}><Film size={22}/></div>
+    <div>
+     <span className={s.eyebrow}>AGENT / CREATOR STUDIO</span>
+     <h1>صناعة فيديو من السيناريو إلى المشاهد</h1>
     </div>
-    <div className={s.clipForm}>
-     <label className={s.field}>اسم الشخصية
-      <input value={character.name} maxLength={80} disabled={playing}
-       onChange={e=>editCast(character.id,{name:e.target.value})}/></label>
-     <label className={s.field}>نوع الصوت المطلوب (وصف)
-      <input value={character.voiceLabel} maxLength={90} disabled={playing}
-       onChange={e=>editCast(character.id,{voiceLabel:e.target.value})}/></label>
-     <label className={s.field+" "+s.wide}>الملامح الثابتة
-      <textarea value={character.appearance} maxLength={300} disabled={playing}
-       onChange={e=>editCast(character.id,{appearance:e.target.value})}/></label>
-     <label className={s.field+" "+s.wide}>الملابس الثابتة
-      <input value={character.wardrobe} maxLength={200} disabled={playing}
-       onChange={e=>editCast(character.id,{wardrobe:e.target.value})}/></label>
-     <label className={s.field+" "+s.wide}>صورة الشخصية الثابتة
-      <input type="file" accept="image/png,image/jpeg,image/webp"
-       disabled={playing} onChange={e=>uploadCastPhoto(character.id,e)}/>
-      <span className={s.small}>{photos.current.has(character.id)?"تم تثبيت الصورة محليًا للمشاهد المرتبطة":"لم ترفع صورة مرجعية بعد"}</span>
-     </label>
-    </div>
-   </div>)}
-   <div className={s.buttonRow}>
-    <button type="button" className={s.secondary} disabled={playing||cast.length>=15}
-     onClick={addCastMember}><Plus size={14}/> إضافة شخصية</button>
-    <button type="button" className={s.secondary} disabled={playing}
-     onClick={()=>downloadText(castBibleAsJson(cast),"agent-character-bible.json","application/json")}>
-     <Save size={14}/> حفظ الشخصيات</button>
-    <button type="button" className={s.secondary} disabled={playing}
-     onClick={()=>castFileRef.current?.click()}><RefreshCw size={14}/> استعادة الشخصيات</button>
-    <input ref={castFileRef} type="file" hidden accept=".json,application/json"
-     onChange={e=>void importCast(e)}/>
    </div>
-   {castNotice&&<div className={s.success} role="status">{castNotice}</div>}
-   <div className={s.notice}>صور الشخصيات لا تخرج من متصفحك ولا تُحفظ في ملف JSON.
-    بعد فتح مشروع جديد أعد رفعها. يتم تثبيت الصورة نفسها، وليس توليد حركة وجه أو تمثيل شفاه.</div>
-  </section>
-  <section className={s.panel} style={{marginBottom:16}}>
-   <h2>2. اكتب القصة واختر عدد المشاهد</h2>
-   <p>AGENT يقسم القصة إلى المشاهد المحددة، ويبحث عن صور مناسبة من Wikimedia Commons المرخصة.
-    التنفيذ هنا لتركيب الفيديو من صور حقيقية على الإنترنت، وليس توليد ممثلين أو فيديو سينمائي بالذكاء الاصطناعي.</p>
-   <div className={s.clipForm}>
-    <label className={s.field}>اسم الفيديو
-     <input value={name} maxLength={100} disabled={playing||imagesBusy}
-      onChange={e=>setName(e.target.value)}/></label>
-    <label className={s.field}>عدد المشاهد حسب نوع الإنتاج
-     <input type="number" min={currentMode.minCount} max={currentMode.maxCount} value={requestedCount} disabled={playing||imagesBusy}
-      onChange={e=>setRequestedCount(Math.max(currentMode.minCount,Math.min(currentMode.maxCount,Number(e.target.value)||1)))}/></label>
-    <label className={s.field}>مدة الفيديو المستهدفة بالثواني
-     <input type="number" min={12} max={720} step={15} value={requestedSeconds}
-      disabled={playing||imagesBusy} onChange={e=>setRequestedSeconds(
-       Math.max(12,Math.min(720,Number(e.target.value)||180)))}/></label>
-    <label className={s.field+" "+s.wide}>القصة / السيناريو
-     <textarea rows={6} maxLength={9000} value={script}
-      disabled={playing||imagesBusy} onChange={e=>setScript(e.target.value)}
-      placeholder="اكتب قصة مصريّة أو وصف أحداث الفيديو..."/></label>
-   </div>
-   <div className={s.buttonRow}>
-    <button type="button" className={s.button} disabled={playing||imagesBusy}
-     onClick={()=>void generateFromStory()}>
-     <Film size={15}/> {imagesBusy?"جارٍ البحث عن الصور...":"إنشاء المشاهد وإحضار الصور تلقائيًا"}</button>
+   <div className={s.topActions}>
+    <span className={s.freePill}>مجاني · يعمل في المتصفح</span>
     <button type="button" className={s.secondary} disabled={playing||imagesBusy}
      onClick={saveProject}><Save size={15}/> حفظ المشروع</button>
-    <button type="button" className={s.secondary} disabled={playing||imagesBusy}
-     onClick={()=>fileImportRef.current?.click()}><RefreshCw size={15}/> استعادة مشروع</button>
-    <input ref={fileImportRef} type="file" accept=".json,application/json"
-     onChange={e=>void importProject(e)} hidden/>
+    <button type="button" className={s.iconButton} disabled={playing||imagesBusy}
+     onClick={()=>fileImportRef.current?.click()} title="استعادة مشروع">
+     <RefreshCw size={17}/><span className={s.mobileHide}>استعادة</span>
+    </button>
+    <input ref={fileImportRef} type="file" hidden accept=".json,application/json"
+     onChange={e=>void importProject(e)}/>
    </div>
-   {imageNotice&&<div className={s.success} role="status">{imageNotice}</div>}
-  </section>
-  <section className={s.panel} style={{marginBottom:16}}>
-   <h2>محرك إنشاء صور المشاهد</h2>
-   <p>أنشئ صورًا أصلية برسوم سينمائية داخل المتصفح مجانًا، أو اطلب صورة AI حقيقية من OpenAI/Gemini بمفتاحك وموافقتك لكل صورة. الصور التي تُنشئها تُضاف للمونتاج فورًا.</p>
-   <div className={s.clipForm}>
-    <label className={s.field}>المحرك
-     <select value={imageEngine} disabled={playing||imageEngineBusy!==null}
-      onChange={e=>{setImageEngine(e.target.value as "local"|"ai");setError("");setImageCostConsent(false);}}>
-      <option value="local">إنشاء رسم مشهد محلي مجاني · بدون AI</option>
-      <option value="ai">إنشاء صورة AI عبر مفتاحك الخاص · قد يكلّف</option>
-     </select>
-    </label>
-    {imageEngine==="local"?<label className={s.field}>الطابع البصري
-     <select value={imageStyle} onChange={e=>setImageStyle(e.target.value as ImageSceneStyle)}
-      disabled={playing||imageEngineBusy!==null}>
-      <option value="cinematic">سينمائي</option><option value="comic">رسوم قصصية</option><option value="noir">ليلي درامي</option>
-     </select>
-    </label>:<>
-     <label className={s.field}>مزود الذكاء الاصطناعي
-      <select value={imageAIProvider} disabled={playing||imageEngineBusy!==null}
-       onChange={e=>{setImageAIProvider(e.target.value as "openai"|"gemini");setImageCostConsent(false);}}>
-       <option value="openai">OpenAI · gpt-image-1</option>
-       <option value="gemini">Gemini · gemini-2.5-flash-image</option>
-      </select>
-     </label>
-     <label className={s.field+" "+s.wide}>مفتاح API الخاص بك (لا يُحفظ في قاعدة بيانات)
-      <input type="password" autoComplete="off" value={imageApiKey}
-       disabled={playing||imageEngineBusy!==null}
-       placeholder="أدخل المفتاح لمرة واحدة في هذه الجلسة"
-       onChange={e=>{setImageApiKey(e.target.value);setImageCostConsent(false);}}/>
-     </label>
-     <label className={s.field+" "+s.wide}>
-      <span><input type="checkbox" checked={imageCostConsent}
-       onChange={e=>setImageCostConsent(e.target.checked)}
-       disabled={playing||imageEngineBusy!==null}/>
-       أوافق على إرسال وصف المشهد للمزوّد وعلى تكلفة توليد صورة واحدة، وأعرف أن السعر يختلف حسب حسابي.</span>
-     </label>
-     <div className={s.notice}>لا تُرسل الصور المرجعية في وضع AI الحالي؛ يُرسل وصف الشخصية فقط، فلا يمكن ضمان ثبات الوجه. المفتاح يُرسل للخادم لهذا الطلب فقط ولا يُخزن. لا يوجد توليد جماعي مدفوع ولا إعادة محاولات تلقائية.</div>
-    </>}
+  </header>
+  <div className={s.projectStrip}>
+   <div className={s.projectName}><span className={s.muted}>المشروع</span>
+    <strong>{name||"بدون عنوان"}</strong>
    </div>
-   <div className={s.buttonRow}>
-    {imageEngine==="local"&&<button type="button" className={s.button}
-     onClick={()=>void createAllLocalImages()}
-     disabled={playing||imagesBusy||imageEngineBusy!==null}>
-     <ImagePlus size={15}/> إنشاء صور جميع المشاهد مجانًا
-    </button>}
-   </div>
-   {imageEngineNotice&&<div className={s.success} role="status">{imageEngineNotice}</div>}
-  </section>
-  <div className={s.layout}>
-   <div className={s.panel}>
-    <h2>3. حدّد الشخصيات وعدّل المشاهد والصوت</h2>
-    <p>الصور المُحضّرة تظهر تلقائيًا، ويمكنك استبدال أي صورة أو تسجيل التعليق الصوتي.</p>
-    <div className={s.segment} role="group" aria-label="أبعاد الفيديو">
-     <button type="button" className={ratio==="9:16"?s.active:""} disabled={playing}
-      onClick={()=>setRatio("9:16")}>9:16 · ريلز وشورتس</button>
-     <button type="button" className={ratio==="16:9"?s.active:""} disabled={playing}
-      onClick={()=>setRatio("16:9")}>16:9 · يوتيوب</button>
-    </div>
-    <label className={s.field}>ملف تعليق صوتي أو موسيقى (اختياري)
-     <input type="file" accept="audio/*" disabled={playing} onChange={onAudio}/>
-     <span className={s.small}>{audioName||"لو رفعت صوت، هيتدمج مع الفيديو عند التصدير؛ غير كده الفيديو صامت."}</span>
-    </label>
-    <label className={s.field}>
-     <span><input type="checkbox" checked={musicEnabled} disabled={playing}
-      onChange={e=>setMusicEnabled(e.target.checked)}/> موسيقى خلفية أصلية مجانية داخل الفيديو</span>
-    </label>
-    <div className={s.buttonRow} style={{marginBottom:16}}>
-     <button type="button" className={recordingVoice?s.danger:s.secondary}
-      disabled={playing||(recordingVoice&&recordingSceneId!==null)} onClick={()=>void recordVoice()}>
-      <Mic size={14}/> {recordingVoice&&recordingSceneId===null?"إيقاف تسجيل صوتي":"تسجيل تعليق بصوتك"}</button>
-     <button type="button" className={s.secondary} onClick={addScene} disabled={playing||scenes.length>=MAX_SCENES}>
-      <Plus size={14}/> إضافة مشهد</button>
-     <button type="button" className={s.secondary} onClick={downloadScript}><FileText size={14}/> السيناريو</button>
-     <button type="button" className={s.secondary} onClick={downloadSubtitles}><FileText size={14}/> ترجمة SRT</button>
-     <button type="button" className={s.secondary} onClick={downloadCredits}><FileText size={14}/> حقوق الصور</button>
-     <button type="button" className={s.secondary} onClick={downloadShotPlan}><FileText size={14}/> خطة توليد صور وحركة متسقة JSON</button>
-     <button type="button" className={s.secondary} onClick={downloadCueSheet}><FileText size={14}/> توقيت حوارات الشخصيات JSON</button>
-    </div>
-    {scenes.map((clip,index)=><div key={clip.id} className={s.clip}>
-     <div className={s.clipTop}><strong>المشهد {index+1} · {clip.duration} ثوانٍ</strong>
-      <button type="button" className={s.danger} disabled={playing||scenes.length<=1}
-       aria-label={"حذف المشهد "+(index+1)}
-       onClick={()=>{images.current.delete(clip.id);shotVideos.current.get(clip.id)?.pause();
-        shotVideos.current.delete(clip.id);sceneVoices.current.delete(clip.id);
-        setShotVideoNames(old=>{const next={...old};delete next[clip.id];return next;});
-        setSceneVoiceNames(old=>{const next={...old};delete next[clip.id];return next;});
-        setScenes(old=>old.filter(c=>c.id!==clip.id));}}>
-       <Trash2 size={14}/></button>
-     </div>
-     <div className={s.clipForm}>
-      <label className={s.field+" "+s.wide}>الشخصية التي تظهر في هذا المشهد
-       <select value={casting[clip.id]||""} disabled={playing}
-        onChange={e=>{setCasting(old=>({...old,[clip.id]:e.target.value}));setDownloadUrl(null);}}>
-        <option value="">بدون شخصية · خلفية فقط</option>
-        {cast.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}
-       </select>
-      </label>
-      <label className={s.field}>العنوان
-       <input maxLength={80} value={clip.title} disabled={playing}
-        onChange={e=>update(clip.id,{title:e.target.value})}/></label>
-      <label className={s.field}>المدة (3–25 ثانية)
-       <input type="number" min={3} max={25} value={clip.duration} disabled={playing}
-        onChange={e=>update(clip.id,{duration:boundedDuration(Number(e.target.value))})}/></label>
-      <label className={s.field+" "+s.wide}>النص الظاهر في الفيديو
-       <textarea maxLength={500} value={clip.subtitle} disabled={playing}
-        onChange={e=>update(clip.id,{subtitle:e.target.value})}/></label>
-      <label className={s.field}>الشخصية / الوصف
-       <input maxLength={70} value={clip.speaker} disabled={playing}
-        onChange={e=>update(clip.id,{speaker:e.target.value})}/></label>
-      <div className={s.wide}>
-       <button type="button" className={s.secondary} disabled={playing}
-        onClick={()=>previewArabicVoice(clip.subtitle)}><Mic size={14}/> سماع النص (معاينة فقط)</button>
-      </div>
-      <label className={s.field+" "+s.wide}>لقطة فيديو متحركة حقيقية للمشهد (MP4 / WebM)
-       <input type="file" accept="video/mp4,video/webm" disabled={playing}
-        onChange={e=>onShotVideo(clip.id,e)}/>
-       <span className={s.small}>{shotVideoNames[clip.id]||"لا توجد لقطة حركة؛ سيُستخدم رسم الخلفية والشخصية الثابتة."}</span>
-      </label>
-      <label className={s.field+" "+s.wide}>حوار عربي مسجّل للشخصية في هذا المشهد
-       <input type="file" accept="audio/*" disabled={playing}
-        onChange={e=>onSceneVoice(clip.id,e)}/>
-       <span className={s.small}>{sceneVoiceNames[clip.id]||"لم يرفع حوار لهذا المشهد. صوت المتصفح معاينة فقط."}</span>
-      </label>
-      <div className={s.wide}>
-       <button type="button" className={recordingSceneId===clip.id?s.danger:s.secondary}
-        disabled={playing||(recordingVoice&&recordingSceneId!==clip.id)}
-        onClick={()=>void recordVoice(clip.id)}>
-        <Mic size={14}/> {recordingSceneId===clip.id?"إيقاف تسجيل حوار المشهد":"تسجيل حوار المشهد من الميكروفون"}
-       </button>
-      </div>
-      <label className={s.field+" "+s.wide}>وصف اختياري للصورة التي تريد إنشاءها
-       <textarea rows={2} maxLength={400} value={imageDescriptions[clip.id]||""}
-        disabled={playing||imageEngineBusy!==null}
-        placeholder="مثال: مريم في محطة قطار ليلًا، إضاءة سينمائية"
-        onChange={e=>setImageDescriptions(old=>({...old,[clip.id]:e.target.value}))}/>
-      </label>
-      <div className={s.wide}>
-       <button type="button" className={s.secondary}
-        disabled={playing||imagesBusy||imageEngineBusy!==null}
-        onClick={()=>void createSceneImage(clip)}>
-        <ImagePlus size={14}/> {imageEngineBusy===clip.id?"جارٍ إنشاء الصورة...":"إنشاء صورة للمشهد ("+(imageEngine==="local"?"مجاني":"AI")+")"}
-       </button>
-       {createdImageNames[clip.id]&&<button type="button" className={s.secondary}
-        onClick={()=>downloadCreatedImage(clip)}><Download size={14}/> تحميل PNG</button>}
-      </div>
-      <label className={s.field}>لون المشهد
-       <input type="color" value={clip.color} disabled={playing}
-        onChange={e=>update(clip.id,{color:e.target.value})}/></label>
-      <label className={s.field+" "+s.wide}>كلمات بحث الصورة عبر الإنترنت
-       <input maxLength={100} value={clip.imageQuery||""} disabled={playing||imagesBusy}
-        onChange={e=>update(clip.id,{imageQuery:e.target.value})}/></label>
-      <div className={s.wide}>
-       <button type="button" className={s.secondary} disabled={playing||imagesBusy}
-        onClick={()=>void replaceImage(clip)}><ImagePlus size={14}/> جلب صورة مناسبة</button>
-       {clip.imageSource&&<a href={clip.imageSource} target="_blank"
-        rel="noopener noreferrer" className={s.sourceLink}>
-        مصدر الصورة · {clip.imageLicense||"ترخيص مفتوح"}</a>}
-      </div>
-      <label className={s.field+" "+s.wide}><span><ImagePlus size={13}/> أو ارفع صورة من جهازك</span>
-       <input type="file" accept="image/png,image/jpeg,image/webp" disabled={playing}
-        onChange={e=>onImage(clip.id,e)}/>
-       {clip.imageUrl&&<span className={s.small}>تم اختيار صورة للمشهد (الصور المحلية لا تُخزّن على الخادم)</span>}
-      </label>
-     </div>
-    </div>)}
-   </div>
-   <div className={s.panel}>
-    <h2><Film size={16}/> 4. معاينة وتصدير الفيديو النهائي</h2>
-    <p>{scenes.length} مشاهد · المدة الإجمالية: {total} ثانية · {ratio==="9:16"?"عمودي":"أفقي"}</p>
-    <div className={s.notice}>مقاطع حركة فعلية: {scenes.filter(clip=>shotVideoNames[clip.id]).length} / {scenes.length}
-     {" · "}حوارات عربية مضافة: {scenes.filter(clip=>sceneVoiceNames[clip.id]).length} / {scenes.length}.
-     المشاهد التي لا تتضمن مقطع حركة ستُصدّر كخلفية متحركة وصورة ثابتة فقط.
-     تسجيل الحوار من الميكروفون يعمل محليًا مع كل مشهد ثم يُدمج عند التصدير.</div>
-    <div className={s.preview}>
-     <div className={s.frame}>
-      <canvas ref={canvasRef} width={540} height={960}
-       aria-label="معاينة الفيديو قبل التصدير"/>
-     </div>
-     <input className={s.progress} aria-label="تقدم تشغيل الفيديو" type="range"
-      min={0} max={Math.max(1,total)} step={.1} value={Math.min(progress,total)}
-      disabled={playing} onChange={e=>{const time=Number(e.target.value);setProgress(time);
-       syncShotVideos(time,false);draw(time);}}/>
-     <span className={s.previewMeta}>{Math.round(progress)} / {total} ثانية</span>
-     <div className={s.buttonRow}>
-      <button type="button" className={s.secondary} onClick={()=>playing?stop():void start(false)}>
-       {playing?<Pause size={16}/>:<Play size={16}/>}
-       {playing?"إيقاف":"تشغيل المعاينة"}</button>
-      <button type="button" className={s.button} disabled={playing}
-       onClick={()=>void start(true)}><Video size={16}/>
-       {recording?"جارٍ التسجيل...":"تصدير الفيديو"}</button>
-     </div>
-    </div>
-    {downloadUrl&&<div className={s.success}>
-     تم تجهيز الفيديو على جهازك. حمّله قبل إغلاق الصفحة.
-     <div className={s.buttonRow} style={{marginTop:9}}>
-      <a className={s.button} href={downloadUrl}
-       download={"agent-"+(productionMode==="episodes"?"episode-"+episode+"-":"video-")+(downloadType.includes("mp4")?"video.mp4":"video.webm")}>
-       <Download size={16}/> تحميل الفيديو</a>
-     </div>
-    </div>}
-    {error&&<div className={s.error} role="alert">{error}</div>}
-    <div className={s.notice}>تحتاج عملية التصدير نفس مدة الفيديو تقريبًا؛ مثال: فيديو 3 دقائق يستغرق حوالي 3 دقائق.
-     الصوت الناتج موسيقى أصلية وحوارات المشاهد التي رفعتها (إن وجدت)، ويمكن إضافة تعليق صوتي مسجل أو مرفوع. النص وحده لا يتحول إلى كلام مسموع تلقائيًا.
-     الصوت الأصلي داخل ملفات الفيديو المرفوعة لا يُمزج تلقائيًا؛ ارفع صوت الحوار كملف منفصل. تأكد من جودة الحركة وتزامن الصوت قبل النشر.
-     الصور التي ينشئها محرك الرسوم المحلي أصلية داخل المتصفح، أما صور Wikimedia فتحتاج مراجعة نسب الحقوق، والصور التوليدية تحتاج مراجعة شروط المزود قبل النشر.
-     التصدير يستخدم MediaRecorder ودعم الصيغ يختلف حسب المتصفح.
-     Chrome وEdge على الكمبيوتر أفضل للتجربة. جودة المخرجات تعتمد على الصور والصوت
-     المرفوعين. لا يوجد توليد فيديو AI مدفوع أو نشر تلقائي.</div>
+   <div className={s.projectMetrics}>
+    <span><Film size={14}/>{scenes.length} مشاهد</span>
+    <span><Play size={14}/>{fmt(total)} دقيقة</span>
+    <span>{ratio==="9:16"?"عمودي 9:16":"أفقي 16:9"}</span>
    </div>
   </div>
-  <p className={s.footer}>AGENT Preview · لقطات الحركة والصوت والصور المرفوعة محلية · خطة التوليد جاهزة للتسليم لمزوّد معتمد لكن لا توجد خدمة AI فيديو أو TTS مدفوعة مفعّلة</p>
+  <nav className={s.steps} aria-label="مراحل صناعة الفيديو">
+   {([
+    {id:"story",title:"القصة",desc:"ابدأ بالسيناريو"},
+    {id:"design",title:"التصميم",desc:"الصور والشخصيات"},
+    {id:"editor",title:"المونتاج",desc:"عدّل كل مشهد"},
+    {id:"export",title:"التصدير",desc:"احفظ الفيديو"}
+   ] as const).map((item,i)=>
+    <button type="button" key={item.id} data-step={item.id}
+     aria-current={step===item.id?"step":undefined}
+     className={s.step+(step===item.id?" "+s.stepActive:"")}
+     onClick={()=>setStep(item.id)}>
+     <span className={s.stepNumber}>{i+1}</span>
+     <span><strong>{item.title}</strong><small>{item.desc}</small></span>
+    </button>)}
+  </nav>
+
+  {error&&<div className={s.error} role="alert">{error}</div>}
+  <div className={s.editorShell}>
+   <main className={s.workArea}>
+    {step==="story"&&<section className={s.panel} aria-label="كتابة القصة">
+     <div className={s.panelHead}>
+      <span className={s.sectionKicker}>01 / CREATE</span>
+      <h2>ابدأ بقصة. وسنجهّز المشاهد.</h2>
+      <p>اكتب فكرتك ثم اختر المدة وعدد المشاهد. سننشئ لوحة بصرية مجانية لكل مشهد تلقائيًا، ويمكن تعديل كل شيء بعد ذلك.</p>
+     </div>
+     <h3 className={s.subheading}>نوع الفيديو</h3>
+     <div className={s.modeGrid}>
+      {(Object.keys(AGENT_VIDEO_MODES) as AgentVideoMode[]).map(mode=>
+       <button key={mode} type="button"
+        className={productionMode===mode?s.modeActive:s.modeButton}
+        disabled={playing||imagesBusy} onClick={()=>chooseMode(mode)}>
+        <strong>{AGENT_VIDEO_MODES[mode].name}</strong>
+        <span>{mode==="episodes"?"مشاهد لحلقة كاملة":
+         mode==="short-series"?"سرد متصل بعدة مشاهد":"قصير وسريع للسوشيال"}</span>
+       </button>)}
+     </div>
+     <div className={s.formGrid}>
+      <label className={s.field+" "+s.wide}>اسم المشروع
+       <input value={name} maxLength={100} disabled={playing||imagesBusy}
+        onChange={e=>setName(e.target.value)} placeholder="اسم الفيديو"/>
+      </label>
+      {productionMode==="episodes"&&<label className={s.field}>رقم الحلقة
+       <input type="number" value={episode} min={1} max={999} disabled={playing}
+        onChange={e=>setEpisode(Math.max(1,Math.min(999,Number(e.target.value)||1)))}/>
+      </label>}
+      <label className={s.field}>عدد المشاهد
+       <input type="number" min={currentMode.minCount} max={currentMode.maxCount}
+        value={requestedCount} disabled={playing||imagesBusy}
+        onChange={e=>setRequestedCount(Math.max(currentMode.minCount,
+         Math.min(currentMode.maxCount,Number(e.target.value)||1)))}/>
+      </label>
+      <label className={s.field}>المدة المستهدفة (ثانية)
+       <input type="number" min={12} max={720} step={15} value={requestedSeconds}
+        disabled={playing||imagesBusy} onChange={e=>setRequestedSeconds(
+         Math.max(12,Math.min(720,Number(e.target.value)||180)))}/>
+      </label>
+      <label className={s.field+" "+s.wide}>القصة أو السيناريو
+       <textarea rows={8} maxLength={9000} value={script} disabled={playing||imagesBusy}
+        onChange={e=>setScript(e.target.value)}
+        placeholder="في أحد شوارع القاهرة، تبدأ حكاية..."/>
+       <span className={s.small}>{script.length} / 9000 حرف</span>
+      </label>
+     </div>
+     <div className={s.actionBar}>
+      <button type="button" className={s.button} disabled={playing||imagesBusy}
+       onClick={()=>void generateFromStory()}><ImagePlus size={17}/>
+       {imagesBusy?"نجهّز المشاهد والصور...":"إنشاء المشاهد والصور مجانًا"}</button>
+      <span className={s.small}>لا تحتاج مفتاح API · ويمكنك التعديل بعدها</span>
+     </div>
+     {imageNotice&&<div className={s.success} role="status">{imageNotice}</div>}
+     <div className={s.hint}><span>الخطوة التالية</span>
+      <button type="button" className={s.textButton} onClick={()=>setStep("design")}>
+       انتقل للتصميم <span aria-hidden="true">←</span>
+      </button>
+     </div>
+    </section>}
+
+    {step==="design"&&<section className={s.panel} aria-label="تصميم المشاهد">
+     <div className={s.panelHead}>
+      <span className={s.sectionKicker}>02 / VISUALS</span>
+      <h2>اختر شكل الفيديو</h2>
+      <p>لوحات بصرية مجانية، تتولد محليًا من وصف كل مشهد. صور شخصياتك لا تغادر المتصفح.</p>
+     </div>
+     <h3 className={s.subheading}>أسلوب الصور</h3>
+     <div className={s.styleGrid}>
+      {([{id:"cinematic",label:"سينمائي",description:"ألوان وإضاءة درامية",tone:"cine"},
+         {id:"comic",label:"رسوم قصصية",description:"مظهر رسومي نابض",tone:"comic"},
+         {id:"noir",label:"ليلي",description:"ظلال عميقة وهدوء",tone:"noir"}] as const).map(style=>
+       <button type="button" key={style.id}
+        className={s.styleTile+(imageStyle===style.id?" "+s.styleSelected:"")}
+        aria-pressed={imageStyle===style.id}
+        disabled={playing||imagesBusy}
+        onClick={()=>{setImageStyle(style.id);setImageEngine("local");}}>
+        <span className={s.styleSwatch+" "+s[style.tone]} aria-hidden="true"></span>
+        <strong>{style.label}</strong><small>{style.description}</small>
+       </button>)}
+     </div>
+     <div className={s.actionBar}>
+      <button type="button" className={s.button}
+       disabled={playing||imagesBusy||imageEngineBusy!==null}
+       onClick={()=>void createAllLocalImages()}>
+       <ImagePlus size={17}/>{imagesBusy?"إنشاء الصور...":"إنشاء صور جميع المشاهد مجانًا"}
+      </button>
+      <span className={s.small}>يتم إدراج الصور في المونتاج مباشرة</span>
+     </div>
+     {(imageEngineNotice||imageNotice)&&<div className={s.success} role="status">
+      {imageEngineNotice||imageNotice}</div>}
+
+     <details className={s.details}>
+      <summary><span>الشخصيات وصورها المرجعية</span><span className={s.summaryHint}>{cast.length} شخصيات · اختياري</span></summary>
+      <div className={s.detailsBody}>
+       <p className={s.small}>ارفع صورة لكل شخصية لتظهر الصورة نفسها في جميع المشاهد المرتبطة بها. لن يتم إرسالها لخادم خارجي.</p>
+       {cast.map(character=><div className={s.castCard} key={character.id}>
+        <div className={s.clipTop}><strong>{character.name||"شخصية"}</strong>
+         <button type="button" className={s.danger} disabled={playing||cast.length===1}
+          onClick={()=>{setCast(old=>old.filter(c=>c.id!==character.id));
+           photos.current.delete(character.id);
+           setCasting(old=>Object.fromEntries(Object.entries(old).map(([k,v])=>
+            [k,v===character.id?"":v])));}}>
+          <Trash2 size={14}/> حذف</button>
+        </div>
+        <div className={s.formGrid}>
+         <label className={s.field}>الاسم<input value={character.name} maxLength={80}
+          disabled={playing} onChange={e=>editCast(character.id,{name:e.target.value})}/></label>
+         <label className={s.field}>نوع الصوت<input value={character.voiceLabel} maxLength={90}
+          disabled={playing} onChange={e=>editCast(character.id,{voiceLabel:e.target.value})}/></label>
+         <label className={s.field+" "+s.wide}>ملامح الشخصية<textarea value={character.appearance}
+          maxLength={300} disabled={playing}
+          onChange={e=>editCast(character.id,{appearance:e.target.value})}/></label>
+         <label className={s.field+" "+s.wide}>الملابس<input value={character.wardrobe}
+          maxLength={200} disabled={playing}
+          onChange={e=>editCast(character.id,{wardrobe:e.target.value})}/></label>
+         <label className={s.field+" "+s.wide}>الصورة المرجعية
+          <input type="file" accept="image/png,image/jpeg,image/webp"
+           disabled={playing} onChange={e=>uploadCastPhoto(character.id,e)}/>
+          <span className={s.small}>{photos.current.has(character.id)?"صورة مثبتة":"لم تُرفع صورة بعد"}</span>
+         </label>
+        </div>
+       </div>)}
+       <div className={s.buttonRow}>
+        <button type="button" className={s.secondary} disabled={playing||cast.length>=15}
+         onClick={addCastMember}><Plus size={14}/> إضافة شخصية</button>
+        <button type="button" className={s.secondary} onClick={()=>downloadText(
+         castBibleAsJson(cast),"agent-character-bible.json","application/json")}>
+         <Save size={14}/> حفظ الشخصيات</button>
+        <button type="button" className={s.secondary}
+         onClick={()=>castFileRef.current?.click()}><RefreshCw size={14}/> استعادة الشخصيات</button>
+        <input ref={castFileRef} type="file" hidden accept=".json,application/json"
+         onChange={e=>void importCast(e)}/>
+       </div>
+       {castNotice&&<div className={s.success} role="status">{castNotice}</div>}
+      </div>
+     </details>
+     <details className={s.details}>
+      <summary><span>خيارات إنشاء الصور الخارجية (اختيارية وقد تكون مدفوعة)</span><span className={s.summaryHint}>ليست مطلوبة</span></summary>
+      <div className={s.detailsBody}>
+       <label className={s.field}>طريقة الإنشاء
+        <select value={imageEngine} disabled={playing||imageEngineBusy!==null}
+         onChange={e=>{setImageEngine(e.target.value as "local"|"ai");
+          setImageCostConsent(false);setError("");}}>
+         <option value="local">رسم محلي مجاني (الافتراضي)</option>
+         <option value="ai">إنشاء صورة AI عبر مفتاحك الخاص · قد يكلّف</option>
+        </select>
+       </label>
+       {imageEngine==="ai"&&<>
+        <label className={s.field}>مزود الصور
+         <select value={imageAIProvider} disabled={playing||imageEngineBusy!==null}
+          onChange={e=>{setImageAIProvider(e.target.value as "openai"|"gemini");setImageCostConsent(false);}}>
+          <option value="openai">OpenAI · gpt-image-1</option>
+          <option value="gemini">Gemini · gemini-2.5-flash-image</option>
+         </select>
+        </label>
+        <label className={s.field}>مفتاح API الخاص بك
+         <input type="password" autoComplete="off" value={imageApiKey}
+          disabled={playing||imageEngineBusy!==null}
+          placeholder="أدخل المفتاح لمرة واحدة في هذه الجلسة"
+          onChange={e=>{setImageApiKey(e.target.value);setImageCostConsent(false);}}/>
+        </label>
+        <label className={s.field}>
+         <span className={s.consentLine}><input type="checkbox"
+          checked={imageCostConsent} disabled={playing||imageEngineBusy!==null}
+          onChange={e=>setImageCostConsent(e.target.checked)}/>
+          أوافق على إرسال وصف المشهد للمزوّد وعلى تكلفة توليد صورة واحدة، وأعرف أن السعر يختلف حسب حسابي.</span>
+        </label>
+        <p className={s.small}>الوجه المرجعي لا يُرسل. لن تُفعّل أي خدمة مدفوعة تلقائيًا، ولا توجد إعادة محاولات آلية.</p>
+       </>}
+      </div>
+     </details>
+     <div className={s.hint}><span>هل الصور جاهزة؟</span>
+      <button type="button" className={s.textButton} onClick={()=>setStep("editor")}>
+       افتح المونتاج <span aria-hidden="true">←</span>
+      </button>
+     </div>
+    </section>}
+
+    {step==="editor"&&<section className={s.panel} aria-label="مونتاج المشاهد">
+     <div className={s.panelHead}>
+      <span className={s.sectionKicker}>03 / EDITOR</span>
+      <h2>المشهد {scenes.findIndex(c=>c.id===selectedScene.id)+1} من {scenes.length}</h2>
+      <p>اختر مشهدًا من الشريط السفلي لتعديل النص أو الصورة أو الصوت. تظهر التغييرات في المعاينة.</p>
+     </div>
+     <div className={s.clip}>
+      <div className={s.clipTop}><strong>{selectedScene.title}</strong>
+       <div className={s.buttonRow}>
+        <button type="button" className={s.secondary}
+         disabled={playing||scenes.length>=MAX_SCENES}
+         onClick={addScene}>
+         <Plus size={14}/> مشهد جديد</button>
+        <button type="button" className={s.danger} aria-label={"حذف المشهد "+(scenes.findIndex(c=>c.id===selectedScene.id)+1)}
+         disabled={playing||scenes.length<=1}
+         onClick={()=>{const id=selectedScene.id;images.current.delete(id);
+          shotVideos.current.get(id)?.pause();shotVideos.current.delete(id);
+          sceneVoices.current.delete(id);
+          setShotVideoNames(old=>{const n={...old};delete n[id];return n;});
+          setSceneVoiceNames(old=>{const n={...old};delete n[id];return n;});
+          setSelectedSceneId(scenes.find(c=>c.id!==id)?.id||1);
+          setScenes(old=>old.filter(c=>c.id!==id));setDownloadUrl(null);}}>
+         <Trash2 size={14}/> حذف</button>
+       </div>
+      </div>
+      <div className={s.formGrid}>
+       <label className={s.field}>عنوان المشهد
+        <input value={selectedScene.title} maxLength={80} disabled={playing}
+         onChange={e=>update(selectedScene.id,{title:e.target.value})}/></label>
+       <label className={s.field}>المدة (3–25 ثانية)
+        <input type="number" min={3} max={25} value={selectedScene.duration} disabled={playing}
+         onChange={e=>update(selectedScene.id,{duration:boundedDuration(Number(e.target.value))})}/>
+       </label>
+       <label className={s.field+" "+s.wide}>النص الظاهر في الفيديو
+        <textarea rows={3} maxLength={500} value={selectedScene.subtitle} disabled={playing}
+         onChange={e=>update(selectedScene.id,{subtitle:e.target.value})}/>
+       </label>
+       <label className={s.field}>الشخصية المرتبطة
+        <select value={casting[selectedScene.id]||""} disabled={playing}
+         onChange={e=>{setCasting(old=>({...old,[selectedScene.id]:e.target.value}));setDownloadUrl(null);}}>
+         <option value="">بدون شخصية</option>
+         {cast.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}
+        </select>
+       </label>
+       <label className={s.field}>اسم المتحدث
+        <input value={selectedScene.speaker} maxLength={70} disabled={playing}
+         onChange={e=>update(selectedScene.id,{speaker:e.target.value})}/>
+       </label>
+       <label className={s.field+" "+s.wide}>وصف الصورة
+        <textarea rows={2} value={imageDescriptions[selectedScene.id]||""}
+         maxLength={400} disabled={playing||imageEngineBusy!==null}
+         onChange={e=>setImageDescriptions(old=>({...old,[selectedScene.id]:e.target.value}))}
+         placeholder="مثال: محطة قطار ليلية، أضواء دافئة..."/>
+       </label>
+      </div>
+      <div className={s.assetStrip}>
+       <div className={s.assetGroup}>
+        <span className={s.muted}>الصورة</span>
+        <div className={s.buttonRow}>
+         <button type="button" className={s.button}
+          disabled={playing||imagesBusy||imageEngineBusy!==null}
+          onClick={()=>void createSceneImage(selectedScene)}>
+          <ImagePlus size={15}/>
+          {imageEngineBusy===selectedScene.id?"جارٍ إنشاء الصورة...":
+           "إنشاء صورة للمشهد ("+(imageEngine==="local"?"مجاني":"AI")+")"}
+         </button>
+         {createdImageNames[selectedScene.id]&&<button type="button" className={s.secondary}
+          onClick={()=>downloadCreatedImage(selectedScene)}><Download size={14}/> تحميل PNG</button>}
+        </div>
+        <label className={s.fileLabel}>أو ارفع صورة
+         <input type="file" accept="image/png,image/jpeg,image/webp"
+          disabled={playing} onChange={e=>onImage(selectedScene.id,e)}/>
+        </label>
+       </div>
+       <div className={s.assetGroup}>
+        <span className={s.muted}>لقطة حركة</span>
+        <label className={s.fileLabel}>رفع MP4 / WebM
+         <input type="file" accept="video/mp4,video/webm" disabled={playing}
+          onChange={e=>onShotVideo(selectedScene.id,e)}/>
+        </label>
+        <span className={s.small}>{shotVideoNames[selectedScene.id]||"بدون لقطة حركة · ستُستخدم الصورة المتحركة بصريًا"}</span>
+       </div>
+       <div className={s.assetGroup}>
+        <span className={s.muted}>الحوار والصوت</span>
+        <div className={s.buttonRow}>
+         <button type="button" className={recordingSceneId===selectedScene.id?s.danger:s.secondary}
+          disabled={playing||(recordingVoice&&recordingSceneId!==selectedScene.id)}
+          onClick={()=>void recordVoice(selectedScene.id)}>
+          <Mic size={14}/>{recordingSceneId===selectedScene.id?"إيقاف تسجيل حوار المشهد":"تسجيل حوار المشهد من الميكروفون"}
+         </button>
+         <button type="button" className={s.secondary} disabled={playing}
+          onClick={()=>previewArabicVoice(selectedScene.subtitle)}>
+          <Play size={13}/> سماع النص (معاينة فقط)</button>
+        </div>
+        <label className={s.fileLabel}>أو ارفع ملف صوت
+         <input type="file" accept="audio/*" disabled={playing}
+          onChange={e=>onSceneVoice(selectedScene.id,e)}/>
+        </label>
+        <span className={s.small}>{sceneVoiceNames[selectedScene.id]||"لم يُسجل صوت بعد. المعاينة الآلية لا تدخل في التصدير."}</span>
+       </div>
+      </div>
+      <details className={s.details}>
+       <summary>خيارات المشهد المتقدمة</summary>
+       <div className={s.detailsBody}>
+        <div className={s.formGrid}>
+         <label className={s.field}>لون خلفية المشهد
+          <input type="color" value={selectedScene.color} disabled={playing}
+           onChange={e=>update(selectedScene.id,{color:e.target.value})}/>
+         </label>
+         <label className={s.field}>بحث صور مرخّصة
+          <input value={selectedScene.imageQuery||""} maxLength={100}
+           disabled={playing||imagesBusy}
+           onChange={e=>update(selectedScene.id,{imageQuery:e.target.value})}/>
+         </label>
+        </div>
+        <button type="button" className={s.secondary}
+         disabled={playing||imagesBusy} onClick={()=>void replaceImage(selectedScene)}>
+         <ImagePlus size={14}/> جلب صورة من Wikimedia</button>
+        {selectedScene.imageSource&&<a href={selectedScene.imageSource}
+         target="_blank" rel="noopener noreferrer" className={s.sourceLink}>
+         مصدر الصورة · {selectedScene.imageLicense||"راجع الترخيص"}</a>}
+       </div>
+      </details>
+     </div>
+     <div className={s.hint}><span>انتهيت من التعديل؟</span>
+      <button type="button" className={s.textButton} onClick={()=>setStep("export")}>
+       الانتقال للتصدير <span aria-hidden="true">←</span>
+      </button>
+     </div>
+    </section>}
+
+    {step==="export"&&<section className={s.panel} aria-label="إعدادات التصدير">
+     <div className={s.panelHead}>
+      <span className={s.sectionKicker}>04 / EXPORT</span>
+      <h2>فيديوك جاهز للتجميع</h2>
+      <p>اختر الأبعاد، أضف الموسيقى أو التعليق، ثم اضغط «تصدير الفيديو» في المعاينة. يعمل التصدير في متصفحك دون اشتراك.</p>
+     </div>
+     <div className={s.exportSummary}>
+      <div><strong>{scenes.length}</strong><span>مشاهد</span></div>
+      <div><strong>{fmt(total)}</strong><span>المدة</span></div>
+      <div><strong>{scenes.filter(c=>shotVideoNames[c.id]).length}</strong><span>مقاطع حركة</span></div>
+      <div><strong>{scenes.filter(c=>sceneVoiceNames[c.id]).length}</strong><span>حوارات</span></div>
+     </div>
+     <h3 className={s.subheading}>أبعاد الفيديو</h3>
+     <div className={s.segment} role="group" aria-label="أبعاد الفيديو">
+      <button type="button" className={ratio==="9:16"?s.active:""} disabled={playing}
+       onClick={()=>setRatio("9:16")}>9:16 · ريلز وشورتس</button>
+      <button type="button" className={ratio==="16:9"?s.active:""} disabled={playing}
+       onClick={()=>setRatio("16:9")}>16:9 · يوتيوب</button>
+     </div>
+     <div className={s.audioTools}>
+      <label className={s.field}>تعليق صوتي أو موسيقى من جهازك
+       <input type="file" accept="audio/*" disabled={playing} onChange={onAudio}/>
+       <span className={s.small}>{audioName||"لم تختر ملفًا — يمكنك إضافة تسجيل من الميكروفون"}</span>
+      </label>
+      <button type="button" className={recordingVoice?s.danger:s.secondary}
+       disabled={playing||(recordingVoice&&recordingSceneId!==null)}
+       onClick={()=>void recordVoice()}>
+       <Mic size={14}/>{recordingVoice&&recordingSceneId===null?"إيقاف تسجيل صوتي":"تسجيل تعليق بصوتك"}
+      </button>
+      <label className={s.field}><span className={s.consentLine}>
+       <input type="checkbox" checked={musicEnabled} disabled={playing}
+        onChange={e=>setMusicEnabled(e.target.checked)}/>
+       إضافة موسيقى خلفية أصلية مجانية</span></label>
+     </div>
+     <div className={s.notice}>يستغرق التصدير قرابة مدة الفيديو الفعلية. الفيديوهات المرفوعة لا يُدمج صوتها تلقائيًا، لذا استخدم ملفات الحوار أو التسجيلات المنفصلة. الناتج WebM أو MP4 حسب دعم متصفحك.</div>
+     <details className={s.details}>
+      <summary>ملفات المشروع والترجمة والإنتاج</summary>
+      <div className={s.detailsBody}>
+       <div className={s.buttonRow}>
+        <button type="button" className={s.secondary} onClick={downloadScript}>
+         <FileText size={14}/> السيناريو</button>
+        <button type="button" className={s.secondary} onClick={downloadSubtitles}>
+         <FileText size={14}/> ترجمة SRT</button>
+        <button type="button" className={s.secondary} onClick={downloadCredits}>
+         <FileText size={14}/> حقوق الصور</button>
+        <button type="button" className={s.secondary} onClick={downloadShotPlan}>
+         <FileText size={14}/> خطة صور وحركة JSON</button>
+        <button type="button" className={s.secondary} onClick={downloadCueSheet}>
+         <FileText size={14}/> توقيت الحوارات JSON</button>
+       </div>
+      </div>
+     </details>
+    </section>}
+   </main>
+
+   <aside className={s.playerRail} aria-label="معاينة الفيديو والتصدير">
+    <div className={s.playerHeader}>
+     <span className={s.playerLive}><span className={s.liveDot}/>معاينة الفيديو</span>
+     <span className={s.playerMeta}>{ratio} · {fmt(total)}</span>
+    </div>
+    <div className={s.preview}>
+     <div className={s.frame}>
+      <canvas ref={canvasRef} width={540} height={960} aria-label="معاينة الفيديو قبل التصدير"/>
+     </div>
+    </div>
+    <div className={s.seekRow}>
+     <span className={s.clock}>{fmt(progress)}</span>
+     <input className={s.progress} aria-label="تقدم تشغيل الفيديو" type="range"
+      min={0} max={Math.max(1,total)} step={.1} value={Math.min(progress,total)}
+      disabled={playing} onChange={e=>seekTo(Number(e.target.value))}/>
+     <span className={s.clock}>{fmt(total)}</span>
+    </div>
+    <div className={s.playerActions}>
+     <button type="button" className={s.secondary}
+      onClick={()=>playing?stop():void start(false)}>
+      {playing?<Pause size={16}/>:<Play size={16}/>}
+      {playing?"إيقاف":"تشغيل المعاينة"}
+     </button>
+     <button type="button" className={s.button} disabled={playing}
+      onClick={()=>{setStep("export");void start(true);}}>
+      <Video size={16}/>{recording?"جارٍ التسجيل...":"تصدير الفيديو"}
+     </button>
+    </div>
+    {downloadUrl&&<div className={s.success}>
+     تم إنشاء الفيديو بنجاح. يمكنك تنزيله الآن.
+     <a className={s.downloadButton} href={downloadUrl}
+      download={"agent-"+(productionMode==="episodes"?"episode-"+episode+"-":"video-")+
+       (downloadType.includes("mp4")?"video.mp4":"video.webm")}>
+      <Download size={16}/> تحميل الفيديو</a>
+    </div>}
+    <div className={s.playerFoot}>
+     <span>مقاطع حركة فعلية: {scenes.filter(clip=>shotVideoNames[clip.id]).length} / {scenes.length}</span>
+     <span>حوارات عربية مضافة: {scenes.filter(clip=>sceneVoiceNames[clip.id]).length} / {scenes.length}</span>
+    </div>
+   </aside>
+  </div>
+
+  <section className={s.timeline} aria-label="شريط مشاهد الفيديو">
+   <div className={s.timelineHeader}>
+    <div><span className={s.sectionKicker}>STORYBOARD</span><h2>الخط الزمني للمشاهد</h2></div>
+    <span className={s.small}>اضغط على أي مشهد لتعديله</span>
+   </div>
+   <div className={s.timelineTrack}>
+    {scenes.map((clip,index)=><button type="button" key={clip.id}
+     aria-label={"اختيار المشهد "+(index+1)}
+     aria-pressed={selectedScene.id===clip.id}
+     disabled={playing}
+     className={s.sceneCard+(selectedScene.id===clip.id?" "+s.sceneCardActive:"")}
+     onClick={()=>selectScene(clip.id)}>
+     <span className={s.sceneThumb} style={{backgroundColor:clip.color}}>
+      {clip.imageUrl&&<img src={clip.imageUrl} alt=""/>}
+      <span className={s.sceneNumber}>{String(index+1).padStart(2,"0")}</span>
+      {shotVideoNames[clip.id]&&<span className={s.motionIndicator}><Video size={13}/></span>}
+     </span>
+     <span className={s.sceneText}><strong>{clip.title||"مشهد"}</strong>
+      <small>{clip.duration} ثوانٍ {sceneVoiceNames[clip.id]?"· صوت":""}</small></span>
+    </button>)}
+    <button type="button" className={s.addSceneCard}
+     disabled={playing||scenes.length>=MAX_SCENES}
+     onClick={addScene}>
+     <Plus size={22}/> مشهد جديد
+    </button>
+   </div>
+  </section>
+  <footer className={s.footer}>توليد الصور المحلي ورسوم المشاهد ومزج الصوت والتصدير يعملون دون اشتراك. هذه النسخة لا تولّد ممثلين فوتوغرافيين متحركين أو مزامنة شفاه تلقائيًا.</footer>
  </section>;
 }

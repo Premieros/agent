@@ -30,8 +30,8 @@ test("video studio is editable, multiclip and defaults to a local, non-AI experi
  assert.match(studio,/const \[ratio,setRatio\]=useState<Ratio>\("9:16"\)/);
  assert.match(studio,/setScenes\(old=>old\.map/);
  assert.match(studio,/type="file"/);
- assert.match(studio,/بدون مفتاح API أو رسوم توليد/);
- assert.match(studio,/لقطات الحركة والصوت والصور المرفوعة محلية/);
+ assert.match(studio,/مجاني · يعمل في المتصفح/);
+ assert.match(studio,/توليد الصور المحلي ورسوم المشاهد/);
 });
 
 test("image search is restricted to licensed Commons assets behind the AGENT API",()=>{
@@ -80,6 +80,23 @@ test("three real production profiles and per-scene locked reference portraits",(
  assert.match(studio,/getCastForScenes\(planned,cast,cast\[0\]\?\.id\)/);
  assert.match(studio,/uploadCastPhoto\(character.id,e\)/);
  assert.match(studio,/previewArabicVoice\(clip.subtitle\)/);
- assert.match(studio,/تحويل الصور إلى ممثلين متحركين/);
+ assert.match(studio,/هذه النسخة لا تولّد ممثلين فوتوغرافيين/);
  assert.doesNotMatch(production,/fetch\s*\(|createClient|supabase|https?:\/\//);
+});
+
+test("modern free storyboard editor exposes a guided workflow and timeline",()=>{
+ const studio=read("components/agent-video-studio.tsx");
+ const css=read("components/agent-video-studio.module.css");
+ assert.match(studio,/type StudioStep="story"\|"design"\|"editor"\|"export"/);
+ assert.match(studio,/aria-label="مراحل صناعة الفيديو"/);
+ assert.match(studio,/data-step=\{item.id\}/);
+ assert.match(studio,/aria-label=\{"اختيار المشهد "\+\(index\+1\)\}/);
+ assert.match(studio,/const selectedScene=scenes.find/);
+ assert.match(studio,/setStep\("design"\)/);
+ assert.match(studio,/renderSceneArtwork\(\{sceneId:clip.id/);
+ assert.match(studio,/إنشاء المشاهد والصور مجانًا/);
+ assert.match(studio,/const addScene=\(\)=>\{/);
+ assert.match(css,/\.editorShell\{display:grid/);
+ assert.match(css,/\.playerRail\{position:sticky/);
+ assert.match(css,/\.timelineTrack\{display:flex;overflow-x:auto/);
 });

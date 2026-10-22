@@ -50,9 +50,20 @@ try{
  await page.route("**/api/video/images?**",route=>route.fulfill({status:200,contentType:"application/json",body:'{"images":[]}'}));
  await page.goto(base+"/video",{waitUntil:"domcontentloaded"});
  await page.getByRole("heading",{name:/صناعة فيديو من السيناريو/}).waitFor();
- const dur=page.locator("label").filter({hasText:"المدة (3–25 ثانية)"}).locator('input[type="number"]');
- assert.equal(await dur.count(),3);
- for(let i=0;i<3;i++)await dur.nth(i).fill("3");
+ // Primary free flow: story -> three real scene PNGs -> design -> single-scene editor.
+ await page.getByRole("button",{name:"إنشاء المشاهد والصور مجانًا"}).waitFor();
+ await page.locator('input[type="number"]').first().fill("3");
+ await page.getByRole("button",{name:"إنشاء المشاهد والصور مجانًا"}).click();
+ await page.locator('[data-step="design"][aria-current="step"]').waitFor({timeout:30000});
+ assert.equal(await page.getByRole("button",{name:/اختيار المشهد/}).count(),3);
+ await page.locator('[data-step="editor"]').click();
+ for(let i=1;i<=3;i++){
+  await page.getByRole("button",{name:"اختيار المشهد "+i}).click();
+  const dur=page.locator("label").filter({hasText:"المدة (3–25 ثانية)"}).locator('input[type="number"]');
+  assert.equal(await dur.count(),1);
+  await dur.fill("3");
+ }
+ await page.getByRole("button",{name:"اختيار المشهد 1"}).click();
 
  // Verify a real PNG was created locally and linked into the video studio.
  await page.getByRole("button",{name:"إنشاء صورة للمشهد (مجاني)"}).first().click();
@@ -78,15 +89,21 @@ try{
   requests++;
   await route.fulfill({status:200,contentType:"image/png",body:png});
  });
+ await page.locator('[data-step="design"]').click();
+ await page.getByText("خيارات إنشاء الصور الخارجية (اختيارية وقد تكون مدفوعة)").click();
  await page.locator("select").filter({has:page.locator('option[value="ai"]')}).selectOption("ai");
  await page.getByPlaceholder("أدخل المفتاح لمرة واحدة في هذه الجلسة").fill("sk-test-browser-manual-only");
  await page.getByText("أوافق على إرسال وصف المشهد").locator('input[type="checkbox"]').check();
+ await page.locator('[data-step="editor"]').click();
  await page.getByRole("button",{name:"إنشاء صورة للمشهد (AI)"}).first().click();
  await page.getByText("تم إنشاء الصورة وإضافتها للمشهد", {exact:false}).waitFor();
  assert.equal(requests,1);
  assert.equal(await page.getByText("أوافق على إرسال وصف المشهد").locator('input[type="checkbox"]').isChecked(),false);
  // Return to the no-cost default for all remaining video testing.
+ await page.locator('[data-step="design"]').click();
+ await page.getByText("خيارات إنشاء الصور الخارجية (اختيارية وقد تكون مدفوعة)").click();
  await page.locator("select").filter({has:page.locator('option[value="ai"]')}).selectOption("local");
+ await page.locator('[data-step="editor"]').click();
  // Produce genuine moving video frames in Chromium without an API or file server.
  const bytes=await page.evaluate(async()=>{
   const canvas=document.createElement("canvas");canvas.width=320;canvas.height=568;
@@ -131,7 +148,7 @@ try{
  await pause(1100);
  await page.getByRole("button",{name:"إيقاف تسجيل حوار المشهد"}).first().click();
  await page.getByText("حوار مسجّل: المشهد 1").first().waitFor();
- const firstVoice=page.locator('input[type="file"][accept="audio/*"]').nth(1);
+ const firstVoice=page.locator('input[type="file"][accept="audio/*"]').first();
  await firstVoice.setInputFiles({name:"dialogue.wav",mimeType:"audio/wav",buffer:wavTone()});
  await page.getByText("مقاطع حركة فعلية: 1 / 3").waitFor();
  await page.getByText("حوارات عربية مضافة: 1 / 3").waitFor();
