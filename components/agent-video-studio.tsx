@@ -2,11 +2,12 @@
 
 import {useCallback,useEffect,useRef,useState,type ChangeEvent} from "react";
 import {Download,Film,ImagePlus,Music2,Pause,Play,Plus,Trash2,Video,Mic,Save,FileText,RefreshCw} from "lucide-react";
-import {storyboardFromScript,serializeVideoDraft,parseVideoDraft,videoSrt,
+import {storyboardFromScript,videoSrt,
  videoScriptDocument,guessImageQuery,safeCommonsUrl,MAX_VIDEO_SCENES,
  type VideoScene} from "@/lib/agent-video-storyboard";
 import {startAmbientSoundtrack} from "@/lib/agent-video-soundtrack";
 import {createShotPlan,audioCueSheet,elapsedSceneAt} from "@/lib/agent-video-pipeline";
+import {exportVideoSession,importVideoSession} from "@/lib/agent-video-session";
 import {AGENT_VIDEO_MODES,getCastForScenes,castBibleAsJson,parseCastBible,
  type AgentVideoCharacter,type AgentVideoMode} from "@/lib/agent-video-production";
 import s from "./agent-video-studio.module.css";
@@ -142,7 +143,8 @@ export default function AgentVideoStudio(){
  const [imageNotice,setImageNotice]=useState("");
  const [musicEnabled,setMusicEnabled]=useState(true);
  const [recordingVoice,setRecordingVoice]=useState(false);
- const micSession=useRef<{recorder:MediaRecorder;stream:MediaStream}|null>(null);
+ const [recordingSceneId,setRecordingSceneId]=useState<number|null>(null);
+ const micSession=useRef<{recorder:MediaRecorder;stream:MediaStream;sceneId:number|null}|null>(null);
  const fileImportRef=useRef<HTMLInputElement|null>(null);
  const [ratio,setRatio]=useState<Ratio>("9:16");
  const [audioUrl,setAudioUrl]=useState<string|null>(null);
@@ -265,7 +267,7 @@ export default function AgentVideoStudio(){
   shotVideos.current.get(id)?.pause();
   const url=URL.createObjectURL(file);urls.current.push(url);
   const video=document.createElement("video");
-  video.src=url;video.muted=true;video.playsInline=true;video.preload="auto";
+  video.src=url;video.muted=true;video.loop=true;video.playsInline=true;video.preload="auto";
   video.onloadeddata=()=>setImageTick(t=>t+1);
   video.onerror=()=>setError("اللقطة غير قابلة للتشغيل في متصفحك، جرّب ترميز H.264/VP9.");
   video.load();shotVideos.current.set(id,video);
@@ -288,7 +290,7 @@ export default function AgentVideoStudio(){
   shotVideos.current.forEach((video,id)=>{
    if(!cue||id!==cue.sceneId){if(!video.paused)video.pause();return;}
    if(!Number.isFinite(video.duration)||video.duration<=0)return;
-   const target=Math.min(Math.max(0,cue.offset),Math.max(0,video.duration-.06));
+   const target=Math.max(0,cue.offset%video.duration);
    if(Math.abs(video.currentTime-target)>.45)try{video.currentTime=target;}catch{}
    if(active&&video.paused&&target<video.duration-.08)
     void video.play().catch(()=>{});
@@ -335,7 +337,7 @@ export default function AgentVideoStudio(){
   let planned:Scene[];
   try{planned=storyboardFromScript(script,requestedSeconds,requestedCount);}
   catch{setError("اكتب قصة من 12 إلى 9000 حرف، وحدد عدد المشاهد والمدة.");return;}
-  setScenes(planned);
+  setScenes(planned);nextId.current=planned.length+1;
   shotVideos.current.forEach(v=>v.pause());shotVideos.current.clear();setShotVideoNames({});
   sceneVoices.current.clear();setSceneVoiceNames({});
   setCasting(getCastForScenes(planned,cast,cast[0]?.id));
@@ -393,31 +395,38 @@ export default function AgentVideoStudio(){
   element.click();setTimeout(()=>URL.revokeObjectURL(url),2000);
  };
  const saveProject=()=>{
-  try{downloadText(serializeVideoDraft(name,ratio,scenes),"agent-video-project.json",
+  try{downloadText(exportVideoSession(name,ratio,scenes,cast,casting,productionMode,episode),"agent-video-project.json",
     "application/json;charset=utf-8");}
   catch{setError("تعذر حفظ مسودة المشروع.");}
  };
  const importProject=async(event:ChangeEvent<HTMLInputElement>)=>{
   const file=event.target.files?.[0];if(!file)return;
-  if(file.size>110000){setError("ملف المشروع كبير أو غير صالح.");return;}
+  if(file.size>130000){setError("ملف المشروع كبير أو غير صالح.");return;}
   try{
-   const draft=parseVideoDraft(await file.text());
+   const session=importVideoSession(await file.text());
+   const draft=session.draft;
    if(running.current)stop();
-   setScenes(draft.scenes);setName(draft.name);
+   setScenes(draft.scenes);nextId.current=Math.max(...draft.scenes.map(s=>s.id))+1;setName(draft.name);
    shotVideos.current.forEach(v=>v.pause());shotVideos.current.clear();setShotVideoNames({});
    sceneVoices.current.clear();setSceneVoiceNames({});
-   setCasting(getCastForScenes(draft.scenes,cast,cast[0]?.id));
+   if(session.cast){
+    setCast(session.cast);nextCastId.current=session.cast.length+1;photos.current.clear();
+    setImageTick(t=>t+1);
+   }
+   setCasting(session.casting||getCastForScenes(draft.scenes,cast,cast[0]?.id));
+   if(session.mode)setProductionMode(session.mode);
+   if(session.episode)setEpisode(session.episode);
    setRatio(draft.aspect==="1:1"?"9:16":draft.aspect);
    setProgress(0);setDownloadUrl(null);images.current.clear();
    for(const scene of draft.scenes){
     if(scene.imageUrl)void loadExternalImage(scene.id,scene.imageUrl);
    }
-   setImageNotice("تم استعادة المشروع. الصور المُحمّلة من جهازك تحتاج إعادة رفعها.");
+   setImageNotice("تم استعادة الشخصيات وروابطها بالمشاهد. أعد رفع صور الشخصيات ولقطات الحركة والتسجيلات الصوتية المحلية.");
    setError("");
   }catch{setError("ملف المشروع غير صالح أو بصيغة غير مدعومة.");}
   event.target.value="";
  };
- const recordVoice=async()=>{
+ const recordVoice=async(sceneId:number|null=null)=>{
   if(micSession.current){
    if(micSession.current.recorder.state!=="inactive")micSession.current.recorder.stop();
    return;
@@ -431,18 +440,24 @@ export default function AgentVideoStudio(){
     .find(m=>MediaRecorder.isTypeSupported(m))||"";
    const recorder=new MediaRecorder(stream,kind?{mimeType:kind}:{});
    const chunks:Blob[]=[];
-   micSession.current={recorder,stream};
+   micSession.current={recorder,stream,sceneId};
    recorder.ondataavailable=e=>{if(e.data.size)chunks.push(e.data);};
    recorder.onstop=()=>{
     stream.getTracks().forEach(t=>t.stop());
     if(chunks.length){
      const blob=new Blob(chunks,{type:kind||chunks[0].type||"audio/webm"});
      const url=URL.createObjectURL(blob);urls.current.push(url);
-     setAudioUrl(url);setAudioName("تعليق صوتي مسجّل داخل AGENT");
+     if(sceneId!==null){
+      sceneVoices.current.set(sceneId,{url,name:"حوار مسجّل: المشهد "+sceneId});
+      setSceneVoiceNames(old=>({...old,[sceneId]:"حوار مسجّل: المشهد "+sceneId}));
+     }else{
+      setAudioUrl(url);setAudioName("تعليق صوتي مسجّل داخل AGENT");
+     }
+     setDownloadUrl(null);
     }
-    setRecordingVoice(false);micSession.current=null;
+    setRecordingVoice(false);setRecordingSceneId(null);micSession.current=null;
    };
-   recorder.start(350);setRecordingVoice(true);setError("");
+   recorder.start(350);setRecordingVoice(true);setRecordingSceneId(sceneId);setError("");
   }catch{setError("تعذر فتح الميكروفون. اسمح بالتسجيل أو ارفع ملف صوتي.");}
  };
 
@@ -475,6 +490,7 @@ export default function AgentVideoStudio(){
    // Input audio is local. Mix it into exported video through a browser-owned
    // Web Audio destination. No files, audio or frames are sent to a server.
    let audioTracks:MediaStreamTrack[]=[];
+   let scheduleAudio:((start:number)=>void)|null=null;
    if(audioUrl){
     const audio=new Audio(audioUrl);
     audio.preload="auto";audio.loop=false;
@@ -502,20 +518,21 @@ export default function AgentVideoStudio(){
      const buffer=await context.decodeAudioData(await response.arrayBuffer());
      return [{clip,buffer}];
     }))).flat();
-    if(musicEnabled)startAmbientSoundtrack(context,audioMix,total);
-    const base=context.currentTime+.08;
-    let cursor=0;
-    for(const clip of scenes){
-     const voice=decoded.find(v=>v.clip.id===clip.id);
-     if(voice){
-      const node=context.createBufferSource();node.buffer=voice.buffer;
-      const gain=context.createGain();gain.gain.value=.95;
-      node.connect(gain);gain.connect(audioMix);
-      node.start(base+cursor,0,Math.min(voice.buffer.duration,clip.duration));
-      run.voiceNodes.push(node);
+    scheduleAudio=(base:number)=>{
+     if(musicEnabled)startAmbientSoundtrack(context,audioMix,total,base);
+     let cursor=0;
+     for(const clip of scenes){
+      const voice=decoded.find(v=>v.clip.id===clip.id);
+      if(voice){
+       const node=context.createBufferSource();node.buffer=voice.buffer;
+       const gain=context.createGain();gain.gain.value=.95;
+       node.connect(gain);gain.connect(audioMix);
+       node.start(base+cursor,0,Math.min(voice.buffer.duration,clip.duration));
+       run.voiceNodes.push(node);
+      }
+      cursor+=clip.duration;
      }
-     cursor+=clip.duration;
-    }
+    };
     if(destination)audioTracks=destination.stream.getAudioTracks();
    }
    if(exportVideo){
@@ -545,10 +562,13 @@ export default function AgentVideoStudio(){
    if(run.audio){try{await run.audio.play();}catch{
     setError("المتصفح منع تشغيل الصوت. اضغط السماح بالصوت، وأعد المحاولة لو لزم.");
    }}
-   const started=performance.now();
+   // Start the audio clock only once MediaRecorder is recording and audio is ready.
+   // A short matching preroll prevents clipping the first Arabic syllable.
+   const started=performance.now()+150;
+   if(scheduleAudio&&run.audioContext) scheduleAudio(run.audioContext.currentTime+.15);
    const frame=(now:number)=>{
     if(!run.playing)return;
-    const seconds=Math.min(total,(now-started)/1000);
+    const seconds=Math.min(total,Math.max(0,(now-started)/1000));
     syncShotVideos(seconds,true);
     paint(canvas,scenes,images.current,seconds,photos.current,casting,cast,shotVideos.current);
     setProgress(seconds);
@@ -710,8 +730,8 @@ export default function AgentVideoStudio(){
     </label>
     <div className={s.buttonRow} style={{marginBottom:16}}>
      <button type="button" className={recordingVoice?s.danger:s.secondary}
-      disabled={playing} onClick={()=>void recordVoice()}>
-      <Mic size={14}/> {recordingVoice?"إيقاف تسجيل صوتي":"تسجيل تعليق بصوتك"}</button>
+      disabled={playing||(recordingVoice&&recordingSceneId!==null)} onClick={()=>void recordVoice()}>
+      <Mic size={14}/> {recordingVoice&&recordingSceneId===null?"إيقاف تسجيل صوتي":"تسجيل تعليق بصوتك"}</button>
      <button type="button" className={s.secondary} onClick={addScene} disabled={playing||scenes.length>=MAX_SCENES}>
       <Plus size={14}/> إضافة مشهد</button>
      <button type="button" className={s.secondary} onClick={downloadScript}><FileText size={14}/> السيناريو</button>
@@ -764,6 +784,11 @@ export default function AgentVideoStudio(){
        <input type="file" accept="audio/*" disabled={playing}
         onChange={e=>onSceneVoice(clip.id,e)}/>
        <span className={s.small}>{sceneVoiceNames[clip.id]||"لم يرفع حوار لهذا المشهد. صوت المتصفح معاينة فقط."}</span>
+       <button type="button" className={recordingSceneId===clip.id?s.danger:s.secondary}
+        disabled={playing||(recordingVoice&&recordingSceneId!==clip.id)}
+        onClick={()=>void recordVoice(clip.id)}>
+        <Mic size={14}/> {recordingSceneId===clip.id?"إيقاف تسجيل حوار المشهد":"تسجيل حوار المشهد من الميكروفون"}
+       </button>
       </label>
       <label className={s.field}>لون المشهد
        <input type="color" value={clip.color} disabled={playing}
@@ -789,6 +814,10 @@ export default function AgentVideoStudio(){
    <div className={s.panel}>
     <h2><Film size={16}/> 4. معاينة وتصدير الفيديو النهائي</h2>
     <p>{scenes.length} مشاهد · المدة الإجمالية: {total} ثانية · {ratio==="9:16"?"عمودي":"أفقي"}</p>
+    <div className={s.notice}>مقاطع حركة فعلية: {scenes.filter(clip=>shotVideoNames[clip.id]).length} / {scenes.length}
+     {" · "}حوارات عربية مضافة: {scenes.filter(clip=>sceneVoiceNames[clip.id]).length} / {scenes.length}.
+     المشاهد التي لا تتضمن مقطع حركة ستُصدّر كخلفية متحركة وصورة ثابتة فقط.
+     تسجيل الحوار من الميكروفون يعمل محليًا مع كل مشهد ثم يُدمج عند التصدير.</div>
     <div className={s.preview}>
      <div className={s.frame}>
       <canvas ref={canvasRef} width={540} height={960}

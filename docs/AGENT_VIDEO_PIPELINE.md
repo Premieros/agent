@@ -12,12 +12,12 @@ No other repository, Supabase project, production environment or paid service is
 4. Once clips have been produced and reviewed **outside AGENT**, upload the motion
    clip for each scene. The browser renders those actual moving frames on a canvas,
    with titles/subtitles and available portraits as fallback when there is no clip.
-5. Upload separate **Arabic dialogue audio per scene**, ideally voiced by the assigned
+5. **Record Arabic dialogue directly for each scene** with the per-scene microphone button (or upload separate audio files), ideally voiced by the assigned
    recurring character, or record/upload an overall narration. During export scene audio
    is mixed at its scene start and clipped at the scene boundary; optional original
    ambient music can play underneath. Preview voice synthesis uses browser voices only
    and is not recorded into the rendered file.
-6. Export WebM/MP4 according to MediaRecorder browser support; download SRT, timing
+6. The session JSON now saves cast details, scene-to-character links, production mode and episode number (compatible with legacy v2). Media itself stays private and must be re-uploaded after re-opening. Short source clips loop within their assigned scene rather than freeze. Export audio is scheduled only after recording begins.\n7. Export WebM/MP4 according to MediaRecorder browser support; download SRT, timing
    manifest, credits, character bible and local project JSON. Export happens in real
    time and needs an open tab. Listen to and review the downloaded file.
 
@@ -50,3 +50,6 @@ can fail to decode, cannot automatically deliver their own audio into Canvas.cap
 and should have independently supplied dialogue tracks. Real video is available only for
 shots with uploaded moving source clips; otherwise visual fallback remains a still/image
 sequence. CI validates code and build, but does not prove playback or lip-sync in a browser.
+
+## Verified provider constraint (October 22, 2026)
+The connected Runway workspace currently exposes no usable video generation models on its Free plan. Its existing image/voice credits do not unlock video generation without changing the plan. AGENT has not used these credits, transmitted cast media, or activated a paid plan. This is not proof of a MetaBatch API.

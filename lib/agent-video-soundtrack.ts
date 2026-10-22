@@ -2,10 +2,10 @@
  * No external media, libraries, API calls or database interactions.
  */
 export function startAmbientSoundtrack(
- context:AudioContext,destination:AudioNode,durationSeconds:number
+ context:AudioContext,destination:AudioNode,durationSeconds:number,startAt=context.currentTime
 ):OscillatorNode[]{
  const duration=Math.max(1,Math.min(900,durationSeconds));
- const start=context.currentTime;
+ const start=Math.max(context.currentTime,startAt);
  const voices=[{hz:110,gain:.014},{hz:164.81,gain:.009},{hz:220,gain:.006}];
  return voices.map(({hz,gain:level},i)=>{
   const oscillator=context.createOscillator();
