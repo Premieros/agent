@@ -15,12 +15,26 @@ export const MAX_VIDEO_SCENES=32;
 export const MAX_VIDEO_SCRIPT_CHARS=9000;
 const palette=["#7548aa","#b05b60","#177f85","#8f5a39","#315f94","#9960aa"];
 const safeText=(x:unknown,limit:number)=>typeof x==="string"?x.trim().slice(0,limit):"";
-export function safeCommonsUrl(value:unknown):value is string{
- if(typeof value!=="string"||value.length>1100)return false;
- try{const u=new URL(value);return u.protocol==="https:"&&u.hostname==="upload.wikimedia.org"&&
-  u.pathname.startsWith("/wikipedia/commons/thumb/")&&/\.(jpe?g|png|webp)$/i.test(u.pathname)&&
-  !u.search&&!u.hash;}catch{return false;}
+export function safeCommonsImageUrl(value:unknown):string|null{
+ if(typeof value!=="string"||value.length>1400)return null;
+ try{
+  const u=new URL(value);
+  if(u.protocol!=="https:"||u.hostname!=="upload.wikimedia.org"||u.hash||
+   /%2f|%5c|%2e%2e/i.test(u.pathname))return null;
+  const parts=u.pathname.split("/").filter(Boolean);
+  if(parts[0]!=="wikipedia"||parts[1]!=="commons")return null;
+  const thumb=parts[2]==="thumb",offset=thumb?3:2;
+  if(parts.length!==offset+(thumb?4:3)||
+   !/^[0-9a-f]$/i.test(parts[offset])||
+   !/^[0-9a-f]{2}$/i.test(parts[offset+1])||
+   !/\.(jpe?g|png|webp)$/i.test(parts[parts.length-1]))
+   return null;
+  // Wikimedia may add analytics/query parameters to "unscaled" thumbs.
+  // Strip all query parameters before forwarding to the image proxy.
+  return u.origin+u.pathname;
+ }catch{return null;}
 }
+export function safeCommonsUrl(value:unknown):value is string{return safeCommonsImageUrl(value)!==null;}
 export const clampSceneDuration=(value:number)=>Number.isFinite(value)
  ?Math.max(3,Math.min(45,Math.round(value))):8;
 export const videoDuration=(scenes:readonly VideoScene[])=>
