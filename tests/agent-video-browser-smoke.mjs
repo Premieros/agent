@@ -54,6 +54,39 @@ try{
  assert.equal(await dur.count(),3);
  for(let i=0;i<3;i++)await dur.nth(i).fill("3");
 
+ // Verify a real PNG was created locally and linked into the video studio.
+ await page.getByRole("button",{name:"إنشاء صورة للمشهد (مجاني)"}).first().click();
+ const pngButton=page.getByRole("button",{name:"تحميل PNG"}).first();
+ await pngButton.waitFor({timeout:20000});
+ const [pngDownload]=await Promise.all([page.waitForEvent("download"),pngButton.click()]);
+ const pngFile=join(folder,pngDownload.suggestedFilename());
+ await pngDownload.saveAs(pngFile);
+ const {readFileSync}=await import("node:fs");
+ const png=readFileSync(pngFile);
+ assert.ok(png.byteLength>1000,"Local scene image not generated");
+ assert.equal(png.subarray(0,8).toString("hex"),"89504e470d0a1a0a");
+ console.log("AGENT LOCAL IMAGE PASS",png.byteLength);
+
+ // Exercise the opt-in AI UI with a mocked network response; no provider is charged.
+ let requests=0;
+ await page.route("**/api/video/generate-image",async route=>{
+  const data=route.request().postDataJSON();
+  assert.equal(data.provider,"openai");
+  assert.equal(data.consentToCharges,true);
+  assert.equal(data.model,"gpt-image-1");
+  assert.ok(data.prompt.length>30);
+  requests++;
+  await route.fulfill({status:200,contentType:"image/png",body:png});
+ });
+ await page.locator("select").filter({has:page.locator('option[value="ai"]')}).selectOption("ai");
+ await page.getByPlaceholder("أدخل المفتاح لمرة واحدة في هذه الجلسة").fill("sk-test-browser-manual-only");
+ await page.getByText("أوافق على إرسال وصف المشهد").locator('input[type="checkbox"]').check();
+ await page.getByRole("button",{name:"إنشاء صورة للمشهد (AI)"}).first().click();
+ await page.getByText("تم إنشاء الصورة وإضافتها للمشهد", {exact:false}).waitFor();
+ assert.equal(requests,1);
+ assert.equal(await page.getByText("أوافق على إرسال وصف المشهد").locator('input[type="checkbox"]').isChecked(),false);
+ // Return to the no-cost default for all remaining video testing.
+ await page.locator("select").filter({has:page.locator('option[value="ai"]')}).selectOption("local");
  // Produce genuine moving video frames in Chromium without an API or file server.
  const bytes=await page.evaluate(async()=>{
   const canvas=document.createElement("canvas");canvas.width=320;canvas.height=568;

@@ -53,3 +53,13 @@ sequence. CI validates code and build, but does not prove playback or lip-sync i
 
 ## Verified provider constraint (October 22, 2026)
 The connected Runway workspace currently exposes no usable video generation models on its Free plan. Its existing image/voice credits do not unlock video generation without changing the plan. AGENT has not used these credits, transmitted cast media, or activated a paid plan. This is not proof of a MetaBatch API.
+
+## Image creation engine (Preview, inside /video)
+
+AGENT now has a **working image engine** for scene storyboards:
+
+- **Free local mode (default):** draw an original illustrated cinematic/noir/comic keyframe as a real PNG directly in Canvas, from Arabic scene prompts. It uses deterministic scenery keywords (city, interiors, sea, gardens and desert), light, depth, and optional *exact* private character reference photo. The same uploaded portrait is composited across scenes without changing identity. The image is added to the matching clip and can be downloaded as a PNG; a single action produces images for all scenes. No model training, diffusion, server upload, external API, subscription, or hidden bill. These are **illustrations, not AI photorealistic pictures**.
+- **Optional real AI mode:** OpenAI gpt-image-1 and Gemini gemini-2.5-flash-image via the project's existing tested provider adapter. Users supply their own API key in session memory and explicitly check a **per-image cost acknowledgement**. Key/scene descriptions are sent through a same-origin AGENT server request to the selected provider, never saved in files, DB or logs. The server must NOT reuse its existing OPENAI_API_KEY or Gemini key. Exactly one image request is made per click, no retries or batch image generation. Costs depend on the user's provider/account, and must be reviewed there before enabling. Real paid generation was **not invoked during development or CI**.
+- Privacy and identity: in real AI mode **only character descriptions, not reference portraits** are sent; therefore identical AI-generated faces across episodes cannot be guaranteed. Local mode uses the exact private uploaded portrait and has stable facial identity. To gain AI face consistency a separately approved reference-image edit workflow would be required.
+- No file is automatically posted to YouTube or sent to a database. Media created in the browser is not embedded in saved JSON and must be regenerated or re-uploaded after restore. Provider results must be reviewed for appropriateness and publication rights.
+- AGENT browser CI uses a mocked AI endpoint to test the explicit-consent request contract without provider charges; it also generates and verifies a real PNG. Tests do not claim real-provider acceptance of a key or account access.

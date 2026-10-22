@@ -7,6 +7,7 @@ import {storyboardFromScript,videoSrt,
  type VideoScene} from "@/lib/agent-video-storyboard";
 import {startAmbientSoundtrack} from "@/lib/agent-video-soundtrack";
 import {createShotPlan,audioCueSheet,elapsedSceneAt} from "@/lib/agent-video-pipeline";
+import {renderSceneArtwork,type ImageSceneStyle} from "@/lib/agent-video-image-engine";
 import {exportVideoSession,importVideoSession} from "@/lib/agent-video-session";
 import {AGENT_VIDEO_MODES,getCastForScenes,castBibleAsJson,parseCastBible,
  type AgentVideoCharacter,type AgentVideoMode} from "@/lib/agent-video-production";
@@ -78,7 +79,7 @@ function paint(canvas:HTMLCanvasElement,scenes:readonly Scene[],images:Map<numbe
  // Commons background search is NEVER used to invent or replace actors.
  const actorId=casting[clip.id],actor=characters.find(c=>c.id===actorId);
  const actorPhoto=actorId?characterPhotos.get(actorId):undefined;
- if(!movingFrame&&actorPhoto&&actorPhoto.complete&&actorPhoto.naturalWidth>0){
+ if(!movingFrame&&actorPhoto&&clip.imageLicense!=="AGENT_LOCAL_ART_WITH_CAST"&&actorPhoto.complete&&actorPhoto.naturalWidth>0){
   ctx.save();
   const aw=vertical?w*.67:w*.32,ah=vertical?h*.56:h*.71;
   const ax=vertical?(w-aw)/2:w*.60,ay=vertical?h*.18:h*.11;
@@ -141,6 +142,16 @@ export default function AgentVideoStudio(){
  const [requestedSeconds,setRequestedSeconds]=useState(45);
  const [imagesBusy,setImagesBusy]=useState(false);
  const [imageNotice,setImageNotice]=useState("");
+ const [imageEngine,setImageEngine]=useState<"local"|"ai">("local");
+ const [imageStyle,setImageStyle]=useState<ImageSceneStyle>("cinematic");
+ const [imageAIProvider,setImageAIProvider]=useState<"openai"|"gemini">("openai");
+ const [imageApiKey,setImageApiKey]=useState("");
+ const [imageCostConsent,setImageCostConsent]=useState(false);
+ const [imageDescriptions,setImageDescriptions]=useState<Record<number,string>>({});
+ const [imageEngineBusy,setImageEngineBusy]=useState<number|null>(null);
+ const [imageEngineNotice,setImageEngineNotice]=useState("");
+ const [createdImageNames,setCreatedImageNames]=useState<Record<number,string>>({});
+ const imageVariation=useRef(17);
  const [musicEnabled,setMusicEnabled]=useState(true);
  const [recordingVoice,setRecordingVoice]=useState(false);
  const [recordingSceneId,setRecordingSceneId]=useState<number|null>(null);
@@ -242,6 +253,87 @@ export default function AgentVideoStudio(){
   window.speechSynthesis.speak(utterance);
   setCastNotice("دي معاينة صوت فقط. صوت المتصفح الآلي لا يُدمج في ملف الفيديو؛ للتصدير ارفع أو سجّل التعليق.");
  };
+ const createSceneImage=async(clip:Scene,allLocal=false)=>{
+  if(playing||imagesBusy||imageEngineBusy!==null)return false;
+  setError("");setImageEngineNotice("");
+  const local=allLocal||imageEngine==="local";
+  if(!local&&(!imageCostConsent||imageApiKey.trim().length<12)){
+   setError("توليد الصور بالذكاء الاصطناعي يتطلب مفتاحك الخاص وموافقة صريحة على تكلفة هذا الطلب.");return false;
+  }
+  setImageEngineBusy(clip.id);
+  try{
+   let blob:Blob;
+   const reference=photos.current.get(casting[clip.id]||"");
+   const scenePrompt=(imageDescriptions[clip.id]||"").trim().slice(0,400);
+   if(local){
+    blob=await renderSceneArtwork({sceneId:clip.id,title:clip.title,
+     subtitle:scenePrompt||clip.subtitle,style:imageStyle,aspect:ratio,
+     seed:imageVariation.current++},reference);
+   }else{
+    const plan=createShotPlan([clip],cast,casting,productionMode,episode,ratio);
+    const prompt=(plan.shots[0].imagePrompt+
+     (scenePrompt?" Visual art direction: "+scenePrompt:"")+
+     " Produce one single coherent scene keyframe without typography.").slice(0,2000);
+    const response=await fetch("/api/video/generate-image",{
+     method:"POST",headers:{"Content-Type":"application/json"},
+     cache:"no-store",body:JSON.stringify({provider:imageAIProvider,
+      model:imageAIProvider==="openai"?"gpt-image-1":"gemini-2.5-flash-image",
+      apiKey:imageApiKey.trim(),consentToCharges:true,prompt})
+    });
+    if(!response.ok){
+     const value=await response.json().catch(()=>({error:"IMAGE_GENERATION_FAILED"})) as {error?:string};
+     throw Error(value.error||"IMAGE_GENERATION_FAILED");
+    }
+    const type=response.headers.get("content-type")?.split(";")[0]||"";
+    if(!["image/png","image/jpeg","image/webp"].includes(type))
+     throw Error("INVALID_IMAGE_RESPONSE");
+    blob=await response.blob();
+    if(blob.size<100||blob.size>5*1024*1024)throw Error("INVALID_IMAGE_RESPONSE");
+   }
+   const url=URL.createObjectURL(blob);urls.current.push(url);
+   const image=new Image();
+   await new Promise<void>((resolve,reject)=>{
+    image.onload=()=>resolve();image.onerror=()=>reject(Error("INVALID_IMAGE_RESPONSE"));
+    image.src=url;
+   });
+   images.current.set(clip.id,image);setImageTick(t=>t+1);
+   update(clip.id,{imageUrl:url,imageCredit:local?"لوحة رقمية مُنشأة محليًا داخل AGENT":"صورة مولدة بطلب المستخدم",
+    imageLicense:local&&reference?"AGENT_LOCAL_ART_WITH_CAST":local?"AGENT_LOCAL_ART":"AI_GENERATED_REVIEW_RIGHTS",
+    imageSource:undefined});
+   setCreatedImageNames(old=>({...old,[clip.id]:"agent-scene-"+clip.id+".png"}));
+   setImageEngineNotice(local?"تم إنشاء صورة مشهد أصلية محليًا وإضافتها إلى الفيديو.":
+    "تم إنشاء الصورة وإضافتها للمشهد. راجع الوجه والحقوق والتكلفة في حساب مزودك.");
+   return true;
+  }catch(e){
+   const code=e instanceof Error?e.message:"IMAGE_GENERATION_FAILED";
+   setError(code==="AI_QUOTA_EXCEEDED"?"حصة توليد الصور لدى المزوّد انتهت. لم يتم تكرار الطلب.":
+    code==="INVALID_ORIGIN"?"طلب الصورة رُفض لأسباب أمنية. افتح الاستوديو من رابط Preview المباشر.":
+    code==="AI_CREDENTIALS_REJECTED"?"المزوّد رفض مفتاحك. تحقق منه.": 
+    code==="IMAGE_RESPONSE_TOO_LARGE"?"ملف الصورة أكبر من الحد المسموح لخادم Preview.":
+    "تعذّر إنشاء صورة المشهد: "+code+". لم تُفعّل أي محاولة تلقائية إضافية.");
+   return false;
+  }finally{
+   setImageCostConsent(false);setImageEngineBusy(null);
+  }
+ };
+ const createAllLocalImages=async()=>{
+  if(playing||imagesBusy||imageEngineBusy!==null||imageEngine!=="local")return;
+  setError("");setImageEngineNotice("يتم تجهيز صور المشاهد تباعًا داخل متصفحك...");
+  // Serial browser composition avoids large concurrent canvas memory allocations.
+  let count=0;
+  for(const clip of scenes){
+   // The helper owns the busy flag, but state updates are asynchronous.
+   const ok=await createSceneImage(clip,true);
+   if(ok)count++;
+  }
+  setImageEngineNotice("تم إنشاء "+count+" من "+scenes.length+" صورة محلية وربطها بالمشاهد.");
+ };
+ const downloadCreatedImage=(clip:Scene)=>{
+  const url=clip.imageUrl;
+  if(!url||!url.startsWith("blob:")||!createdImageNames[clip.id])return;
+  const a=document.createElement("a");a.href=url;
+  a.download=createdImageNames[clip.id];a.click();
+ };
  const update=(id:number,patch:Partial<Scene>)=>{
   if(playing)return;
   setScenes(old=>old.map(c=>c.id===id?{...c,...patch}:c));
@@ -338,6 +430,7 @@ export default function AgentVideoStudio(){
   try{planned=storyboardFromScript(script,requestedSeconds,requestedCount);}
   catch{setError("اكتب قصة من 12 إلى 9000 حرف، وحدد عدد المشاهد والمدة.");return;}
   setScenes(planned);nextId.current=planned.length+1;
+  setCreatedImageNames({});setImageDescriptions({});
   shotVideos.current.forEach(v=>v.pause());shotVideos.current.clear();setShotVideoNames({});
   sceneVoices.current.clear();setSceneVoiceNames({});
   setCasting(getCastForScenes(planned,cast,cast[0]?.id));
@@ -407,6 +500,7 @@ export default function AgentVideoStudio(){
    const draft=session.draft;
    if(running.current)stop();
    setScenes(draft.scenes);nextId.current=Math.max(...draft.scenes.map(s=>s.id))+1;setName(draft.name);
+   setCreatedImageNames({});setImageDescriptions({});
    shotVideos.current.forEach(v=>v.pause());shotVideos.current.clear();setShotVideoNames({});
    sceneVoices.current.clear();setSceneVoiceNames({});
    if(session.cast){
@@ -421,7 +515,7 @@ export default function AgentVideoStudio(){
    for(const scene of draft.scenes){
     if(scene.imageUrl)void loadExternalImage(scene.id,scene.imageUrl);
    }
-   setImageNotice("تم استعادة الشخصيات وروابطها بالمشاهد. أعد رفع صور الشخصيات ولقطات الحركة والتسجيلات الصوتية المحلية.");
+   setImageNotice("تم استعادة الشخصيات وروابطها بالمشاهد. أعد إنشاء الصور المحلية ورفع صور الشخصيات ولقطات الحركة والتسجيلات الصوتية.");
    setError("");
   }catch{setError("ملف المشروع غير صالح أو بصيغة غير مدعومة.");}
   event.target.value="";
@@ -710,6 +804,54 @@ export default function AgentVideoStudio(){
    </div>
    {imageNotice&&<div className={s.success} role="status">{imageNotice}</div>}
   </section>
+  <section className={s.panel} style={{marginBottom:16}}>
+   <h2>محرك إنشاء صور المشاهد</h2>
+   <p>أنشئ صورًا أصلية برسوم سينمائية داخل المتصفح مجانًا، أو اطلب صورة AI حقيقية من OpenAI/Gemini بمفتاحك وموافقتك لكل صورة. الصور التي تُنشئها تُضاف للمونتاج فورًا.</p>
+   <div className={s.clipForm}>
+    <label className={s.field}>المحرك
+     <select value={imageEngine} disabled={playing||imageEngineBusy!==null}
+      onChange={e=>{setImageEngine(e.target.value as "local"|"ai");setError("");setImageCostConsent(false);}}>
+      <option value="local">إنشاء رسم مشهد محلي مجاني · بدون AI</option>
+      <option value="ai">إنشاء صورة AI عبر مفتاحك الخاص · قد يكلّف</option>
+     </select>
+    </label>
+    {imageEngine==="local"?<label className={s.field}>الطابع البصري
+     <select value={imageStyle} onChange={e=>setImageStyle(e.target.value as ImageSceneStyle)}
+      disabled={playing||imageEngineBusy!==null}>
+      <option value="cinematic">سينمائي</option><option value="comic">رسوم قصصية</option><option value="noir">ليلي درامي</option>
+     </select>
+    </label>:<>
+     <label className={s.field}>مزود الذكاء الاصطناعي
+      <select value={imageAIProvider} disabled={playing||imageEngineBusy!==null}
+       onChange={e=>{setImageAIProvider(e.target.value as "openai"|"gemini");setImageCostConsent(false);}}>
+       <option value="openai">OpenAI · gpt-image-1</option>
+       <option value="gemini">Gemini · gemini-2.5-flash-image</option>
+      </select>
+     </label>
+     <label className={s.field+" "+s.wide}>مفتاح API الخاص بك (لا يُحفظ في قاعدة بيانات)
+      <input type="password" autoComplete="off" value={imageApiKey}
+       disabled={playing||imageEngineBusy!==null}
+       placeholder="أدخل المفتاح لمرة واحدة في هذه الجلسة"
+       onChange={e=>{setImageApiKey(e.target.value);setImageCostConsent(false);}}/>
+     </label>
+     <label className={s.field+" "+s.wide}>
+      <span><input type="checkbox" checked={imageCostConsent}
+       onChange={e=>setImageCostConsent(e.target.checked)}
+       disabled={playing||imageEngineBusy!==null}/>
+       أوافق على إرسال وصف المشهد للمزوّد وعلى تكلفة توليد صورة واحدة، وأعرف أن السعر يختلف حسب حسابي.</span>
+     </label>
+     <div className={s.notice}>لا تُرسل الصور المرجعية في وضع AI الحالي؛ يُرسل وصف الشخصية فقط، فلا يمكن ضمان ثبات الوجه. المفتاح يُرسل للخادم لهذا الطلب فقط ولا يُخزن. لا يوجد توليد جماعي مدفوع ولا إعادة محاولات تلقائية.</div>
+    </>}
+   </div>
+   <div className={s.buttonRow}>
+    {imageEngine==="local"&&<button type="button" className={s.button}
+     onClick={()=>void createAllLocalImages()}
+     disabled={playing||imagesBusy||imageEngineBusy!==null}>
+     <ImagePlus size={15}/> إنشاء صور جميع المشاهد مجانًا
+    </button>}
+   </div>
+   {imageEngineNotice&&<div className={s.success} role="status">{imageEngineNotice}</div>}
+  </section>
   <div className={s.layout}>
    <div className={s.panel}>
     <h2>3. حدّد الشخصيات وعدّل المشاهد والصوت</h2>
@@ -792,6 +934,21 @@ export default function AgentVideoStudio(){
         <Mic size={14}/> {recordingSceneId===clip.id?"إيقاف تسجيل حوار المشهد":"تسجيل حوار المشهد من الميكروفون"}
        </button>
       </div>
+      <label className={s.field+" "+s.wide}>وصف اختياري للصورة التي تريد إنشاءها
+       <textarea rows={2} maxLength={400} value={imageDescriptions[clip.id]||""}
+        disabled={playing||imageEngineBusy!==null}
+        placeholder="مثال: مريم في محطة قطار ليلًا، إضاءة سينمائية"
+        onChange={e=>setImageDescriptions(old=>({...old,[clip.id]:e.target.value}))}/>
+      </label>
+      <div className={s.wide}>
+       <button type="button" className={s.secondary}
+        disabled={playing||imagesBusy||imageEngineBusy!==null}
+        onClick={()=>void createSceneImage(clip)}>
+        <ImagePlus size={14}/> {imageEngineBusy===clip.id?"جارٍ إنشاء الصورة...":"إنشاء صورة للمشهد ("+(imageEngine==="local"?"مجاني":"AI")+")"}
+       </button>
+       {createdImageNames[clip.id]&&<button type="button" className={s.secondary}
+        onClick={()=>downloadCreatedImage(clip)}><Download size={14}/> تحميل PNG</button>}
+      </div>
       <label className={s.field}>لون المشهد
        <input type="color" value={clip.color} disabled={playing}
         onChange={e=>update(clip.id,{color:e.target.value})}/></label>
@@ -851,7 +1008,7 @@ export default function AgentVideoStudio(){
     <div className={s.notice}>تحتاج عملية التصدير نفس مدة الفيديو تقريبًا؛ مثال: فيديو 3 دقائق يستغرق حوالي 3 دقائق.
      الصوت الناتج موسيقى أصلية وحوارات المشاهد التي رفعتها (إن وجدت)، ويمكن إضافة تعليق صوتي مسجل أو مرفوع. النص وحده لا يتحول إلى كلام مسموع تلقائيًا.
      الصوت الأصلي داخل ملفات الفيديو المرفوعة لا يُمزج تلقائيًا؛ ارفع صوت الحوار كملف منفصل. تأكد من جودة الحركة وتزامن الصوت قبل النشر.
-     هذه الصور من مصادر مرخّصة مستقلة؛ راجع ملف نسب الحقوق قبل النشر.
+     الصور التي ينشئها محرك الرسوم المحلي أصلية داخل المتصفح، أما صور Wikimedia فتحتاج مراجعة نسب الحقوق، والصور التوليدية تحتاج مراجعة شروط المزود قبل النشر.
      التصدير يستخدم MediaRecorder ودعم الصيغ يختلف حسب المتصفح.
      Chrome وEdge على الكمبيوتر أفضل للتجربة. جودة المخرجات تعتمد على الصور والصوت
      المرفوعين. لا يوجد توليد فيديو AI مدفوع أو نشر تلقائي.</div>
