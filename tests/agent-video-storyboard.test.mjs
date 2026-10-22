@@ -9,7 +9,7 @@ test("Arabic story becomes the exact number of clips the owner selected",()=>{
  for(const count of [1,3,5,8,16,32]){
   const scenes=storyboardFromScript(script,180,count);
   assert.equal(scenes.length,count);
-  assert.equal(videoDuration(scenes),180);
+  assert.equal(videoDuration(scenes),Math.min(180,count*45));
   assert.deepEqual(scenes.map(x=>x.id),Array.from({length:count},(_,i)=>i+1));
   assert.ok(scenes.every(x=>x.subtitle.length>0&&x.duration>=3&&x.duration<=45));
  }
