@@ -72,10 +72,40 @@ export default function LiveCrm() {
       .select("organization_id,role").eq("user_id",activeSession.user.id).limit(1);
     if (membershipResult.error && (isExpiredAuthError(membershipResult.error) ||
       membershipResult.status === 401)) {
-      const refreshed=await db.auth.refreshSession();
-      if(refreshed.data.session && !refreshed.error){
-        membershipResult=await db.from("organization_members")
-          .select("organization_id,role").eq("user_id",refreshed.data.session.user.id).limit(1);
+      // Explicitly attach the validated access token to the Data API request.
+      // This distinguishes a missing Authorization header from a database GRANT/RLS denial.
+      // Do not copy a service-role key to the browser or bypass RLS.
+      const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+      const publicKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
+      if (url && publicKey) {
+        try {
+          const endpoint = new URL("/rest/v1/organization_members", url);
+          endpoint.searchParams.set("select", "organization_id,role");
+          endpoint.searchParams.set("user_id", "eq." + activeSession.user.id);
+          endpoint.searchParams.set("limit", "1");
+          const rest = await fetch(endpoint, {
+            headers: {
+              apikey: publicKey,
+              Authorization: "Bearer " + activeSession.access_token,
+              Accept: "application/json"
+            },
+            cache: "no-store"
+          });
+          const payload: unknown = await rest.json();
+          if (rest.ok && Array.isArray(payload)) {
+            membershipResult = { ...membershipResult, data: payload as Member[], error: null, status: rest.status };
+          } else {
+            const failure = payload && typeof payload === "object"
+              ? payload as { code?: string; message?: string } : {};
+            membershipResult = {
+              ...membershipResult, data: null,
+              error: { code: failure.code || "UNKNOWN", message: failure.message || "REST request failed" },
+              status: rest.status
+            };
+          }
+        } catch {
+          // Preserve the initial Supabase failure if network access is unavailable.
+        }
       }
     }
     const {data:memberships,error:membershipError}=membershipResult;
@@ -83,12 +113,13 @@ export default function LiveCrm() {
       setMembership(null);
       const code=membershipError.code || "unknown";
       const status=membershipResult.status || 0;
+      const authRole=activeSession.user.role === "authenticated" ? "authenticated" : "not-authenticated";
       const kind=code==="42501"?"رفض PostgreSQL صلاحية الوصول إلى جدول العضويات":
         status===401?"تم رفض جلسة المصادقة":
         status===403?"صلاحيات قراءة جدول العضويات مرفوضة":
         status===404?"جدول العضويات أو واجهة Supabase غير متاح":
         status===0?"تعذر الاتصال بخدمة قاعدة البيانات":"فشل استعلام عضوية المؤسسة";
-      setError(`${kind} — HTTP ${status} / ${code}. حسابك قد يكون مديرًا بالفعل؛ لا تنشئ عضوية جديدة.`);
+      setError(`${kind} — HTTP ${status} / ${code} (session role: ${authRole}). العضوية موجودة مسبقًا؛ افحص GRANT وRLS إذا تكرر الخطأ.`);
       setChecking(false);return;
     }
     setError("");
