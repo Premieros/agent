@@ -15,6 +15,7 @@ export default function SupportAdmin(){
  const [title,setTitle]=useState(""),[content,setContent]=useState("");
  const [origin,setOrigin]=useState(""),[docs,setDocs]=useState<Doc[]>([]),[widgets,setWidgets]=useState<Widget[]>([]);
  const [message,setMessage]=useState(""),[busy,setBusy]=useState(false);
+ const [question,setQuestion]=useState(""),[answer,setAnswer]=useState(""),[sources,setSources]=useState<Array<{id:string;title:string}>>([]);
  async function request(path:string,method="GET",body?:unknown){
   if(!db)throw new Error("Supabase غير مُعد.");
   const session=await currentSession(db);if(!session)throw new Error("سجل الدخول أولًا.");
@@ -57,6 +58,11 @@ export default function SupportAdmin(){
     <textarea style={field} rows={8} value={content} onChange={e=>setContent(e.target.value)} placeholder="محتوى المعرفة"/>
     <button style={button} disabled={busy} onClick={()=>void act(async()=>{await request("/api/support/documents","POST",{projectId:chosen,title,content});setTitle("");setContent("");const d=await request("/api/support/documents?projectId="+chosen);setDocs(d.documents)})}>حفظ المستند</button>
     <ul>{docs.map(d=><li key={d.id}>{d.title} <button disabled={busy} onClick={()=>void act(async()=>{await request("/api/support/documents?projectId="+chosen+"&id="+d.id,"DELETE");setDocs(v=>v.filter(x=>x.id!==d.id))})}>حذف</button></li>)}</ul>
+    <h3>تجربة رد المساعد قبل النشر</h3>
+    <p>هذه تجربة خاصة بالمدير، لا ترسل رسالة إلى عميل ولا تحفظ المحادثة. تستخدم المستندات المعتمدة لهذا المشروع فقط.</p>
+    <textarea style={field} rows={3} value={question} onChange={e=>setQuestion(e.target.value)} placeholder="اكتب سؤال العميل لاختبار المساعد"/>
+    <button style={button} disabled={busy||question.trim().length<3} onClick={()=>void act(async()=>{const result=await request("/api/support/preview","POST",{projectId:chosen,question});setAnswer(result.answer);setSources(result.sources||[])})}>تجربة الرد الذكي</button>
+    {answer&&<div style={{padding:16,border:"1px solid #888",borderRadius:8,whiteSpace:"pre-wrap"}}><strong>رد المساعد</strong><p>{answer}</p>{sources.length>0&&<p>المصادر: {sources.map(x=>x.title).join("، ")}</p>}</div>}
     <h3>مواقع المشروع المسموحة</h3>
     <input style={field} placeholder="https://example.com" value={origin} onChange={e=>setOrigin(e.target.value)}/>
     <button style={button} disabled={busy} onClick={()=>void act(async()=>{await request("/api/support/widgets","POST",{projectId:chosen,origin});setOrigin("");const w=await request("/api/support/widgets?projectId="+chosen);setWidgets(w.widgets)})}>إنشاء مفتاح موقع</button>
