@@ -83,7 +83,8 @@ export default function LiveCrm() {
       setMembership(null);
       const code=membershipError.code || "unknown";
       const status=membershipResult.status || 0;
-      const kind=status===401?"تم رفض جلسة المصادقة":
+      const kind=code==="42501"?"رفض PostgreSQL صلاحية الوصول إلى جدول العضويات":
+        status===401?"تم رفض جلسة المصادقة":
         status===403?"صلاحيات قراءة جدول العضويات مرفوضة":
         status===404?"جدول العضويات أو واجهة Supabase غير متاح":
         status===0?"تعذر الاتصال بخدمة قاعدة البيانات":"فشل استعلام عضوية المؤسسة";
