@@ -139,8 +139,15 @@ export default function LiveCrm() {
         db.from("handoff_tasks").select("id",{count:"exact",head:true})
           .eq("organization_id",member.organization_id).eq("status","pending")
       ]);
-      if(l.error||t.error||p.error)
-        setError("تعذر تحميل بعض بيانات CRM؛ حاول تحديث الصفحة.");
+      const errors = [
+        ["العملاء",l.error,l.status],
+        ["مهام المتابعة",t.error,t.status],
+        ["عدد المهام المعلقة",p.error,p.status]
+      ] as const;
+      const failures = errors.filter(([,err])=>Boolean(err)).map(([label,err,status])=>
+        `${label}: HTTP ${status||0} / ${err?.code||"unknown"}`);
+      if(failures.length)
+        setError("تعذر تحميل بعض بيانات CRM — "+failures.join("؛ ")+".");
       setLeads(l.error?[]:(l.data||[]) as Lead[]);
       setTasks(t.error?[]:(t.data||[]) as Task[]);
       setLeadTotal(l.error?null:l.count??null);
