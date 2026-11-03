@@ -2,9 +2,9 @@
 import { useCallback, useEffect, useState } from "react";
 import { ArrowRight, CheckCircle2, LoaderCircle, LogOut, Plus, RefreshCw, ShieldCheck, UsersRound } from "lucide-react";
 import Link from "next/link";
-import type { User } from "@supabase/supabase-js";
+import type { User, Session } from "@supabase/supabase-js";
 import { getSupabase } from "@/lib/supabase-browser";
-import { currentUser, currentSession, isExpiredAuthError } from "@/lib/auth-session";
+import { currentSession, isExpiredAuthError } from "@/lib/auth-session";
 
 type Member = { organization_id: string; role: string };
 type Lead = { id: string; full_name: string; business_name: string | null; phone: string | null; business_type: string; source: string; stage: string; priority: string; created_at: string };
@@ -92,7 +92,7 @@ export default function LiveCrm() {
     return()=>{window.removeEventListener("popstate",sync);window.removeEventListener("agent:select-crm-view",handle);};
   },[]);
 
-  const load = useCallback(async (activeUser: User | null) => {
+  const load = useCallback(async (activeUser: User | null, eventSession?: Session | null) => {
     if (!db || !activeUser) {
       setMembership(null);setLeads([]);setTasks([]);
       setLeadTotal(null);setPendingTotal(null);setError("");setChecking(false);return;
@@ -101,11 +101,17 @@ export default function LiveCrm() {
     setLeadTotal(null);setPendingTotal(null);
     // Trust an up-to-date session, never the old component state.
     // A successful Auth login does not imply the Data API is ready or authorized.
-    const activeSession = await currentSession(db);
-    if (!activeSession || activeSession.user.id !== activeUser.id) {
+    // Auth events already provide a valid session. Reading getSession again
+    // while a refresh/sign-in event is still settling can race with that event.
+    const activeSession = eventSession === undefined ? await currentSession(db) : eventSession;
+    if (!activeSession) {
       setMembership(null);
-      setError("جلسة الدخول غير مكتملة. أعد تسجيل الدخول من هذه الصفحة.");
+      setError("انتهت جلسة الدخول. يرجى تسجيل الدخول مرة أخرى.");
       setChecking(false); return;
+    }
+    if (activeSession.user.id !== activeUser.id) {
+      // Stale event: a newer login is active, so don't invalidate its state.
+      return;
     }
     let membershipResult = await db.from("organization_members")
       .select("organization_id,role").eq("user_id",activeSession.user.id).limit(1);
@@ -220,19 +226,20 @@ export default function LiveCrm() {
   useEffect(() => {
     if (!db) { setChecking(false); return; }
     let active = true;
-    void currentUser(db).then((signedInUser) => {
-      if (active) { setUser(signedInUser); void load(signedInUser); }
-    }).catch(() => {
-      if (active) { setUser(null); setMembership(null); setChecking(false); }
-    });
-    const { data: listener } = db.auth.onAuthStateChange((_event, session) => {
+    // INITIAL_SESSION is delivered by Supabase after stored auth is restored.
+    // Do not concurrently call currentUser()/getSession() here; that creates
+    // competing initial-load requests and misleading session errors.
+    const { data: listener } = db.auth.onAuthStateChange((event, session) => {
       if (!active) return;
+      if (!["INITIAL_SESSION","SIGNED_IN","SIGNED_OUT","TOKEN_REFRESHED","USER_UPDATED"].includes(event)) return;
       setUser(session?.user ?? null);
-      // Schedule the data load outside the auth event callback.
-      setTimeout(() => { if (active) void load(session?.user ?? null); }, 0);
+      // Avoid Supabase auth lock reentrancy by deferring database reads.
+      setTimeout(() => {
+        if (active) void load(session?.user ?? null,session);
+      },0);
     });
-    return () => { active = false; listener.subscription.unsubscribe(); };
-  }, [db, load]);
+    return () => { active=false; listener.subscription.unsubscribe(); };
+  }, [db,load]);
 
   async function signIn() {
     if (!db || !email.trim()) return;
