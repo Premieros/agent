@@ -70,8 +70,11 @@ export default function LiveCrm() {
     }
     let membershipResult = await db.from("organization_members")
       .select("organization_id,role").eq("user_id",activeSession.user.id).limit(1);
-    if (membershipResult.error && (isExpiredAuthError(membershipResult.error) ||
-      membershipResult.status === 401)) {
+    let membershipError: { code?: string; message?: string } | null = membershipResult.error;
+    let memberships: Member[] | null = membershipResult.data;
+    let membershipStatus = membershipResult.status;
+    if (membershipError && (isExpiredAuthError(membershipError) ||
+      membershipStatus === 401)) {
       // Explicitly attach the validated access token to the Data API request.
       // This distinguishes a missing Authorization header from a database GRANT/RLS denial.
       // Do not copy a service-role key to the browser or bypass RLS.
@@ -93,26 +96,25 @@ export default function LiveCrm() {
           });
           const payload: unknown = await rest.json();
           if (rest.ok && Array.isArray(payload)) {
-            membershipResult = { ...membershipResult, data: payload as Member[], error: null, status: rest.status };
+            memberships = payload as Member[];
+            membershipError = null;
+            membershipStatus = rest.status;
           } else {
             const failure = payload && typeof payload === "object"
               ? payload as { code?: string; message?: string } : {};
-            membershipResult = {
-              ...membershipResult, data: null,
-              error: { code: failure.code || "UNKNOWN", message: failure.message || "REST request failed" },
-              status: rest.status
-            };
+            memberships = null;
+            membershipError = { code: failure.code || "UNKNOWN", message: failure.message || "REST request failed" };
+            membershipStatus = rest.status;
           }
         } catch {
           // Preserve the initial Supabase failure if network access is unavailable.
         }
       }
     }
-    const {data:memberships,error:membershipError}=membershipResult;
     if(membershipError){
       setMembership(null);
       const code=membershipError.code || "unknown";
-      const status=membershipResult.status || 0;
+      const status=membershipStatus || 0;
       const authRole=activeSession.user.role === "authenticated" ? "authenticated" : "not-authenticated";
       const kind=code==="42501"?"رفض PostgreSQL صلاحية الوصول إلى جدول العضويات":
         status===401?"تم رفض جلسة المصادقة":
