@@ -56,7 +56,7 @@ export default function LiveCrm() {
   const load = useCallback(async (activeUser: User | null) => {
     if (!db || !activeUser) {
       setMembership(null);setLeads([]);setTasks([]);
-      setLeadTotal(null);setPendingTotal(null);setChecking(false);return;
+      setLeadTotal(null);setPendingTotal(null);setError("");setChecking(false);return;
     }
     setChecking(true);
     setLeadTotal(null);setPendingTotal(null);
@@ -148,7 +148,7 @@ export default function LiveCrm() {
     const { error: e } = await db.auth.signInWithPassword({ email: email.trim(), password });
     setBusy(false);
     if (e) setError("فشل تسجيل الدخول. راجع البريد وكلمة المرور. لو حسابك كان برابط البريد فقط، لازم تعيّن كلمة مرور بعد تسجيل دخول ناجح أولًا.");
-    else setPassword("");
+    else { setError(""); setPassword(""); }
   }
   async function savePassword() {
     if (!db || !user || newPassword.length < 12 || newPassword !== confirmPassword) return;
