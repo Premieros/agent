@@ -32,3 +32,29 @@ The integration contract should be a public widget identifier plus server-valida
 
 ## Safety
 No destructive migrations, no automatic sending of customer messages, and no modifications to existing AGENT business tables are part of this PR.
+
+
+## Public website chat (feature-gated; never enable before review)
+
+Additional files: `app/api/support/public/sessions/route.ts`, `app/api/support/public/messages/route.ts`, `app/support/widget.js/route.ts`, and `supabase/migrations/20261103_support_public_limits.sql`.
+
+1. Apply **both** additive migrations on a staging database first, then test organization and cross-project isolation.
+2. Set `SUPABASE_SERVICE_ROLE_KEY` as a **server-only** Vercel secret (never `NEXT_PUBLIC_`). This secret can bypass RLS; do not expose it or put it in the widget.
+3. Ensure `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` target the same AGENT database.
+4. Configure an AI provider server-side (OpenAI or Gemini) for generated answers. Without an AI provider, visitor replies use a safe no-answer fallback. The admin test supports clearly labeled extractive previews without a provider.
+5. Review traffic abuse protections, error behavior, and cost budgets. Only then set `SUPPORT_PUBLIC_CHAT_ENABLED=true` on a controlled deployment.
+6. In `/support`, create a project, add text knowledge, and add an allowed HTTPS origin. Then place this in that website's HTML (replace placeholders):
+
+```html
+<script src="https://YOUR-AGENT-HOST/support/widget.js" data-widget-key="YOUR_PUBLIC_WIDGET_KEY" defer></script>
+```
+
+The `data-widget-key` identifies a configured website; it is not a secret. The server verifies the HTTPS Origin and project-bound session token for every message. Browsers store the visitor token in per-tab `sessionStorage`. There is no cross-site session cookie requirement.
+
+### Important restrictions
+- Do not rely solely on the Origin header as strong caller authentication. Enforce Vercel WAF / upstream rate limits in addition to database limits, and test anonymous abuse with a real edge deployment.
+- Keep the public feature gate disabled until the migration, configuration, tests, security review, and audit are complete.
+- The current lookup is conservative keyword matching over plain-text documents, not vector RAG. PDF/DOCX/XLSX extraction and embeddings need a later ingestion pipeline.
+- The widget is a minimal web implementation; mobile apps need their own authenticated adapter.
+- Vercel Preview environment AI secrets are not automatically inherited from Production. Configure scoped preview secrets only when appropriate.
+- AGENT CRM and marketing data are separate from `support_*` tables.
