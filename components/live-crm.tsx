@@ -78,7 +78,11 @@ export default function LiveCrm() {
       if (isExpiredAuthError(membershipError)) {
         setUser(null);
         setError("انتهت جلسة الدخول. سجّل الدخول مرة أخرى.");
-      } else setError("تعذر تحميل صلاحيات الحساب. جرّب تحديث الصفحة.");
+      } else {
+        const status = membershipResult.status || 0;
+        const code = membershipError.code || "unknown";
+        setError(`تعذر قراءة عضوية AGENT من Supabase (HTTP ${status}، code: ${code}). العضوية قد تكون موجودة؛ راجع إعدادات الاتصال وRLS بدلاً من إنشاء حساب جديد.`);
+      }
       setChecking(false); return;
     }
     setError("");
@@ -208,7 +212,7 @@ export default function LiveCrm() {
           </>}
         </form>
       </div>}
-      {db && !checking && user && !membership && <div className="crm-card"><h2>حسابك جاهز، وينتظر إضافتك للفريق</h2><p>البريد: <b dir="ltr">{user.email}</b></p><p>مسؤول النظام لازم يضيف حسابك لعضوية الشركة. ده إجراء مقصود لحماية العملاء والمحادثات، ومش هنسمح لحساب غير معتمد يشوف أي بيانات.</p><button className="crm-btn-secondary" onClick={()=>void load(user)}>إعادة فحص العضوية <RefreshCw size={15}/></button></div>}
+      {db && !checking && user && !membership && !error && <div className="crm-card"><h2>حسابك جاهز، وينتظر إضافتك للفريق</h2><p>البريد: <b dir="ltr">{user.email}</b></p><p>مسؤول النظام لازم يضيف حسابك لعضوية الشركة. ده إجراء مقصود لحماية العملاء والمحادثات، ومش هنسمح لحساب غير معتمد يشوف أي بيانات.</p><button className="crm-btn-secondary" onClick={()=>void load(user)}>إعادة فحص العضوية <RefreshCw size={15}/></button></div>}
       {db && !checking && membership && user && <>
         {crmView==="account" && <section className="crm-card crm-password-panel">
           <div className="crm-section-head"><div><h2>تسجيل الدخول بكلمة مرور</h2><p>عيّن كلمة مرور مرة واحدة، علشان متحتاجش رسالة بريد في كل دخول.</p></div>
