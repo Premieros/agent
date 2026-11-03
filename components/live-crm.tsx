@@ -4,7 +4,7 @@ import { ArrowRight, CheckCircle2, LoaderCircle, LogOut, Plus, RefreshCw, Shield
 import Link from "next/link";
 import type { User } from "@supabase/supabase-js";
 import { getSupabase } from "@/lib/supabase-browser";
-import { currentUser, isExpiredAuthError, recoverExpiredSession } from "@/lib/auth-session";
+import { currentUser, currentSession, isExpiredAuthError } from "@/lib/auth-session";
 
 type Member = { organization_id: string; role: string };
 type Lead = { id: string; full_name: string; business_name: string | null; phone: string | null; business_type: string; source: string; stage: string; priority: string; created_at: string };
@@ -60,30 +60,35 @@ export default function LiveCrm() {
     }
     setChecking(true);
     setLeadTotal(null);setPendingTotal(null);
-    let membershipResult = await db.from("organization_members")
-      .select("organization_id, role").eq("user_id", activeUser.id).limit(1);
-    if (membershipResult.error && isExpiredAuthError(membershipResult.error)) {
-      const restored = await recoverExpiredSession(db);
-      if (!restored) {
-        setUser(null); setMembership(null);
-        setError("انتهت جلسة الدخول. سجّل الدخول مرة أخرى.");
-        setChecking(false); return;
-      }
-      membershipResult = await db.from("organization_members")
-        .select("organization_id, role").eq("user_id", restored.id).limit(1);
-    }
-    const {data: memberships, error: membershipError} = membershipResult;
-    if (membershipError) {
+    // Trust an up-to-date session, never the old component state.
+    // A successful Auth login does not imply the Data API is ready or authorized.
+    const activeSession = await currentSession(db);
+    if (!activeSession || activeSession.user.id !== activeUser.id) {
       setMembership(null);
-      if (isExpiredAuthError(membershipError)) {
-        setUser(null);
-        setError("انتهت جلسة الدخول. سجّل الدخول مرة أخرى.");
-      } else {
-        const status = membershipResult.status || 0;
-        const code = membershipError.code || "unknown";
-        setError(`تعذر قراءة عضوية AGENT من Supabase (HTTP ${status}، code: ${code}). العضوية قد تكون موجودة؛ راجع إعدادات الاتصال وRLS بدلاً من إنشاء حساب جديد.`);
-      }
+      setError("جلسة الدخول غير مكتملة. أعد تسجيل الدخول من هذه الصفحة.");
       setChecking(false); return;
+    }
+    let membershipResult = await db.from("organization_members")
+      .select("organization_id,role").eq("user_id",activeSession.user.id).limit(1);
+    if (membershipResult.error && (isExpiredAuthError(membershipResult.error) ||
+      membershipResult.status === 401)) {
+      const refreshed=await db.auth.refreshSession();
+      if(refreshed.data.session && !refreshed.error){
+        membershipResult=await db.from("organization_members")
+          .select("organization_id,role").eq("user_id",refreshed.data.session.user.id).limit(1);
+      }
+    }
+    const {data:memberships,error:membershipError}=membershipResult;
+    if(membershipError){
+      setMembership(null);
+      const code=membershipError.code || "unknown";
+      const status=membershipResult.status || 0;
+      const kind=status===401?"تم رفض جلسة المصادقة":
+        status===403?"صلاحيات قراءة جدول العضويات مرفوضة":
+        status===404?"جدول العضويات أو واجهة Supabase غير متاح":
+        status===0?"تعذر الاتصال بخدمة قاعدة البيانات":"فشل استعلام عضوية المؤسسة";
+      setError(`${kind} — HTTP ${status} / ${code}. حسابك قد يكون مديرًا بالفعل؛ لا تنشئ عضوية جديدة.`);
+      setChecking(false);return;
     }
     setError("");
     const member = (memberships?.[0] ?? null) as Member | null;
