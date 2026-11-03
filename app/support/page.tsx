@@ -37,6 +37,10 @@ export default function SupportAdmin(){
  const button={padding:"10px 16px",borderRadius:8,border:"1px solid #888",cursor:"pointer"} as const;
  return <main dir="rtl" style={{maxWidth:900,margin:"auto",padding:24,lineHeight:1.7}}>
   <Link href="/assistant">← العودة إلى AGENT</Link>
+  <div style={{display:"flex",gap:12,flexWrap:"wrap",alignItems:"center",marginTop:16}}>
+   <Link href="/support/customer" target="_blank" style={{display:"inline-block",padding:"10px 16px",borderRadius:12,background:"#0b758b",color:"#fff",textDecoration:"none"}}>فتح نسخة العملاء التجريبية ↗</Link>
+   <span style={{fontSize:13,color:"#6b7280"}}>معاينة شكل الشات وأسئلته دون ربطه ببيانات حقيقية.</span>
+  </div>
   <h1>خدمة العملاء متعددة المشاريع</h1>
   <p>كل مشروع له إعداداته ومصادر معرفته المستقلة. الربط العام والرد الآلي لا يُفعّلان قبل اكتمال الاختبارات الأمنية ونشر واجهة العميل.</p>
   {message&&<p role="status" style={{padding:12,border:"1px solid #888",borderRadius:8}}>{message}</p>}
@@ -68,6 +72,9 @@ export default function SupportAdmin(){
     <button style={button} disabled={busy} onClick={()=>void act(async()=>{await request("/api/support/widgets","POST",{projectId:chosen,origin});setOrigin("");const w=await request("/api/support/widgets?projectId="+chosen);setWidgets(w.widgets)})}>إنشاء مفتاح موقع</button>
     {widgets.map(w=><div key={w.id} style={{padding:10,border:"1px solid #888",borderRadius:8,overflowWrap:"anywhere"}}>
      <b>{w.allowed_origin}</b><p>Widget Key: <code>{w.public_key}</code></p>
+     <p style={{fontSize:13}}>لإضافة الشات إلى موقعك المسموح به، انسخ الكود التالي وضعه قبل إغلاق صفحة الموقع:</p>
+     <textarea readOnly rows={2} style={{...field,fontFamily:"monospace",fontSize:12,direction:"ltr"}} value={`<script src="${typeof window!=="undefined"?window.location.origin:"https://YOUR-AGENT-HOST"}/support/widget.js" data-widget-key="${w.public_key}" defer></script>`}/>
+     <p style={{fontSize:12,color:"#64748b"}}>لن يعمل الشات العام قبل تطبيق ترحيلات قاعدة البيانات وتفعيل مفاتيح الخادم وإجراء اختبارات الأمان.</p>
      <button disabled={busy} onClick={()=>void act(async()=>{await request("/api/support/widgets","PATCH",{id:w.id,projectId:chosen,enabled:!w.enabled});setWidgets(a=>a.map(x=>x.id===w.id?{...x,enabled:!x.enabled}:x))})}>{w.enabled?"تعطيل":"تفعيل"}</button>
     </div>)}
    </>}
