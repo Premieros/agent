@@ -39,7 +39,10 @@ export async function POST(req:NextRequest){
   });
   const providers=configuredProviders();
   const provider=providers.includes("openai")?"openai":providers.includes("gemini")?"gemini":null;
-  if(!provider)return response({\n   answer:"معاينة من المعرفة (من دون نموذج ذكاء اصطناعي):\\n"+matched[0].content.slice(0,1100),\n   sources:matched.map(doc=>({id:doc.id,title:doc.title})),grounded:true,model:null,mode:"extractive"\n  });
+  if(!provider)return response({
+   answer:"معاينة من المعرفة (من دون نموذج ذكاء اصطناعي):\\n"+matched[0].content.slice(0,1100),
+   sources:matched.map(doc=>({id:doc.id,title:doc.title})),grounded:true,model:null,mode:"extractive"
+  });
   const config=resolveAIConfig({provider,keySource:"server"});
   const context=[
    "سؤال العميل:",body.question.trim(),
