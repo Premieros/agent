@@ -15,12 +15,12 @@ function demoAnswer(question:string):string {
  return demoReplies.find(x=>x.match.test(question))?.reply||
  "أهلًا بك! هذه تجربة توضيحية لواجهة خدمة العملاء من AGENT. بعد ربط مشروع حقيقي وإضافة قاعدة المعرفة، ستظهر الإجابات المعتمدة الخاصة بهذا المشروع بدل الردود التجريبية.";
 }
-let seed=0;
 export default function CustomerChatPage(){
+ const nextId=useRef(1);
  const [widgetKey,setWidgetKey]=useState("");
  const [ready,setReady]=useState(false);
  const [messages,setMessages]=useState<ChatMessage[]>([
-  {id:++seed,kind:"assistant",body:"أهلًا وسهلًا 👋 كيف أقدر أساعدك النهارده؟"}
+  {id:1,kind:"assistant",body:"أهلًا وسهلًا 👋 كيف أقدر أساعدك النهارده؟"}
  ]);
  const [draft,setDraft]=useState("");
  const [busy,setBusy]=useState(false);
@@ -34,7 +34,7 @@ export default function CustomerChatPage(){
   setReady(true);
  },[]);
  useEffect(()=>{boxRef.current?.scrollTo({top:boxRef.current.scrollHeight,behavior:"smooth"});},[messages,busy]);
- function add(kind:ChatMessage["kind"],body:string){setMessages(v=>[...v,{id:++seed,kind,body}]);}
+ function add(kind:ChatMessage["kind"],body:string){setMessages(v=>[...v,{id:++nextId.current,kind,body}]);}
  async function call(path:string,data:unknown){
   const res=await fetch(path,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(data),cache:"no-store"});
   const parsed=await res.json() as Reply & Partial<VisitorSession>;
@@ -63,7 +63,7 @@ export default function CustomerChatPage(){
   }catch(e){setNotice(e instanceof Error?e.message:"تعذر الرد الآن. حاول لاحقًا.");}
   finally{setBusy(false);}
  }
- function reset(){setMessages([{id:++seed,kind:"assistant",body:"أهلًا وسهلًا 👋 كيف أقدر أساعدك النهارده؟"}]);setSession(null);setNotice("");setDraft("");}
+ function reset(){setMessages([{id:++nextId.current,kind:"assistant",body:"أهلًا وسهلًا 👋 كيف أقدر أساعدك النهارده؟"}]);setSession(null);setNotice("");setDraft("");}
  return <main className="customer-surface" dir="rtl">
   <style>{`
    .customer-surface{min-height:100vh;background:radial-gradient(circle at 8% 7%,#e0f4fc,transparent 38%),radial-gradient(circle at 95% 100%,#dceeea,transparent 38%),#f7fafc;color:#1b3540;font-family:inherit;padding:36px 18px}
