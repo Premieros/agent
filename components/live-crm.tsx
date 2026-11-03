@@ -17,6 +17,44 @@ const types = [
 const stages: Record<string, string> = { new: "جديد", qualifying: "تأهيل", qualified: "جاهز للمبيعات", contacting: "جارٍ التواصل", site_visit: "معاينة", proposal: "عرض سعر", won: "تم البيع", lost: "لم يتم البيع" };
 const base = { full_name: "", business_name: "", phone: "", business_type: "restaurant" };
 
+type CrmReadResult<T> = {
+  data: T[] | null; count: number | null;
+  error: { code?: string } | null; status: number;
+};
+
+// Use the user's own JWT on retry; service keys never reach the browser.
+// RLS remains enforced for every retry.
+async function retryCrmRead<T>(
+  table: "leads" | "handoff_tasks",
+  filters: Record<string,string>,
+  token: string
+): Promise<CrmReadResult<T>> {
+  const supabaseUrl=process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const publishableKey=process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
+  if(!supabaseUrl||!publishableKey)
+    return {data:null,count:null,error:{code:"CONFIG_MISSING"},status:0};
+  try{
+    const endpoint=new URL("/rest/v1/"+table,supabaseUrl);
+    for(const [key,value] of Object.entries(filters)) endpoint.searchParams.set(key,value);
+    const res=await fetch(endpoint,{
+      headers:{
+        apikey:publishableKey,
+        Authorization:"Bearer "+token,
+        Prefer:"count=exact",
+        Accept:"application/json"
+      },cache:"no-store"
+    });
+    const json:unknown=await res.json();
+    if(!res.ok||!Array.isArray(json)){
+      const details=json&&typeof json==="object"?json as {code?:string}:{};
+      return {data:null,count:null,error:{code:details.code||"REST_FAILED"},status:res.status};
+    }
+    const range=res.headers.get("content-range");
+    const total=range?.match(/\\/(\\d+)$/);
+    return {data:json as T[],count:total?Number(total[1]):null,error:null,status:res.status};
+  }catch{return {data:null,count:null,error:{code:"NETWORK_ERROR"},status:0};}
+}
+
 export default function LiveCrm() {
   const db = getSupabase();
   const [user, setUser] = useState<User | null>(null);
@@ -139,19 +177,41 @@ export default function LiveCrm() {
         db.from("handoff_tasks").select("id",{count:"exact",head:true})
           .eq("organization_id",member.organization_id).eq("status","pending")
       ]);
+      const shouldRetry=(r:{error:{code?:string}|null;status:number})=>
+        Boolean(r.error)&&(r.status===401||r.error?.code==="42501");
+      const [leadsResult,tasksResult,pendingResult]=await Promise.all([
+        shouldRetry(l)
+          ? retryCrmRead<Lead>("leads",{
+              select:"id,full_name,business_name,phone,business_type,source,stage,priority,created_at",
+              organization_id:"eq."+member.organization_id,
+              order:"created_at.desc",limit:"100"
+            },activeSession.access_token) : Promise.resolve(l),
+        shouldRetry(t)
+          ? retryCrmRead<Task>("handoff_tasks",{
+              select:"id,lead_id,handoff_type,status,summary",
+              organization_id:"eq."+member.organization_id,
+              order:"created_at.desc",limit:"100"
+            },activeSession.access_token) : Promise.resolve(t),
+        shouldRetry(p)
+          ? retryCrmRead<{id:string}>("handoff_tasks",{
+              select:"id",organization_id:"eq."+member.organization_id,
+              status:"eq.pending",limit:"0"
+            },activeSession.access_token) : Promise.resolve(p)
+      ]);
+      const lFinal=leadsResult,tFinal=tasksResult,pFinal=pendingResult;
       const errors = [
-        ["العملاء",l.error,l.status],
-        ["مهام المتابعة",t.error,t.status],
-        ["عدد المهام المعلقة",p.error,p.status]
+        ["العملاء",lFinal.error,lFinal.status],
+        ["مهام المتابعة",tFinal.error,tFinal.status],
+        ["عدد المهام المعلقة",pFinal.error,pFinal.status]
       ] as const;
       const failures = errors.filter(([,err])=>Boolean(err)).map(([label,err,status])=>
         `${label}: HTTP ${status||0} / ${err?.code||"unknown"}`);
       if(failures.length)
         setError("تعذر تحميل بعض بيانات CRM — "+failures.join("؛ ")+".");
-      setLeads(l.error?[]:(l.data||[]) as Lead[]);
-      setTasks(t.error?[]:(t.data||[]) as Task[]);
-      setLeadTotal(l.error?null:l.count??null);
-      setPendingTotal(p.error?null:p.count??null);
+      setLeads(lFinal.error?[]:(lFinal.data||[]) as Lead[]);
+      setTasks(tFinal.error?[]:(tFinal.data||[]) as Task[]);
+      setLeadTotal(lFinal.error?null:lFinal.count??null);
+      setPendingTotal(pFinal.error?null:pFinal.count??null);
     }
     setChecking(false);
   }, [db]);
