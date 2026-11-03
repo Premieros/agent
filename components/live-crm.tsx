@@ -50,8 +50,9 @@ async function retryCrmRead<T>(
       return {data:null,count:null,error:{code:details.code||"REST_FAILED"},status:res.status};
     }
     const range=res.headers.get("content-range");
-    const total=range?.match(/\\/(\\d+)$/);
-    return {data:json as T[],count:total?Number(total[1]):null,error:null,status:res.status};
+    const totalPart=range?.split("/").pop() || "";
+    const total=/^[0-9]+$/.test(totalPart)?Number(totalPart):null;
+    return {data:json as T[],count:total,error:null,status:res.status};
   }catch{return {data:null,count:null,error:{code:"NETWORK_ERROR"},status:0};}
 }
 
