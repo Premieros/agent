@@ -39,7 +39,7 @@ export async function POST(req:NextRequest){
   });
   const providers=configuredProviders();
   const provider=providers.includes("openai")?"openai":providers.includes("gemini")?"gemini":null;
-  if(!provider)return response({error:"لا يوجد مفتاح OpenAI أو Gemini على الخادم لتشغيل التجربة."},503);
+  if(!provider)return response({\n   answer:"معاينة من المعرفة (من دون نموذج ذكاء اصطناعي):\\n"+matched[0].content.slice(0,1100),\n   sources:matched.map(doc=>({id:doc.id,title:doc.title})),grounded:true,model:null,mode:"extractive"\n  });
   const config=resolveAIConfig({provider,keySource:"server"});
   const context=[
    "سؤال العميل:",body.question.trim(),
@@ -55,7 +55,7 @@ export async function POST(req:NextRequest){
    "تعليمات أسلوب المشروع (لا تتجاوز قواعد الأمان والمصادر): "+String(project.instructions).slice(0,3000)
   ].join("\n");
   const result=await askSelectedAgent(config,"مساعد خدمة العملاء",instructions,context,650,"general");
-  return response({answer:result.text,model:result.model,grounded:true,
+  return response({answer:result.text,model:result.model,grounded:true,mode:"ai",
    sources:matched.map(doc=>({id:doc.id,title:doc.title}))});
  }catch(e){
   if(e instanceof AIProviderError)return response({error:"تعذر الاتصال بالنموذج: "+e.code},502);
