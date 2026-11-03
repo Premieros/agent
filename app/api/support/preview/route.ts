@@ -8,7 +8,7 @@ const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const response = (body:unknown, status=200) => NextResponse.json(body,{status,headers:{"Cache-Control":"no-store"}});
 const words = (v:string) => new Set((v.toLocaleLowerCase("ar").match(/[\p{L}\p{N}]{3,}/gu)||[]).slice(0,80));
 type Knowledge = { id:string; title:string; content:string };
-export function selectSupportSources(query:string, documents:Knowledge[], max=4):Knowledge[] {
+function selectSupportSources(query:string, documents:Knowledge[], max=4):Knowledge[] {
  const tokens=words(query);
  return documents.map(doc=>{
   const title=doc.title.toLocaleLowerCase("ar"),body=doc.content.toLocaleLowerCase("ar");
