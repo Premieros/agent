@@ -1,3 +1,4 @@
+import {verifyPremierSupportIdentity,attachVerifiedIdentity,PREMIER_ORIGIN,PREMIER_WIDGET_KEY,IDENTITY_PREFIX} from "@/lib/premier-support-identity";
 import {NextRequest,NextResponse} from "next/server";
 import {supportService,getWidget,originFor,cors,consume,ipFor,tokenMatches} from "@/lib/support-public";
 
@@ -24,7 +25,7 @@ export async function POST(req:NextRequest){
    return result({error:"طلب غير صالح."},413,origin);
   const raw=await req.text();
   if(raw.length>2000)return result({error:"طلب غير صالح."},413,origin);
-  const body=JSON.parse(raw) as {widgetKey?:unknown;conversationId?:unknown;visitorToken?:unknown};
+  const body=JSON.parse(raw) as {widgetKey?:unknown;conversationId?:unknown;visitorToken?:unknown;selectedBranchId?:unknown};
   const widget=await getWidget(db,body.widgetKey,origin);
   if(!widget)return result({error:"الموقع غير مصرح."},403,null);
   if(typeof body.conversationId!=="string"||!uuid.test(body.conversationId)||
@@ -40,6 +41,24 @@ export async function POST(req:NextRequest){
    .eq("widget_id",widget.id).maybeSingle();
   if(convError||!conversation||!tokenMatches(body.visitorToken,conversation.customer_token_hash))
    return result({error:"انتهت المحادثة المحفوظة أو لم تعد متاحة.",code:"SESSION_EXPIRED"},401,origin);
+  // Attach identity to pre-existing conversations on their first authenticated restore.
+  if(origin===PREMIER_ORIGIN&&body.widgetKey===PREMIER_WIDGET_KEY){
+   const authorization=req.headers.get("authorization")||"";
+   if(authorization.startsWith("Bearer ")){
+    try{
+     const identity=await verifyPremierSupportIdentity(authorization.slice(7).trim(),body.selectedBranchId);
+     if(identity){
+      const {data:previous}=await db.from("support_messages").select("id")
+       .eq("organization_id",widget.organization_id).eq("project_id",widget.project_id)
+       .eq("conversation_id",conversation.id).eq("role","system")
+       .like("body",IDENTITY_PREFIX+"%").limit(1);
+      if(!previous?.length)await attachVerifiedIdentity(db,{
+       id:conversation.id,organization_id:widget.organization_id,project_id:widget.project_id
+      },identity);
+     }
+    }catch{/* History must remain available even when identity lookup fails. */}
+   }
+  }
   const {data,error}=await db.from("support_messages")
    .select("id,role,body,created_at").eq("organization_id",widget.organization_id)
    .eq("project_id",widget.project_id).eq("conversation_id",conversation.id)
