@@ -251,7 +251,7 @@ body{
  background:#fff!important;border:1px solid #cbdde2!important;
  border-radius:13px!important;color:#19353f!important
 }
-.support-admin-theme button{
+.support-admin-theme:not(.support-simple) button{
  background:#0b758b!important;color:#fff!important;
  border:1px solid #0b758b!important;border-radius:13px!important;
  padding:10px 15px!important
