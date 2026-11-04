@@ -61,7 +61,11 @@ export async function POST(req:NextRequest){
     .normalize("NFKC").replace(/[\u064B-\u065F\u0670]/g,"")
     .replace(/[!؟?،.\s]+/g," ").trim();
    const isGreeting=/^(?:السلام عليكم(?: ورحمة الله(?: وبركاته)?)?|وعليكم السلام(?: ورحمة الله(?: وبركاته)?)?|سلام(?: عليكم)?|اهلا(?: وسهلا)?|أهلا(?: وسهلا)?|مرحبا|مرحبًا|صباح الخير|مساء الخير|هاي|hello|hi)$/.test(greeting);
-   if(isGreeting){
+   const asksIfAutomated=/(?:هل|انت|أنت|انتي|أنتي|هل انت|هل أنت|ده|دا)\\s*(?:بوت|روبوت|ذكاء اصطناعي|مساعد آلي|نظام آلي)|(?:اكلم|بتكلم|اتكلم|بتحدث)\\s*(?:مع|ل)\\s*(?:بوت|روبوت|إنسان|انسان|شخص|موظف)|(?:are you|is this)\\s*(?:a |an )?(?:bot|ai|human|person)/i.test(message);
+   if(asksIfAutomated){
+    answer="أنت تتحدث مع نظام المساعدة الآلي لخدمة عملاء "+project.name+". يمكنني الإجابة عن المعلومات المتاحة، وإذا احتجت دعمًا بشريًا يمكنك التواصل مع فريق الدعم.";
+    sources=[];
+   }else if(isGreeting){
     answer="وعليكم السلام، أهلًا بك في "+project.name+"! كيف أقدر أساعدك اليوم؟";
     sources=[];
    }else if(matching.length){
