@@ -9,6 +9,7 @@ type Project={id:string;name:string;slug:string;instructions:string};
 type Doc={id:string;title:string;created_at:string};
 type Widget={id:string;public_key:string;allowed_origin:string;enabled:boolean};
 type Notice={kind:"success"|"error";text:string};
+type SupportHealth={serverConfigured:boolean;aiConfigured:boolean;publicEnabled:boolean;limiterReady:boolean;widgets:Array<{allowed_origin:string;enabled:boolean}>;ready:boolean};
 
 export default function SupportAdmin(){
  const db=getSupabase();
@@ -25,6 +26,15 @@ export default function SupportAdmin(){
  const [busy,setBusy]=useState(false);
  const [creating,setCreating]=useState(false);
  const [copiedKey,setCopiedKey]=useState("");
+ const [health,setHealth]=useState<SupportHealth|null>(null);
+ const [checking,setChecking]=useState(false);
+ async function checkHealth(){
+  if(!chosen)return;
+  setChecking(true);
+  try{const next=await request("/api/support/diagnostics?projectId="+encodeURIComponent(chosen));setHealth(next)}
+  catch(e){setNotice({kind:"error",text:e instanceof Error?e.message:String(e)})}
+  finally{setChecking(false)}
+ }
  async function copyEmbed(snippet:string,key:string){
   try{await navigator.clipboard.writeText(snippet);setCopiedKey(key);setNotice({kind:"success",text:"تم نسخ كود الربط. الصقه قبل إغلاق </body> في موقعك."})}
   catch{setNotice({kind:"error",text:"تعذر النسخ تلقائيًا. حدّد الكود وانسخه يدويًا."})}
@@ -61,7 +71,7 @@ export default function SupportAdmin(){
   if(!chosen){setDocs([]);setWidgets([]);setInstructions("");return;}
   let cancelled=false;
   setInstructions(project?.instructions||"");
-  setAnswer("");setSources([]);
+  setAnswer("");setSources([]);setHealth(null);
   void Promise.all([
    request("/api/support/documents?projectId="+encodeURIComponent(chosen)),
    request("/api/support/widgets?projectId="+encodeURIComponent(chosen))
@@ -167,6 +177,20 @@ export default function SupportAdmin(){
 
    <section className="support-simple-card">
     <h2>4. أضف الشات إلى أي موقع</h2>
+    <div style={{display:"grid",gap:8,padding:12,border:"1px solid #dbe8ea",borderRadius:12,background:"#f6fafc"}}>
+     <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,flexWrap:"wrap"}}>
+      <strong>فحص جاهزية الربط</strong>
+      <button type="button" style={secondary} disabled={checking||busy} onClick={()=>void checkHealth()}>{checking?"جارٍ الفحص…":"فحص الاتصال"}</button>
+     </div>
+     {health&&<div style={{display:"grid",gap:5,fontSize:12}}>
+      <span>{health.serverConfigured?"✓":"✗"} اتصال الخادم بقاعدة AGENT</span>
+      <span>{health.limiterReady?"✓":"✗"} حدود الاستخدام الآمنة</span>
+      <span>{health.aiConfigured?"✓":"✗"} مفتاح Gemini أو OpenAI على خادم AGENT</span>
+      <span>{health.publicEnabled?"✓":"✗"} تفعيل الشات العام على الخادم</span>
+      <span>{health.widgets.some(w=>w.enabled)?"✓":"✗"} موقع واحد مفعّل على الأقل</span>
+      <strong>{health.ready?"الإعدادات الأساسية جاهزة. اختبر الشات من الموقع الفعلي قبل اعتماده.":"ما زال الربط يحتاج إلى الإعدادات غير المكتملة أعلاه."}</strong>
+     </div>}
+    </div>
     <p style={smallStyle}>يعمل على WordPress وShopify ومواقع HTML وReact وأي استضافة تسمح بإضافة JavaScript. لا يحتاج المشروع الآخر إلى Vercel أو Supabase أو مفتاح ذكاء اصطناعي.</p>
     <p style={smallStyle}>الطريقة: أضف رابط الموقع هنا ← انسخ الكود ← الصقه مرة واحدة قبل إغلاق <code dir="ltr">&lt;/body&gt;</code> في الموقع. إعداد الذكاء الاصطناعي يتم مرة واحدة داخل AGENT.</p>
     <div className="support-simple-grid">
