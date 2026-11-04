@@ -29,7 +29,7 @@ export function originFor(req:NextRequest):string|null{
 }
 export function cors(origin:string|null){
  return {"Cache-Control":"no-store","Vary":"Origin",...(origin?{"Access-Control-Allow-Origin":origin}:{}),
-  "Access-Control-Allow-Methods":"POST,OPTIONS","Access-Control-Allow-Headers":"Content-Type"};
+  "Access-Control-Allow-Methods":"POST,OPTIONS","Access-Control-Allow-Headers":"Content-Type,Authorization"};
 }
 export async function getWidget(db:SupabaseClient,key:unknown,origin:string|null):Promise<SupportWidget|null>{
  if(typeof key!=="string"||!/^[0-9a-f]{48}$/.test(key)||!origin)return null;
