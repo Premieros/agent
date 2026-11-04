@@ -20,7 +20,7 @@ export default function SupportAdmin(){
   if(!db)throw new Error("Supabase غير مُعد.");
   const session=await currentSession(db);if(!session)throw new Error("سجل الدخول أولًا.");
   const res=await fetch(path,{method,headers:{Authorization:"Bearer "+session.access_token,...(body?{"Content-Type":"application/json"}:{})},body:body?JSON.stringify(body):undefined});
-  const data=await res.json();if(!res.ok)throw new Error(data.error||"تعذر تنفيذ العملية.");return data;
+  const data=await res.json();if(!res.ok)throw new Error((data.error||"تعذر تنفيذ العملية.")+(data.code&&data.code!=="UNKNOWN"?" (code: "+data.code+")":""));return data;
  }
  async function load(){
   try{const data=await request("/api/support/projects");setProjects(data.projects);}catch(e){setMessage(String(e));}
@@ -43,7 +43,10 @@ export default function SupportAdmin(){
   </div>
   <h1>خدمة العملاء متعددة المشاريع</h1>
   <p>كل مشروع له إعداداته ومصادر معرفته المستقلة. الربط العام والرد الآلي لا يُفعّلان قبل اكتمال الاختبارات الأمنية ونشر واجهة العميل.</p>
-  {message&&<p role="status" style={{padding:12,border:"1px solid #888",borderRadius:8}}>{message}</p>}
+  {message&&<div role="alert" style={{padding:16,border:"1px solid #dfb5aa",background:"#fff6f3",borderRadius:13,color:"#853f30",display:"grid",gap:10}}>
+   <strong>تعذر تحميل بيانات خدمة العملاء</strong><span>{message}</span>
+   <button type="button" disabled={busy} onClick={()=>void load()} style={{width:"fit-content",padding:"8px 15px",borderRadius:10,border:"1px solid #b77b68",background:"#fff",color:"#853f30"}}>إعادة محاولة التحميل</button>
+  </div>}
   <section style={{display:"grid",gap:10,margin:"24px 0"}}>
    <h2>إضافة مشروع</h2><input style={field} placeholder="اسم المشروع" value={name} onChange={e=>setName(e.target.value)}/>
    <input style={field} placeholder="رمز المشروع مثل premier" value={slug} onChange={e=>setSlug(e.target.value)}/>
