@@ -1,3 +1,4 @@
+import {verifyPremierSupportIdentity,attachVerifiedIdentity,PREMIER_ORIGIN,PREMIER_WIDGET_KEY} from "@/lib/premier-support-identity";
 import {NextRequest,NextResponse} from "next/server";
 import {supportService,getWidget,originFor,cors,consume,ipFor,issueVisitorToken,sha} from "@/lib/support-public";
 export const runtime="nodejs";
@@ -15,7 +16,7 @@ export async function POST(req:NextRequest){
  try{
   if(Number(req.headers.get("content-length")||0)>3000)return response({error:"Request too large"},413,origin);
   const raw=await req.text();if(raw.length>3000)return response({error:"Request too large"},413,origin);
-  const body=JSON.parse(raw) as {widgetKey?:unknown};
+  const body=JSON.parse(raw) as {widgetKey?:unknown;selectedBranchId?:unknown};
   const widget=await getWidget(db,body.widgetKey,origin);
   if(!widget)return response({error:"الموقع غير مسموح."},403,null);
   const allowed=await consume(db,"support-session",widget.id+":"+ipFor(req),8,300);
@@ -26,6 +27,17 @@ export async function POST(req:NextRequest){
    widget_id:widget.id,customer_token_hash:sha(token),mode:"ai"
   }).select("id").single();
   if(error||!data)return response({error:"تعذر إنشاء المحادثة."},502,origin);
+  if(origin===PREMIER_ORIGIN&&body.widgetKey===PREMIER_WIDGET_KEY){
+   const authorization=req.headers.get("authorization")||"";
+   if(authorization.startsWith("Bearer ")){
+    try{
+     const identity=await verifyPremierSupportIdentity(authorization.slice(7).trim(),body.selectedBranchId);
+     if(identity)await attachVerifiedIdentity(db,{
+      id:data.id,organization_id:widget.organization_id,project_id:widget.project_id
+     },identity);
+    }catch{/* Identity enrichment is optional; do not block customer chat. */}
+   }
+  }
   return response({conversationId:data.id,visitorToken:token},201,origin);
  }catch{return response({error:"تعذر بدء المحادثة."},400,origin);}
 }
