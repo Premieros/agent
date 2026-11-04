@@ -11,6 +11,7 @@ const openRoutes=new Set([
  "/api/support/public/messages",
  "/api/support/public/history",
  "/api/support/premier-inbox",
+ "/api/support/johna-inbox",
  "/support/widget.js"
 ]);
 
