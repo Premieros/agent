@@ -34,6 +34,13 @@ export async function johnaSupportAdmin(req:NextRequest){
  if(!db)throw new JohnaAccessError(503,"خادم خدمة العملاء غير متاح.");
  const widget=await getWidget(db,JOHNA_WIDGET_KEY,JOHNA_ORIGIN);
  if(!widget)throw new JohnaAccessError(503,"مفتاح مشروع Johna-S غير مفعل في AGENT.");
+ // Never let a key created under another AGENT project expose that project's
+ // conversations to a Johna-S administrator, even on the same Pages origin.
+ const {data:project,error:projectError}=await db.from("support_projects")
+  .select("slug").eq("id",widget.project_id)
+  .eq("organization_id",widget.organization_id).maybeSingle();
+ if(projectError||project?.slug!=="johna-s")
+  throw new JohnaAccessError(403,"مفتاح المحادثة غير مرتبط بمشروع Johna-S.");
  const allowed=await consume(db,"johna-inbox-admin",data.user.id+":"+ipFor(req),60,60);
  if(!allowed)throw new JohnaAccessError(429,"طلبات كثيرة؛ حاول مرة أخرى.");
  return {db,widget,adminName:(profile.full_name||profile.username||"موظف الدعم").slice(0,100)};
