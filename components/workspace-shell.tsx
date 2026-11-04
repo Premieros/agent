@@ -3,10 +3,13 @@
 import {useEffect,useState,type ReactNode} from "react";
 import Link from "next/link";
 import {usePathname} from "next/navigation";
-import {Menu,MessagesSquare,PlugZap,Library,Plus,X} from "lucide-react";
+import {Menu,MessagesSquare,PlugZap,Library,Plus,X,Headphones,LayoutDashboard,UsersRound} from "lucide-react";
 
 const sections=[
+  {href:"/",label:"الرئيسية",icon:LayoutDashboard},
   {href:"/assistant",label:"المحادثات",icon:MessagesSquare},
+  {href:"/crm",label:"إدارة العملاء",icon:UsersRound},
+  {href:"/support",label:"خدمة العملاء",icon:Headphones},
   {href:"/assistant/integrations",label:"الربط وإعداداته",icon:PlugZap},
   {href:"/assistant/library",label:"المكتبة",icon:Library}
 ] as const;
@@ -14,7 +17,7 @@ const sections=[
 export default function WorkspaceShell({children}:{children:ReactNode}){
   const pathname=usePathname();
   const isWorkspace=pathname==="/"||pathname==="/studio"||pathname==="/assistant"||
-    pathname.startsWith("/assistant/")||pathname==="/crm"||pathname.startsWith("/crm/");
+    pathname.startsWith("/assistant/")||pathname==="/crm"||pathname.startsWith("/crm/")||pathname==="/support";
   const [mobileOpen,setMobileOpen]=useState(false);
   useEffect(()=>{
     const close=()=>setMobileOpen(false);
@@ -28,8 +31,8 @@ export default function WorkspaceShell({children}:{children:ReactNode}){
   },[]);
   useEffect(()=>{setMobileOpen(false);},[pathname]);
   if(!isWorkspace)return <>{children}</>;
-  const active=pathname.startsWith("/assistant/library")?sections[2]:
-    pathname.startsWith("/assistant/integrations")?sections[1]:sections[0];
+  const active=sections.find(item=>item.href===pathname) ||
+    sections.find(item=>item.href!=="/"&&pathname.startsWith(item.href+"/")) || sections[1];
   const title=active.label;
   return <div className="workspace-shell agent-chat-first">
     {mobileOpen&&<button type="button" className="workspace-backdrop" aria-label="إغلاق القائمة"
