@@ -35,7 +35,7 @@ export async function POST(req:NextRequest){
   const allowed=await consume(db,"support-history",widget.id+":"+ipFor(req),45,60);
   if(!allowed)return result({error:"طلبات كثيرة. حاول لاحقًا."},429,origin);
   const {data:conversation,error:convError}=await db.from("support_conversations")
-   .select("id,customer_token_hash").eq("id",body.conversationId)
+   .select("id,customer_token_hash,mode").eq("id",body.conversationId)
    .eq("organization_id",widget.organization_id)
    .eq("project_id",widget.project_id)
    .eq("widget_id",widget.id).maybeSingle();
@@ -64,8 +64,8 @@ export async function POST(req:NextRequest){
    .eq("project_id",widget.project_id).eq("conversation_id",conversation.id)
    .order("created_at",{ascending:false}).limit(100);
   if(error)return result({error:"تعذر استرجاع الرسائل."},503,origin);
-  return result({conversationId:conversation.id,messages:(data||[]).reverse()
+  return result({conversationId:conversation.id,mode:conversation.mode,messages:(data||[]).reverse()
    .filter(m=>m.role==="customer"||m.role==="assistant"||m.role==="employee")
-   .map(m=>({id:m.id,sender:m.role==="customer"?"visitor":"assistant",text:m.body}))},200,origin);
+   .map(m=>({id:m.id,role:m.role,sender:m.role==="customer"?"visitor":"assistant",text:m.body,createdAt:m.created_at}))},200,origin);
  }catch{return result({error:"تعذر استرجاع المحادثة."},400,origin);}
 }
