@@ -30,7 +30,7 @@ export async function GET(req:NextRequest){
     // A single dedicated test bucket confirms that the rate-limit function is callable.
     const {data,error}=await service.rpc("support_consume_limit",{
      p_key_hash:sha("support-health:"+session.organizationId+":"+projectId),
-     p_window_start:new Date("2026-01-01T00:00:00.000Z").toISOString(),
+     p_window_start:new Date(Math.floor(Date.now()/3600000)*3600000).toISOString(),
      p_max:100
     });
     limiterReady=!error&&data===true;
