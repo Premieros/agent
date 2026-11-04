@@ -1,3 +1,4 @@
+import {JOHNA_WIDGET_KEY,JOHNA_ORIGIN} from "@/lib/johna-support-admin";
 import {NextRequest,NextResponse} from "next/server";
 import {supportService,getWidget,originFor,cors,consume,ipFor,tokenMatches} from "@/lib/support-public";
 import {answerSupportWithFreeModels} from "@/lib/support-auto-ai";
@@ -55,6 +56,24 @@ export async function POST(req:NextRequest){
    conversation_id:conversation.id,role:"customer",body:message
   });
   if(saved.error)return response({error:"تعذر حفظ الرسالة."},502,origin);
+  const johna=origin===JOHNA_ORIGIN&&body.widgetKey===JOHNA_WIDGET_KEY;
+  // A human handoff keeps the same conversation and messages; never insert
+  // an artificial assistant response on every message sent while staff owns it.
+  const requestsHuman=johna&&/^(?:عايز|أريد|اريد|محتاج|ممكن|حولني|حوّلني|كلمني|اربطني|التحدث مع|التواصل مع)?\\s*(?:موظف|موظف دعم|دعم بشري|شخص حقيقي|إنسان|انسان|human|agent|human support)\\s*[؟?!\\s.]*$/i.test(message);
+  if(requestsHuman&&conversation.mode!=="human"){
+   const {error:handoffError}=await db.from("support_conversations")
+    .update({mode:"human",updated_at:new Date().toISOString()})
+    .eq("id",conversation.id).eq("organization_id",widget.organization_id)
+    .eq("project_id",widget.project_id).eq("widget_id",widget.id);
+   if(handoffError)return response({error:"تعذر تحويل المحادثة للدعم البشري."},503,origin);
+  }
+  if(conversation.mode==="human"||requestsHuman){
+   await db.from("support_conversations")
+    .update({updated_at:new Date().toISOString()})
+    .eq("id",conversation.id).eq("organization_id",widget.organization_id)
+    .eq("project_id",widget.project_id).eq("widget_id",widget.id);
+   return response({answer:null,mode:"human",conversationId:conversation.id},200,origin);
+  }
   let answer="لا أجد معلومة معتمدة للإجابة حاليًا. يرجى التواصل مع موظف الدعم.";
   let sources:Array<{id:string;title:string}>=[];
   if(conversation.mode==="human")answer="المحادثة قيد متابعة أحد الموظفين.";
@@ -128,6 +147,14 @@ export async function POST(req:NextRequest){
     }
    }
   }
+  if(johna){
+   // The admin may have taken over while the AI model was generating.
+   // Re-read ownership before sending the response to the visitor.
+   const {data:latest}=await db.from("support_conversations")
+    .select("mode").eq("id",conversation.id).eq("organization_id",widget.organization_id)
+    .eq("project_id",widget.project_id).eq("widget_id",widget.id).maybeSingle();
+   if(!latest||latest.mode==="human")return response({answer:null,mode:"human",conversationId:conversation.id},200,origin);
+  }
   const reply=await db.from("support_messages").insert({
    organization_id:widget.organization_id,project_id:widget.project_id,
    conversation_id:conversation.id,role:"assistant",body:answer
@@ -135,6 +162,6 @@ export async function POST(req:NextRequest){
   if(reply.error)return response({error:"تم حفظ السؤال لكن تعذر حفظ الإجابة."},502,origin);
   await db.from("support_conversations").update({updated_at:new Date().toISOString()})
    .eq("id",conversation.id).eq("project_id",widget.project_id);
-  return response({answer,sources},200,origin);
+  return response({answer,sources,mode:"ai"},200,origin);
  }catch{return response({error:"تعذر معالجة الرسالة."},400,origin);}
 }
