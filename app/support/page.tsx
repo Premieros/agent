@@ -9,7 +9,7 @@ type Project={id:string;name:string;slug:string;instructions:string};
 type Doc={id:string;title:string;created_at:string};
 type Widget={id:string;public_key:string;allowed_origin:string;enabled:boolean};
 type Notice={kind:"success"|"error";text:string};
-type SupportHealth={serverConfigured:boolean;aiConfigured:boolean;publicEnabled:boolean;limiterReady:boolean;widgets:Array<{allowed_origin:string;enabled:boolean}>;ready:boolean};
+type SupportHealth={serverConfigured:boolean;aiConfigured:boolean;freeModelsAvailable:boolean;availableModels:number;providers:Array<{provider:string;configured:boolean;costClass:string}>;publicEnabled:boolean;limiterReady:boolean;widgets:Array<{allowed_origin:string;enabled:boolean}>;ready:boolean};
 
 export default function SupportAdmin(){
  const db=getSupabase();
@@ -192,7 +192,9 @@ export default function SupportAdmin(){
      {health&&<div style={{display:"grid",gap:5,fontSize:12}}>
       <span>{health.serverConfigured?"✓":"✗"} اتصال الخادم بقاعدة AGENT</span>
       <span>{health.limiterReady?"✓":"✗"} حدود الاستخدام الآمنة</span>
-      <span>{health.aiConfigured?"✓":"✗"} مفتاح Gemini أو OpenAI على خادم AGENT</span>
+      <span>{health.aiConfigured?"✓":"✗"} مفاتيح النموذج المركزي (OpenRouter / Gemini / Groq)</span>
+      <span>{health.freeModelsAvailable?"✓":"✗"} نماذج مؤهلة للتبديل التلقائي: {health.availableModels||0}</span>
+      <span>المفاتيح الموصلة: {health.providers.filter(p=>p.configured).map(p=>p.provider).join("، ")||"لا توجد"}</span>
       <span>{health.publicEnabled?"✓":"✗"} تفعيل الشات العام على الخادم</span>
       <span>{health.widgets.some(w=>w.enabled)?"✓":"✗"} موقع واحد مفعّل على الأقل</span>
       <strong>{health.ready?"الإعدادات الأساسية جاهزة. اختبر الشات من الموقع الفعلي قبل اعتماده.":"ما زال الربط يحتاج إلى الإعدادات غير المكتملة أعلاه."}</strong>
