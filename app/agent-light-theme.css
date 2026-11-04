@@ -267,3 +267,66 @@ body{
  .support-admin-theme{padding:14px!important}
  .support-admin-theme section{padding:15px!important}
 }
+
+
+/* All navigation sections are expanded, with independent scrolling. */
+.workspace-shell .workspace-navigation {
+ display:flex!important;
+ flex-direction:column!important;
+ min-height:0!important;
+}
+.workspace-shell .agent-all-navigation {
+ display:flex!important;
+ flex-direction:column!important;
+ gap:12px!important;
+ overflow-y:auto!important;
+ overflow-x:hidden!important;
+ flex:1 1 auto!important;
+ min-height:0!important;
+ padding:5px 4px 18px!important;
+ scrollbar-width:thin;
+}
+.workspace-shell .agent-navigation-group {
+ display:flex!important;
+ flex-direction:column!important;
+ gap:3px!important;
+ width:100%!important;
+ margin:0!important;
+ padding:0 0 10px!important;
+ border-bottom:1px solid #dcebef!important;
+}
+.workspace-shell .agent-navigation-heading {
+ color:#61838e!important;
+ font:800 11px/1.6 "Cairo",Tahoma,sans-serif!important;
+ letter-spacing:0!important;
+ padding:8px 11px 5px!important;
+ margin:0!important;
+}
+.workspace-shell .agent-navigation-group .workspace-nav-link {
+ display:flex!important;
+ align-items:center!important;
+ min-height:36px!important;
+ font-size:12.5px!important;
+ margin:0!important;
+ padding:6px 10px!important;
+ gap:10px!important;
+}
+.workspace-shell .agent-navigation-group .workspace-nav-link span {
+ flex:1;
+ color:inherit!important;
+}
+.workspace-shell .agent-navigation-group .workspace-sidebar-slot {
+ position:static!important;
+ display:block!important;
+ min-height:0;
+ width:100%;
+ overflow:visible;
+}
+.workspace-shell .workspace-navigation-footer {
+ flex:0 0 auto;
+ padding:9px!important;
+}
+@media(max-width:760px){
+ .workspace-shell .agent-all-navigation {gap:7px!important;}
+ .workspace-shell .agent-navigation-group{padding-bottom:7px!important;}
+}
