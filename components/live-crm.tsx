@@ -231,7 +231,7 @@ export default function LiveCrm() {
     // competing initial-load requests and misleading session errors.
     const { data: listener } = db.auth.onAuthStateChange((event, session) => {
       if (!active) return;
-      if (!["INITIAL_SESSION","SIGNED_IN","SIGNED_OUT","TOKEN_REFRESHED","USER_UPDATED"].includes(event)) return;
+      if (!["INITIAL_SESSION","SIGNED_IN","SIGNED_OUT","USER_UPDATED"].includes(event)) return;
       setUser(session?.user ?? null);
       // Avoid Supabase auth lock reentrancy by deferring database reads.
       setTimeout(() => {
