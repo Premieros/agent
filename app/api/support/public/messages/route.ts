@@ -55,7 +55,16 @@ export async function POST(req:NextRequest){
     return {...doc,score};
    }).filter(d=>d.score>0).sort((a,b)=>b.score-a.score).slice(0,3);
    sources=matching.map(x=>({id:x.id,title:x.title}));
-   if(matching.length){
+   // Short greetings are conversational intents, not knowledge-base queries.
+   // Answer them deterministically without spending AI quota or inventing facts.
+   const greeting=message.toLocaleLowerCase("ar")
+    .normalize("NFKC").replace(/[\u064B-\u065F\u0670]/g,"")
+    .replace(/[!؟?،.\\s]+/g," ").trim();
+   const isGreeting=/^(?:السلام عليكم(?: ورحمة الله(?: وبركاته)?)?|وعليكم السلام(?: ورحمة الله(?: وبركاته)?)?|سلام(?: عليكم)?|اهلا(?: وسهلا)?|أهلا(?: وسهلا)?|مرحبا|مرحبًا|صباح الخير|مساء الخير|هاي|hello|hi)$/.test(greeting);
+   if(isGreeting){
+    answer="وعليكم السلام، أهلًا بك في "+project.name+"! كيف أقدر أساعدك اليوم؟";
+    sources=[];
+   }else if(matching.length){
     try{
      // Paid fallback is forbidden. Conditional tiers are an explicit server-side opt-in.
      const allowConditional=process.env.SUPPORT_ALLOW_CONDITIONAL_FREE_TIER==="true";
