@@ -14,7 +14,7 @@ export default function SupportAdmin(){
  const [name,setName]=useState(""),[slug,setSlug]=useState(""),[instructions,setInstructions]=useState("");
  const [title,setTitle]=useState(""),[content,setContent]=useState("");
  const [origin,setOrigin]=useState(""),[docs,setDocs]=useState<Doc[]>([]),[widgets,setWidgets]=useState<Widget[]>([]);
- const [message,setMessage]=useState(""),[busy,setBusy]=useState(false);
+ const [notice,setNotice]=useState<{kind:"success"|"error";text:string}|null>(null),[busy,setBusy]=useState(false);
  const [question,setQuestion]=useState(""),[answer,setAnswer]=useState(""),[sources,setSources]=useState<Array<{id:string;title:string}>>([]);
  async function request(path:string,method="GET",body?:unknown){
   if(!db)throw new Error("Supabase غير مُعد.");
@@ -23,16 +23,21 @@ export default function SupportAdmin(){
   const data=await res.json();if(!res.ok)throw new Error((data.error||"تعذر تنفيذ العملية.")+(data.code&&data.code!=="UNKNOWN"?" (code: "+data.code+")":""));return data;
  }
  async function load(){
-  try{const data=await request("/api/support/projects");setProjects(data.projects);}catch(e){setMessage(String(e));}
+  const data=await request("/api/support/projects");
+  setProjects(data.projects);
+  return data.projects as Project[];
  }
- useEffect(()=>{if(db)void load();},[db]);
+ async function refresh(){
+  try{await load();setNotice(null);}catch(e){setNotice({kind:"error",text:e instanceof Error?e.message:String(e)});}
+ }
+ useEffect(()=>{if(db)void refresh();},[db]);
  useEffect(()=>{if(!chosen)return;void Promise.all([
   request("/api/support/documents?projectId="+encodeURIComponent(chosen)),
   request("/api/support/widgets?projectId="+encodeURIComponent(chosen))
- ]).then(([d,w])=>{setDocs(d.documents);setWidgets(w.widgets)}).catch(e=>setMessage(String(e)));
+ ]).then(([d,w])=>{setDocs(d.documents);setWidgets(w.widgets)}).catch(e=>setNotice({kind:"error",text:e instanceof Error?e.message:String(e)}));
  const p=projects.find(p=>p.id===chosen);setInstructions(p?.instructions||"");
  },[chosen,projects]);
- async function act(fn:()=>Promise<void>){setBusy(true);setMessage("");try{await fn();setMessage("تم حفظ التغيير.")}catch(e){setMessage(e instanceof Error?e.message:String(e))}finally{setBusy(false)}}
+ async function act(fn:()=>Promise<void>){setBusy(true);setNotice(null);try{await fn();setNotice({kind:"success",text:"تم حفظ التغيير بنجاح."})}catch(e){setNotice({kind:"error",text:e instanceof Error?e.message:String(e)})}finally{setBusy(false)}}
  const field={width:"100%",padding:10,border:"1px solid #9ca3af",borderRadius:8,background:"transparent",color:"inherit"} as const;
  const button={padding:"10px 16px",borderRadius:8,border:"1px solid #888",cursor:"pointer"} as const;
  return <main className="support-admin-theme" dir="rtl" style={{maxWidth:1100,margin:"30px auto",padding:28,lineHeight:1.7}}>
@@ -43,14 +48,14 @@ export default function SupportAdmin(){
   </div>
   <h1>خدمة العملاء متعددة المشاريع</h1>
   <p>كل مشروع له إعداداته ومصادر معرفته المستقلة. الربط العام والرد الآلي لا يُفعّلان قبل اكتمال الاختبارات الأمنية ونشر واجهة العميل.</p>
-  {message&&<div role="alert" style={{padding:16,border:"1px solid #dfb5aa",background:"#fff6f3",borderRadius:13,color:"#853f30",display:"grid",gap:10}}>
-   <strong>تعذر تحميل بيانات خدمة العملاء</strong><span>{message}</span>
-   <button type="button" disabled={busy} onClick={()=>void load()} style={{width:"fit-content",padding:"8px 15px",borderRadius:10,border:"1px solid #b77b68",background:"#fff",color:"#853f30"}}>إعادة محاولة التحميل</button>
+  {notice&&<div role={notice.kind==="error"?"alert":"status"} style={{padding:16,border:notice.kind==="error"?"1px solid #dfb5aa":"1px solid #a3d9ce",background:notice.kind==="error"?"#fff6f3":"#effaf6",borderRadius:13,color:notice.kind==="error"?"#853f30":"#136c5a",display:"grid",gap:10}}>
+   <strong>{notice.kind==="error"?"تعذر تنفيذ العملية":"تمت العملية بنجاح"}</strong><span>{notice.text}</span>
+   {notice.kind==="error"&&<button type="button" disabled={busy} onClick={()=>void refresh()} style={{width:"fit-content",padding:"8px 15px",borderRadius:10,border:"1px solid #b77b68",background:"#fff",color:"#853f30"}}>إعادة محاولة التحميل</button>}
   </div>}
   <section style={{display:"grid",gap:10,margin:"24px 0"}}>
    <h2>إضافة مشروع</h2><input style={field} placeholder="اسم المشروع" value={name} onChange={e=>setName(e.target.value)}/>
    <input style={field} placeholder="رمز المشروع مثل premier" value={slug} onChange={e=>setSlug(e.target.value)}/>
-   <button style={button} disabled={busy} onClick={()=>void act(async()=>{await request("/api/support/projects","POST",{name,slug});setName("");setSlug("");await load()})}>إضافة المشروع</button>
+   <button style={button} disabled={busy} onClick={()=>void act(async()=>{const created=await request("/api/support/projects","POST",{name,slug});setName("");setSlug("");await load();if(created.project?.id)setChosen(created.project.id)})}>إضافة المشروع</button>
   </section>
   <section style={{display:"grid",gap:12}}>
    <h2>إدارة المشروع</h2>
@@ -61,7 +66,7 @@ export default function SupportAdmin(){
     <button style={button} disabled={busy} onClick={()=>void act(async()=>{await request("/api/support/projects","PATCH",{projectId:chosen,instructions});await load()})}>حفظ التعليمات</button>
     <h3>إضافة ملف معرفة نصي</h3>
     <input style={field} placeholder="عنوان الملف" value={title} onChange={e=>setTitle(e.target.value)}/>
-    <input type="file" accept=".txt,.md,.csv,.json" onChange={async e=>{const f=e.target.files?.[0];if(!f)return;if(f.size>200000){setMessage("الملف يتجاوز الحد الحالي (200 ألف حرف).");return;}setTitle(f.name);setContent(await f.text())}}/>
+    <input type="file" accept=".txt,.md,.csv,.json" onChange={async e=>{const f=e.target.files?.[0];if(!f)return;if(f.size>200000){setNotice({kind:"error",text:"الملف يتجاوز الحد الحالي (200 ألف حرف)."});return;}setTitle(f.name);setContent(await f.text())}}/>
     <textarea style={field} rows={8} value={content} onChange={e=>setContent(e.target.value)} placeholder="محتوى المعرفة"/>
     <button style={button} disabled={busy} onClick={()=>void act(async()=>{await request("/api/support/documents","POST",{projectId:chosen,title,content});setTitle("");setContent("");const d=await request("/api/support/documents?projectId="+chosen);setDocs(d.documents)})}>حفظ المستند</button>
     <ul>{docs.map(d=><li key={d.id}>{d.title} <button disabled={busy} onClick={()=>void act(async()=>{await request("/api/support/documents?projectId="+chosen+"&id="+d.id,"DELETE");setDocs(v=>v.filter(x=>x.id!==d.id))})}>حذف</button></li>)}</ul>
