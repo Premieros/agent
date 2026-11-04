@@ -100,7 +100,7 @@ export default function SupportAdmin(){
     <h1 style={{margin:"0 0 5px"}}>خدمة العملاء</h1>
     <p style={{margin:0}}>اختر المشروع، أضف معلوماته، ثم جرّب المساعد.</p>
    </div>
-   <Link href="/support/customer" target="_blank" className="support-customer-link">معاينة واجهة العملاء ↗</Link>
+   <div style={{display:"flex",gap:9,flexWrap:"wrap"}}><Link href="/support/conversations" className="support-customer-link">محادثات العملاء</Link><Link href="/support/customer" target="_blank" className="support-customer-link">معاينة واجهة العملاء ↗</Link></div>
   </header>
   {notice&&<div role={notice.kind==="error"?"alert":"status"}
     className={"support-simple-alert "+notice.kind}>
