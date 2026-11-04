@@ -33,6 +33,7 @@ const groups:Group[]=[
  ]},
  {title:"خدمة العملاء الذكية",items:[
   {href:"/support",label:"المشاريع وقاعدة المعرفة",icon:Headphones},
+  {href:"/support/conversations",label:"محادثات العملاء",icon:MessagesSquare},
   {href:"/support/customer",label:"واجهة العملاء",icon:MonitorPlay}
  ]},
  {title:"الربط والإعدادات",items:[
@@ -45,7 +46,7 @@ export default function WorkspaceShell({children}:{children:ReactNode}){
  const searchParams=useSearchParams();
  const isWorkspace=pathname==="/"||pathname==="/studio"||pathname==="/assistant"||
    pathname.startsWith("/assistant/")||pathname==="/crm"||pathname.startsWith("/crm/")||
-   pathname==="/support";
+   pathname==="/support"||pathname==="/support/conversations";
  const [mobileOpen,setMobileOpen]=useState(false);
  useEffect(()=>{
   const close=()=>setMobileOpen(false);
