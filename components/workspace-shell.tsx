@@ -99,9 +99,6 @@ export default function WorkspaceShell({children}:{children:ReactNode}){
      <div id="workspace-sidebar-slot" className="workspace-sidebar-slot"/>
     </section>}
    </nav>
-   <div className="workspace-navigation-footer">
-    <span>كل الأقسام ظاهرة. لا توجد قوائم مخفية.</span>
-   </div>
   </aside>
   <main className="workspace-main">
    <header className="workspace-topbar">
