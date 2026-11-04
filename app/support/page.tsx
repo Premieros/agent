@@ -20,6 +20,8 @@ export default function SupportAdmin(){
  const [docs,setDocs]=useState<Doc[]>([]),[widgets,setWidgets]=useState<Widget[]>([]);
  const [title,setTitle]=useState(""),[content,setContent]=useState("");
  const [question,setQuestion]=useState(""),[answer,setAnswer]=useState("");
+ const [allowConditional,setAllowConditional]=useState(false);
+ const [replyModel,setReplyModel]=useState("");
  const [sources,setSources]=useState<Array<{id:string;title:string}>>([]);
  const [origin,setOrigin]=useState("");
  const [notice,setNotice]=useState<Notice|null>(null);
@@ -71,7 +73,7 @@ export default function SupportAdmin(){
   if(!chosen){setDocs([]);setWidgets([]);setInstructions("");return;}
   let cancelled=false;
   setInstructions(project?.instructions||"");
-  setAnswer("");setSources([]);setHealth(null);
+  setAnswer("");setSources([]);setHealth(null);setReplyModel("");
   void Promise.all([
    request("/api/support/documents?projectId="+encodeURIComponent(chosen)),
    request("/api/support/widgets?projectId="+encodeURIComponent(chosen))
@@ -164,13 +166,18 @@ export default function SupportAdmin(){
 
    <section className="support-simple-card">
     <h2>3. جرّب الرد</h2>
+    <p style={smallStyle}>يختار AGENT نموذجًا مجانيًا من OpenRouter تلقائيًا، ثم ينتقل إلى بديل عند الفشل أو بلوغ الحد. تُستخدم Gemini وGroq فقط عند السماح بحصصهما المشروطة أدناه.</p>
+    <label style={{display:"flex",gap:9,alignItems:"start",fontSize:13}}>
+     <input type="checkbox" checked={allowConditional} onChange={e=>setAllowConditional(e.target.checked)} style={{marginTop:7}}/>
+     السماح أثناء هذه التجربة باستخدام حصص Gemini وGroq المجانية المشروطة (قد تطبّق رسوم حسب الحساب).
+    </label>
     <textarea style={inputStyle} rows={3} value={question} onChange={e=>setQuestion(e.target.value)}
      placeholder="اسأل كما يسأل العميل"/>
     <button style={buttonStyle} disabled={busy||question.trim().length<3} onClick={()=>void act(async()=>{
-     const result=await request("/api/support/preview","POST",{projectId:chosen,question});
-     setAnswer(result.answer||"");setSources(result.sources||[]);
+     const result=await request("/api/support/preview","POST",{projectId:chosen,question,allowConditionalFreeTier:allowConditional});
+     setAnswer(result.answer||"");setSources(result.sources||[]);setReplyModel(result.model||"");
     },"ظهرت نتيجة الاختبار أدناه.")}>اختبار المساعد</button>
-    {answer&&<div className="support-simple-answer"><strong>الرد</strong><p>{answer}</p>
+    {answer&&<div className="support-simple-answer"><strong>الرد</strong>{replyModel&&<small style={{display:"block"}}>النموذج المستخدم: {replyModel}</small>}<p>{answer}</p>
      {sources.length>0&&<small>المصادر: {sources.map(s=>s.title).join("، ")}</small>}
     </div>}
    </section>
