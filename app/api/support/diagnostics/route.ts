@@ -1,8 +1,10 @@
 import {NextRequest,NextResponse} from "next/server";
 import {requireAgentSession,errorResponse} from "@/lib/agent-server";
 import {supportService,sha} from "@/lib/support-public";
+import {autoProviderInfo,discoverAutoModelsDetailed} from "@/lib/auto-ai";
 
 export const runtime="nodejs";
+export const maxDuration=60;
 const reply=(data:unknown,status=200)=>NextResponse.json(data,{status,headers:{"Cache-Control":"no-store"}});
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -16,7 +18,10 @@ export async function GET(req:NextRequest){
    .select("id").eq("id",projectId).eq("organization_id",session.organizationId).maybeSingle();
   if(projectError||!project)return reply({error:"المشروع غير موجود أو لا تملك صلاحية الوصول إليه."},404);
   const serverConfigured=Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL&&process.env.SUPABASE_SERVICE_ROLE_KEY);
-  const aiConfigured=Boolean(process.env.GEMINI_API_KEY||process.env.OPENAI_API_KEY);
+  const providers=autoProviderInfo();
+  const aiConfigured=providers.some(p=>p.configured);
+  const discovery=await discoverAutoModelsDetailed(process.env.SUPPORT_ALLOW_CONDITIONAL_FREE_TIER==="true");
+  const freeModelsAvailable=discovery.candidates.length>0;
   const publicEnabled=process.env.SUPPORT_PUBLIC_CHAT_ENABLED==="true";
   let limiterReady=false;
   let widgets:Array<{allowed_origin:string;enabled:boolean}>=[];
@@ -38,8 +43,9 @@ export async function GET(req:NextRequest){
   }
   return reply({
    serverConfigured,aiConfigured,publicEnabled,limiterReady,
+   freeModelsAvailable,availableModels:discovery.candidates.length,providers,
    widgets,
-   ready:serverConfigured&&aiConfigured&&publicEnabled&&limiterReady&&widgets.some(w=>w.enabled)
+   ready:serverConfigured&&aiConfigured&&freeModelsAvailable&&publicEnabled&&limiterReady&&widgets.some(w=>w.enabled)
   });
  }catch(e){const x=errorResponse(e);return reply({error:x.message},x.status)}
 }
