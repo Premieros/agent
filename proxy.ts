@@ -9,6 +9,7 @@ const publicHost="premieros-agent-support-public.vercel.app";
 const openRoutes=new Set([
  "/api/support/public/sessions",
  "/api/support/public/messages",
+ "/api/support/public/history",
  "/api/support/premier-inbox",
  "/support/widget.js"
 ]);
