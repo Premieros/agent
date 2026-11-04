@@ -35,7 +35,7 @@ export default function SupportAdmin(){
  async function act(fn:()=>Promise<void>){setBusy(true);setMessage("");try{await fn();setMessage("تم حفظ التغيير.")}catch(e){setMessage(e instanceof Error?e.message:String(e))}finally{setBusy(false)}}
  const field={width:"100%",padding:10,border:"1px solid #9ca3af",borderRadius:8,background:"transparent",color:"inherit"} as const;
  const button={padding:"10px 16px",borderRadius:8,border:"1px solid #888",cursor:"pointer"} as const;
- return <main dir="rtl" style={{maxWidth:900,margin:"auto",padding:24,lineHeight:1.7}}>
+ return <main className="support-admin-theme" dir="rtl" style={{maxWidth:1100,margin:"30px auto",padding:28,lineHeight:1.7}}>
   <Link href="/assistant">← العودة إلى AGENT</Link>
   <div style={{display:"flex",gap:12,flexWrap:"wrap",alignItems:"center",marginTop:16}}>
    <Link href="/support/customer" target="_blank" style={{display:"inline-block",padding:"10px 16px",borderRadius:12,background:"#0b758b",color:"#fff",textDecoration:"none"}}>فتح نسخة العملاء التجريبية ↗</Link>
