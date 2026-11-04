@@ -59,7 +59,7 @@ export async function POST(req:NextRequest){
    // Answer them deterministically without spending AI quota or inventing facts.
    const greeting=message.toLocaleLowerCase("ar")
     .normalize("NFKC").replace(/[\u064B-\u065F\u0670]/g,"")
-    .replace(/[!؟?،.\\s]+/g," ").trim();
+    .replace(/[!؟?،.\s]+/g," ").trim();
    const isGreeting=/^(?:السلام عليكم(?: ورحمة الله(?: وبركاته)?)?|وعليكم السلام(?: ورحمة الله(?: وبركاته)?)?|سلام(?: عليكم)?|اهلا(?: وسهلا)?|أهلا(?: وسهلا)?|مرحبا|مرحبًا|صباح الخير|مساء الخير|هاي|hello|hi)$/.test(greeting);
    if(isGreeting){
     answer="وعليكم السلام، أهلًا بك في "+project.name+"! كيف أقدر أساعدك اليوم؟";
