@@ -24,6 +24,11 @@ export default function SupportAdmin(){
  const [notice,setNotice]=useState<Notice|null>(null);
  const [busy,setBusy]=useState(false);
  const [creating,setCreating]=useState(false);
+ const [copiedKey,setCopiedKey]=useState("");
+ async function copyEmbed(snippet:string,key:string){
+  try{await navigator.clipboard.writeText(snippet);setCopiedKey(key);setNotice({kind:"success",text:"تم نسخ كود الربط. الصقه قبل إغلاق </body> في موقعك."})}
+  catch{setNotice({kind:"error",text:"تعذر النسخ تلقائيًا. حدّد الكود وانسخه يدويًا."})}
+ }
  const [loading,setLoading]=useState(true);
  const project=projects.find(p=>p.id===chosen);
 
@@ -161,8 +166,9 @@ export default function SupportAdmin(){
    </section>
 
    <section className="support-simple-card">
-    <h2>4. ربط موقع العملاء</h2>
-    <p style={smallStyle}>أنشئ مفتاحًا للموقع الذي سيظهر عليه الشات. التشغيل الحقيقي يتطلب إعداد الخادم وحدود الاستخدام.</p>
+    <h2>4. أضف الشات إلى أي موقع</h2>
+    <p style={smallStyle}>يعمل على WordPress وShopify ومواقع HTML وReact وأي استضافة تسمح بإضافة JavaScript. لا يحتاج المشروع الآخر إلى Vercel أو Supabase أو مفتاح ذكاء اصطناعي.</p>
+    <p style={smallStyle}>الطريقة: أضف رابط الموقع هنا ← انسخ الكود ← الصقه مرة واحدة قبل إغلاق <code dir="ltr">&lt;/body&gt;</code> في الموقع. إعداد الذكاء الاصطناعي يتم مرة واحدة داخل AGENT.</p>
     <div className="support-simple-grid">
      <input style={inputStyle} aria-label="رابط موقع العميل" value={origin} placeholder="https://example.com"
       onChange={e=>setOrigin(e.target.value)}/>
@@ -176,8 +182,12 @@ export default function SupportAdmin(){
     {widgets.map(w=><div className="support-simple-site" key={w.id}>
      <strong>{w.allowed_origin}</strong>
      <span style={smallStyle}>المفتاح العام: <code>{w.public_key}</code></span>
-     <textarea readOnly style={{...inputStyle,direction:"ltr",fontSize:12,fontFamily:"monospace"}} rows={2}
+     <textarea readOnly aria-label={"كود ربط "+w.allowed_origin} onFocus={e=>e.currentTarget.select()} style={{...inputStyle,direction:"ltr",fontSize:12,fontFamily:"monospace"}} rows={2}
        value={`<script src="${typeof window!=="undefined"?window.location.origin:"https://YOUR-AGENT-HOST"}/support/widget.js" data-widget-key="${w.public_key}" defer></script>`}/>
+     <button type="button" style={buttonStyle} onClick={()=>void copyEmbed(`<script src="${window.location.origin}/support/widget.js" data-widget-key="${w.public_key}" defer></script>`,w.public_key)}>
+      {copiedKey===w.public_key?"تم نسخ الكود ✓":"نسخ كود الربط"}
+     </button>
+     <span style={smallStyle}>{w.enabled?"الموقع مفعّل من لوحة AGENT":"الموقع غير مفعّل؛ فعّله بعد تجهيز الشات واختبار الأمان."}</span>
      <button style={secondary} disabled={busy} onClick={()=>void act(async()=>{
       await request("/api/support/widgets","PATCH",{id:w.id,projectId:chosen,enabled:!w.enabled});
       setWidgets(v=>v.map(x=>x.id===w.id?{...x,enabled:!x.enabled}:x));
