@@ -1,3 +1,4 @@
+import {IDENTITY_PREFIX,parseVerifiedIdentity} from "@/lib/premier-support-identity";
 import {NextRequest,NextResponse} from "next/server";
 import {createClient} from "@supabase/supabase-js";
 import {supportService,getWidget,consume,ipFor} from "@/lib/support-public";
@@ -60,14 +61,25 @@ export async function GET(req:NextRequest){
   if(convError)return reply({error:"تعذر تحميل محادثات Premier."},503);
   if(!conversations?.length)return reply({conversations:[],messages:[]});
   const ids=conversations.map(c=>c.id);
-  const [{data:project,error:projectError},{data:messages,error:messageError}]=await Promise.all([
+  const [{data:project,error:projectError},{data:messages,error:messageError},{data:identities,error:identityError}]=await Promise.all([
    db.from("support_projects").select("name").eq("id",widget.project_id)
     .eq("organization_id",widget.organization_id).maybeSingle(),
    db.from("support_messages").select("id,conversation_id,project_id,role,body,created_at")
     .eq("organization_id",widget.organization_id).eq("project_id",widget.project_id)
-    .in("conversation_id",ids).order("created_at",{ascending:false}).limit(1200)
+    .in("conversation_id",ids).neq("role","system")
+    .order("created_at",{ascending:false}).limit(1200),
+   db.from("support_messages").select("conversation_id,body,created_at")
+    .eq("organization_id",widget.organization_id).eq("project_id",widget.project_id)
+    .in("conversation_id",ids).eq("role","system")
+    .like("body",IDENTITY_PREFIX+"%").order("created_at",{ascending:false}).limit(300)
   ]);
-  if(projectError||messageError)return reply({error:"تعذر تحميل رسائل Premier."},503);
+  if(projectError||messageError||identityError)return reply({error:"تعذر تحميل رسائل Premier."},503);
+  const identityByConversation=new Map<string,ReturnType<typeof parseVerifiedIdentity>>();
+  for(const item of identities||[]){
+   if(identityByConversation.has(item.conversation_id))continue;
+   const identity=parseVerifiedIdentity(item.body);
+   if(identity)identityByConversation.set(item.conversation_id,identity);
+  }
   const counts=new Map<string,number>();
   const safeMessages=(messages||[]).filter(m=>{
    if(m.project_id!==widget.project_id||!ids.includes(m.conversation_id))return false;
@@ -83,6 +95,10 @@ export async function GET(req:NextRequest){
    conversations:conversations.map(c=>({
     id:c.id,projectId:c.project_id,projectName:project?.name||"Premier",
     origin:PREMIER_ORIGIN,mode:c.mode,
+    employeeName:identityByConversation.get(c.id)?.employeeName||null,
+    branchName:identityByConversation.get(c.id)?.branchName||null,
+    organizationName:identityByConversation.get(c.id)?.organizationName||null,
+    identityVerified:identityByConversation.has(c.id),
     createdAt:c.created_at,updatedAt:c.updated_at
    })),
    messages:safeMessages
