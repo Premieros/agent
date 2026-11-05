@@ -60,6 +60,16 @@ export async function POST(req:NextRequest){
   const johna=origin===JOHNA_ORIGIN&&body.widgetKey===JOHNA_WIDGET_KEY;
   // A human handoff keeps the same conversation and messages; never insert
   // an artificial assistant response on every message sent while staff owns it.
+  if(johna){
+    const {error:statusError}=await db.from("support_conversations")
+      .update({mode:"human",updated_at:new Date().toISOString()})
+      .eq("id",conversation.id)
+      .eq("organization_id",widget.organization_id)
+      .eq("project_id",widget.project_id)
+      .eq("widget_id",widget.id);
+    if(statusError)return response({error:"الدعم الآلي غير متاح مؤقتًا."},503,origin);
+    return response({answer:null,mode:"human",conversationId:conversation.id},200,origin);
+  }
   const requestsHuman=johna&&(
    /^(?:موظف|موظف دعم|دعم بشري|الدعم البشري|شخص حقيقي|إنسان|انسان|human|human support)\s*[؟?!.\s]*$/i.test(message)||
    /(?:أريد|اريد|عايز|محتاج|ممكن|حولني|حوّلني|كلمني|اربطني|اتكلم|أتكلم|التحدث|التواصل).{0,40}(?:موظف|دعم بشري|بشري|إنسان|انسان|شخص حقيقي|الدعم البشري|human)/i.test(message)
