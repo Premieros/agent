@@ -1,5 +1,5 @@
 import {JOHNA_WIDGET_KEY,JOHNA_ORIGIN} from "@/lib/johna-support-admin";
-import {JOHNA_PRODUCT_KNOWLEDGE} from "@/lib/johna-product-knowledge";
+import {johnaPublicAnswer} from "@/lib/johna-public-help";
 import {NextRequest,NextResponse} from "next/server";
 import {supportService,getWidget,originFor,cors,consume,ipFor,tokenMatches} from "@/lib/support-public";
 import {answerSupportWithFreeModels} from "@/lib/support-auto-ai";
@@ -61,14 +61,28 @@ export async function POST(req:NextRequest){
   // A human handoff keeps the same conversation and messages; never insert
   // an artificial assistant response on every message sent while staff owns it.
   if(johna){
-    const {error:statusError}=await db.from("support_conversations")
-      .update({mode:"human",updated_at:new Date().toISOString()})
-      .eq("id",conversation.id)
-      .eq("organization_id",widget.organization_id)
-      .eq("project_id",widget.project_id)
-      .eq("widget_id",widget.id);
-    if(statusError)return response({error:"الدعم الآلي غير متاح مؤقتًا."},503,origin);
-    return response({answer:null,mode:"human",conversationId:conversation.id},200,origin);
+    if(conversation.mode==="human")
+      return response({answer:null,mode:"human",conversationId:conversation.id},200,origin);
+    const approved=johnaPublicAnswer(message);
+    if(!approved){
+      const {error}=await db.from("support_conversations")
+        .update({mode:"human",updated_at:new Date().toISOString()})
+        .eq("id",conversation.id).eq("organization_id",widget.organization_id)
+        .eq("project_id",widget.project_id).eq("widget_id",widget.id);
+      if(error)return response({error:"تعذر تحويل المحادثة إلى موظف الدعم."},503,origin);
+      return response({answer:null,mode:"human",conversationId:conversation.id},200,origin);
+    }
+    const {data:latest}=await db.from("support_conversations").select("mode")
+      .eq("id",conversation.id).eq("organization_id",widget.organization_id)
+      .eq("project_id",widget.project_id).eq("widget_id",widget.id).maybeSingle();
+    if(!latest||latest.mode!=="ai")
+      return response({answer:null,mode:"human",conversationId:conversation.id},200,origin);
+    const {error:saveError}=await db.from("support_messages").insert({
+      organization_id:widget.organization_id,project_id:widget.project_id,
+      conversation_id:conversation.id,role:"assistant",body:approved
+    });
+    if(saveError)return response({error:"تعذر حفظ الإجابة."},503,origin);
+    return response({answer:approved,mode:"ai",sources:[]},200,origin);
   }
   const requestsHuman=johna&&(
    /^(?:موظف|موظف دعم|دعم بشري|الدعم البشري|شخص حقيقي|إنسان|انسان|human|human support)\s*[؟?!.\s]*$/i.test(message)||
@@ -113,8 +127,7 @@ export async function POST(req:NextRequest){
    // A project-specific code-reviewed reference is always available for the
    // Johna-S widget, even before its AGENT admin uploads documents to the DB.
    // Never inject Johna-S knowledge into Premier or any other widget.
-   const authoritative=johna?JOHNA_PRODUCT_KNOWLEDGE:[];
-   const knowledge=[...authoritative,...(docs||[])];
+   const knowledge=docs||[];
    const matching=knowledge.map(doc=>{
     const title=normalize(doc.title),txt=normalize(doc.content);
     let score=0;for(const t of terms)score+=(title.includes(t)?3:0)+(txt.includes(t)?1:0);
