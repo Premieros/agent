@@ -1,4 +1,5 @@
 import {JOHNA_WIDGET_KEY,JOHNA_ORIGIN} from "@/lib/johna-support-admin";
+import {JOHNA_PRODUCT_KNOWLEDGE} from "@/lib/johna-product-knowledge";
 import {NextRequest,NextResponse} from "next/server";
 import {supportService,getWidget,originFor,cors,consume,ipFor,tokenMatches} from "@/lib/support-public";
 import {answerSupportWithFreeModels} from "@/lib/support-auto-ai";
@@ -99,7 +100,12 @@ export async function POST(req:NextRequest){
     .replace(/[\u064B-\u065F\u0670]/g,"").replace(/[أإآ]/g,"ا").replace(/ى/g,"ي").replace(/ة/g,"ه");
    const terms=new Set((normalize(search).match(/[\p{L}\p{N}]{3,}/gu)||[])
     .filter(t=>!["عندي","يمكن","اريد","كيف","بسبب","ماذا","هنا","الان"].includes(t)).slice(0,65));
-   const matching=(docs||[]).map(doc=>{
+   // A project-specific code-reviewed reference is always available for the
+   // Johna-S widget, even before its AGENT admin uploads documents to the DB.
+   // Never inject Johna-S knowledge into Premier or any other widget.
+   const authoritative=johna?JOHNA_PRODUCT_KNOWLEDGE:[];
+   const knowledge=[...authoritative,...(docs||[])];
+   const matching=knowledge.map(doc=>{
     const title=normalize(doc.title),txt=normalize(doc.content);
     let score=0;for(const t of terms)score+=(title.includes(t)?3:0)+(txt.includes(t)?1:0);
     return {...doc,score};
