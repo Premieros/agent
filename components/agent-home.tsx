@@ -12,6 +12,7 @@ const sections=[
   {href:"/assistant",title:"المساعد الذكي",detail:"المحادثات والبرمجة والتحليل",icon:MessagesSquare},
   {href:"/crm?view=leads",title:"العملاء",detail:"سجلات العملاء ومراحل البيع",icon:UsersRound},
   {href:"/crm/inbox",title:"صندوق الوارد",detail:"المحادثات والمتابعات",icon:Inbox},
+  {href:"/support",title:"خدمة العملاء الذكية",detail:"إدارة المشاريع ومعرفتها واختبار ردود الدعم",icon:MessagesSquare},
   {href:"/studio?section=agents",title:"الوكلاء",detail:"تشغيل الفريق ومراجعة النتائج",icon:Bot},
   {href:"/studio?section=campaigns",title:"التسويق",detail:"الحملات والمهام والتصميمات",icon:Megaphone},
   {href:"/assistant/integrations",title:"الإضافات",detail:"الاتصالات والخدمات المصرح بها",icon:PlugZap}

@@ -2,9 +2,9 @@
 import { useCallback, useEffect, useState } from "react";
 import { ArrowRight, CheckCircle2, LoaderCircle, LogOut, Plus, RefreshCw, ShieldCheck, UsersRound } from "lucide-react";
 import Link from "next/link";
-import type { User } from "@supabase/supabase-js";
+import type { User, Session } from "@supabase/supabase-js";
 import { getSupabase } from "@/lib/supabase-browser";
-import { currentUser, isExpiredAuthError, recoverExpiredSession } from "@/lib/auth-session";
+import { currentSession, isExpiredAuthError } from "@/lib/auth-session";
 
 type Member = { organization_id: string; role: string };
 type Lead = { id: string; full_name: string; business_name: string | null; phone: string | null; business_type: string; source: string; stage: string; priority: string; created_at: string };
@@ -16,6 +16,45 @@ const types = [
 ];
 const stages: Record<string, string> = { new: "جديد", qualifying: "تأهيل", qualified: "جاهز للمبيعات", contacting: "جارٍ التواصل", site_visit: "معاينة", proposal: "عرض سعر", won: "تم البيع", lost: "لم يتم البيع" };
 const base = { full_name: "", business_name: "", phone: "", business_type: "restaurant" };
+
+type CrmReadResult<T> = {
+  data: T[] | null; count: number | null;
+  error: { code?: string } | null; status: number;
+};
+
+// Use the user's own JWT on retry; service keys never reach the browser.
+// RLS remains enforced for every retry.
+async function retryCrmRead<T>(
+  table: "leads" | "handoff_tasks",
+  filters: Record<string,string>,
+  token: string
+): Promise<CrmReadResult<T>> {
+  const supabaseUrl=process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const publishableKey=process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
+  if(!supabaseUrl||!publishableKey)
+    return {data:null,count:null,error:{code:"CONFIG_MISSING"},status:0};
+  try{
+    const endpoint=new URL("/rest/v1/"+table,supabaseUrl);
+    for(const [key,value] of Object.entries(filters)) endpoint.searchParams.set(key,value);
+    const res=await fetch(endpoint,{
+      headers:{
+        apikey:publishableKey,
+        Authorization:"Bearer "+token,
+        Prefer:"count=exact",
+        Accept:"application/json"
+      },cache:"no-store"
+    });
+    const json:unknown=await res.json();
+    if(!res.ok||!Array.isArray(json)){
+      const details=json&&typeof json==="object"?json as {code?:string}:{};
+      return {data:null,count:null,error:{code:details.code||"REST_FAILED"},status:res.status};
+    }
+    const range=res.headers.get("content-range");
+    const totalPart=range?.split("/").pop() || "";
+    const total=/^[0-9]+$/.test(totalPart)?Number(totalPart):null;
+    return {data:json as T[],count:total,error:null,status:res.status};
+  }catch{return {data:null,count:null,error:{code:"NETWORK_ERROR"},status:0};}
+}
 
 export default function LiveCrm() {
   const db = getSupabase();
@@ -53,33 +92,82 @@ export default function LiveCrm() {
     return()=>{window.removeEventListener("popstate",sync);window.removeEventListener("agent:select-crm-view",handle);};
   },[]);
 
-  const load = useCallback(async (activeUser: User | null) => {
+  const load = useCallback(async (activeUser: User | null, eventSession?: Session | null) => {
     if (!db || !activeUser) {
       setMembership(null);setLeads([]);setTasks([]);
-      setLeadTotal(null);setPendingTotal(null);setChecking(false);return;
+      setLeadTotal(null);setPendingTotal(null);setError("");setChecking(false);return;
     }
     setChecking(true);
     setLeadTotal(null);setPendingTotal(null);
-    let membershipResult = await db.from("organization_members")
-      .select("organization_id, role").eq("user_id", activeUser.id).limit(1);
-    if (membershipResult.error && isExpiredAuthError(membershipResult.error)) {
-      const restored = await recoverExpiredSession(db);
-      if (!restored) {
-        setUser(null); setMembership(null);
-        setError("انتهت جلسة الدخول. سجّل الدخول مرة أخرى.");
-        setChecking(false); return;
-      }
-      membershipResult = await db.from("organization_members")
-        .select("organization_id, role").eq("user_id", restored.id).limit(1);
-    }
-    const {data: memberships, error: membershipError} = membershipResult;
-    if (membershipError) {
+    // Trust an up-to-date session, never the old component state.
+    // A successful Auth login does not imply the Data API is ready or authorized.
+    // Auth events already provide a valid session. Reading getSession again
+    // while a refresh/sign-in event is still settling can race with that event.
+    const activeSession = eventSession === undefined ? await currentSession(db) : eventSession;
+    if (!activeSession) {
       setMembership(null);
-      if (isExpiredAuthError(membershipError)) {
-        setUser(null);
-        setError("انتهت جلسة الدخول. سجّل الدخول مرة أخرى.");
-      } else setError("تعذر تحميل صلاحيات الحساب. جرّب تحديث الصفحة.");
+      setError("انتهت جلسة الدخول. يرجى تسجيل الدخول مرة أخرى.");
       setChecking(false); return;
+    }
+    if (activeSession.user.id !== activeUser.id) {
+      // Stale event: a newer login is active, so don't invalidate its state.
+      return;
+    }
+    let membershipResult = await db.from("organization_members")
+      .select("organization_id,role").eq("user_id",activeSession.user.id).limit(1);
+    let membershipError: { code?: string; message?: string } | null = membershipResult.error;
+    let memberships: Member[] | null = membershipResult.data;
+    let membershipStatus = membershipResult.status;
+    if (membershipError && (isExpiredAuthError(membershipError) ||
+      membershipStatus === 401)) {
+      // Explicitly attach the validated access token to the Data API request.
+      // This distinguishes a missing Authorization header from a database GRANT/RLS denial.
+      // Do not copy a service-role key to the browser or bypass RLS.
+      const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+      const publicKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
+      if (url && publicKey) {
+        try {
+          const endpoint = new URL("/rest/v1/organization_members", url);
+          endpoint.searchParams.set("select", "organization_id,role");
+          endpoint.searchParams.set("user_id", "eq." + activeSession.user.id);
+          endpoint.searchParams.set("limit", "1");
+          const rest = await fetch(endpoint, {
+            headers: {
+              apikey: publicKey,
+              Authorization: "Bearer " + activeSession.access_token,
+              Accept: "application/json"
+            },
+            cache: "no-store"
+          });
+          const payload: unknown = await rest.json();
+          if (rest.ok && Array.isArray(payload)) {
+            memberships = payload as Member[];
+            membershipError = null;
+            membershipStatus = rest.status;
+          } else {
+            const failure = payload && typeof payload === "object"
+              ? payload as { code?: string; message?: string } : {};
+            memberships = null;
+            membershipError = { code: failure.code || "UNKNOWN", message: failure.message || "REST request failed" };
+            membershipStatus = rest.status;
+          }
+        } catch {
+          // Preserve the initial Supabase failure if network access is unavailable.
+        }
+      }
+    }
+    if(membershipError){
+      setMembership(null);
+      const code=membershipError.code || "unknown";
+      const status=membershipStatus || 0;
+      const authRole=activeSession.user.role === "authenticated" ? "authenticated" : "not-authenticated";
+      const kind=code==="42501"?"رفض PostgreSQL صلاحية الوصول إلى جدول العضويات":
+        status===401?"تم رفض جلسة المصادقة":
+        status===403?"صلاحيات قراءة جدول العضويات مرفوضة":
+        status===404?"جدول العضويات أو واجهة Supabase غير متاح":
+        status===0?"تعذر الاتصال بخدمة قاعدة البيانات":"فشل استعلام عضوية المؤسسة";
+      setError(`${kind} — HTTP ${status} / ${code} (session role: ${authRole}). العضوية موجودة مسبقًا؛ افحص GRANT وRLS إذا تكرر الخطأ.`);
+      setChecking(false);return;
     }
     setError("");
     const member = (memberships?.[0] ?? null) as Member | null;
@@ -96,12 +184,41 @@ export default function LiveCrm() {
         db.from("handoff_tasks").select("id",{count:"exact",head:true})
           .eq("organization_id",member.organization_id).eq("status","pending")
       ]);
-      if(l.error||t.error||p.error)
-        setError("تعذر تحميل بعض بيانات CRM؛ حاول تحديث الصفحة.");
-      setLeads(l.error?[]:(l.data||[]) as Lead[]);
-      setTasks(t.error?[]:(t.data||[]) as Task[]);
-      setLeadTotal(l.error?null:l.count??null);
-      setPendingTotal(p.error?null:p.count??null);
+      const shouldRetry=(r:{error:{code?:string}|null;status:number})=>
+        Boolean(r.error)&&(r.status===401||r.error?.code==="42501");
+      const [leadsResult,tasksResult,pendingResult]=await Promise.all([
+        shouldRetry(l)
+          ? retryCrmRead<Lead>("leads",{
+              select:"id,full_name,business_name,phone,business_type,source,stage,priority,created_at",
+              organization_id:"eq."+member.organization_id,
+              order:"created_at.desc",limit:"100"
+            },activeSession.access_token) : Promise.resolve(l),
+        shouldRetry(t)
+          ? retryCrmRead<Task>("handoff_tasks",{
+              select:"id,lead_id,handoff_type,status,summary",
+              organization_id:"eq."+member.organization_id,
+              order:"created_at.desc",limit:"100"
+            },activeSession.access_token) : Promise.resolve(t),
+        shouldRetry(p)
+          ? retryCrmRead<{id:string}>("handoff_tasks",{
+              select:"id",organization_id:"eq."+member.organization_id,
+              status:"eq.pending",limit:"0"
+            },activeSession.access_token) : Promise.resolve(p)
+      ]);
+      const lFinal=leadsResult,tFinal=tasksResult,pFinal=pendingResult;
+      const errors = [
+        ["العملاء",lFinal.error,lFinal.status],
+        ["مهام المتابعة",tFinal.error,tFinal.status],
+        ["عدد المهام المعلقة",pFinal.error,pFinal.status]
+      ] as const;
+      const failures = errors.filter(([,err])=>Boolean(err)).map(([label,err,status])=>
+        `${label}: HTTP ${status||0} / ${err?.code||"unknown"}`);
+      if(failures.length)
+        setError("تعذر تحميل بعض بيانات CRM — "+failures.join("؛ ")+".");
+      setLeads(lFinal.error?[]:(lFinal.data||[]) as Lead[]);
+      setTasks(tFinal.error?[]:(tFinal.data||[]) as Task[]);
+      setLeadTotal(lFinal.error?null:lFinal.count??null);
+      setPendingTotal(pFinal.error?null:pFinal.count??null);
     }
     setChecking(false);
   }, [db]);
@@ -109,19 +226,20 @@ export default function LiveCrm() {
   useEffect(() => {
     if (!db) { setChecking(false); return; }
     let active = true;
-    void currentUser(db).then((signedInUser) => {
-      if (active) { setUser(signedInUser); void load(signedInUser); }
-    }).catch(() => {
-      if (active) { setUser(null); setMembership(null); setChecking(false); }
-    });
-    const { data: listener } = db.auth.onAuthStateChange((_event, session) => {
+    // INITIAL_SESSION is delivered by Supabase after stored auth is restored.
+    // Do not concurrently call currentUser()/getSession() here; that creates
+    // competing initial-load requests and misleading session errors.
+    const { data: listener } = db.auth.onAuthStateChange((event, session) => {
       if (!active) return;
+      if (!["INITIAL_SESSION","SIGNED_IN","SIGNED_OUT","USER_UPDATED"].includes(event)) return;
       setUser(session?.user ?? null);
-      // Schedule the data load outside the auth event callback.
-      setTimeout(() => { if (active) void load(session?.user ?? null); }, 0);
+      // Avoid Supabase auth lock reentrancy by deferring database reads.
+      setTimeout(() => {
+        if (active) void load(session?.user ?? null,session);
+      },0);
     });
-    return () => { active = false; listener.subscription.unsubscribe(); };
-  }, [db, load]);
+    return () => { active=false; listener.subscription.unsubscribe(); };
+  }, [db,load]);
 
   async function signIn() {
     if (!db || !email.trim()) return;
@@ -144,7 +262,7 @@ export default function LiveCrm() {
     const { error: e } = await db.auth.signInWithPassword({ email: email.trim(), password });
     setBusy(false);
     if (e) setError("فشل تسجيل الدخول. راجع البريد وكلمة المرور. لو حسابك كان برابط البريد فقط، لازم تعيّن كلمة مرور بعد تسجيل دخول ناجح أولًا.");
-    else setPassword("");
+    else { setError(""); setPassword(""); }
   }
   async function savePassword() {
     if (!db || !user || newPassword.length < 12 || newPassword !== confirmPassword) return;
@@ -208,7 +326,7 @@ export default function LiveCrm() {
           </>}
         </form>
       </div>}
-      {db && !checking && user && !membership && <div className="crm-card"><h2>حسابك جاهز، وينتظر إضافتك للفريق</h2><p>البريد: <b dir="ltr">{user.email}</b></p><p>مسؤول النظام لازم يضيف حسابك لعضوية الشركة. ده إجراء مقصود لحماية العملاء والمحادثات، ومش هنسمح لحساب غير معتمد يشوف أي بيانات.</p><button className="crm-btn-secondary" onClick={()=>void load(user)}>إعادة فحص العضوية <RefreshCw size={15}/></button></div>}
+      {db && !checking && user && !membership && !error && <div className="crm-card"><h2>حسابك جاهز، وينتظر إضافتك للفريق</h2><p>البريد: <b dir="ltr">{user.email}</b></p><p>مسؤول النظام لازم يضيف حسابك لعضوية الشركة. ده إجراء مقصود لحماية العملاء والمحادثات، ومش هنسمح لحساب غير معتمد يشوف أي بيانات.</p><button className="crm-btn-secondary" onClick={()=>void load(user)}>إعادة فحص العضوية <RefreshCw size={15}/></button></div>}
       {db && !checking && membership && user && <>
         {crmView==="account" && <section className="crm-card crm-password-panel">
           <div className="crm-section-head"><div><h2>تسجيل الدخول بكلمة مرور</h2><p>عيّن كلمة مرور مرة واحدة، علشان متحتاجش رسالة بريد في كل دخول.</p></div>
