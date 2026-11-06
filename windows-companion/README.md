@@ -10,7 +10,7 @@ This is an opt-in remote desktop **command queue**, not a remote-access trojan a
 ## Before it can work
 1. Apply `supabase/migrations/20261106_desktop_companion.sql` to **the AGENT** Supabase project `gldlgdycgneadbqftcrj` using the normal reviewed migration process. **Do not apply to Premier POS.**
 2. Set `SUPABASE_SERVICE_ROLE_KEY` in the AGENT Vercel project's **server-only encrypted** environment variables. This secret must never be committed or prefixed with NEXT_PUBLIC_. Restrict access to the deployment team.
-3. Deploy the AGENT branch to a trusted environment. The desktop app currently pins `BASE_URL` to `https://premieros-ai-sales-agent.vercel.app`; for a preview test, a developer must explicitly update the trusted host in the source code and rebuild a new EXE. Never point device tokens to untrusted sites.
+3. Deploy the AGENT branch to a trusted environment. The desktop app currently pins `BASE_URL` to the trusted AGENT Studio feature-preview URL. Rebuild the EXE if the verified deployment hostname changes; do not send pairing tokens to an unrelated host. Never point device tokens to untrusted sites.
 4. Build a Windows executable with GitHub Actions workflow `Windows Companion EXE` (pull request or manual workflow dispatch), or locally on a Windows machine:
    ```powershell
    py -3.12 -m venv .venv
