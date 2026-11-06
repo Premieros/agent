@@ -14,7 +14,7 @@ import webbrowser
 import tkinter as tk
 from tkinter import messagebox, ttk
 
-BASE_URL = "https://premieros-ai-sales-agent.vercel.app"
+BASE_URL = "https://premieros-ai-sales-agent-git-feature-c390af-sayedalaa82285-7634.vercel.app"
 ALLOWED_ACTIONS = {"open_url", "click", "type_text", "hotkey"}
 EVENTS: "queue.Queue[tuple[str, object]]" = queue.Queue()
 
