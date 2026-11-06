@@ -7,6 +7,7 @@ import type { User } from "@supabase/supabase-js";
 import { getSupabase } from "@/lib/supabase-browser";
 import { currentSession, currentUser, isExpiredAuthError, recoverExpiredSession } from "@/lib/auth-session";
 import { renderFreeCreative } from "@/lib/free-creative";
+import DesktopChatPanel from "@/components/desktop-chat-panel";
 
 type Member = { organization_id: string; role: string };
 type Page = {
@@ -516,6 +517,7 @@ export default function AgentStudio() {
           <div><h2>{studioSection==="models"?"النماذج والذكاء الاصطناعي":studioSection==="pages"?"الصفحات والعلامات":studioSection==="campaigns"?"الحملات والمهام":studioSection==="outputs"?"مخرجات الوكلاء":studioSection==="creatives"?"مكتبة التصميمات":"فريق الوكلاء والحملات"}</h2>
           <p>{studioSection==="models"?"إعداد مفاتيح النماذج واختيار طريقة التشغيل في مكان واحد":studioSection==="pages"?"إدارة ملفات العلامات التجارية والصفحات":studioSection==="campaigns"?"تشغيل مهام التسويق واعتمادها":studioSection==="outputs"?"مراجعة المسودات والمحتوى الناتج عن الوكلاء":studioSection==="creatives"?"تصميمات المهمة والقوالب المجانية والصور الخاصة":"تشغيل مهام الفريق وإدارة اعتماد المخرجات"}</p></div>
         </div>
+        {studioSection==="creatives" && member.role==="admin" && <DesktopChatPanel />}
         {studioSection==="models" && <>
         <section className="studio-auto-routing">
           <div className="studio-auto-head">
