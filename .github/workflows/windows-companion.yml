@@ -1,5 +1,11 @@
 name: Windows Companion EXE
 on:
+  push:
+    branches:
+      - feature/support-ai-multproject
+    paths:
+      - 'windows-companion/**'
+      - '.github/workflows/windows-companion.yml'
   workflow_dispatch:
   pull_request:
     paths:
