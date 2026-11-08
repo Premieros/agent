@@ -1,12 +1,16 @@
-# AGENT — Multi-page AI Sales & Marketing
+# AGENT — Unified AI Workspace
 
-Arabic-first web workspace for running multiple Facebook and Instagram brand workspaces, producing AI-assisted marketing drafts, managing customer leads and internal team handoff.
+Arabic-first unified AI workspace for multi-skill assistant, marketing agents, CRM, team inbox and customer support across multiple websites. Social messaging connectors are under review and not live.
 
 **Production site:** https://premieros-ai-sales-agent.vercel.app  
 **Multi-page AI Studio:** https://premieros-ai-sales-agent.vercel.app/studio  
 **General multi-skill assistant:** https://premieros-ai-sales-agent.vercel.app/assistant  
 **Authenticated CRM:** https://premieros-ai-sales-agent.vercel.app/crm  
 **Team Inbox:** https://premieros-ai-sales-agent.vercel.app/crm/inbox
+
+## Unified preview and repository map
+
+See [docs/PROJECT_STRUCTURE.md](docs/PROJECT_STRUCTURE.md). The preview retains Support AI project/inbox interfaces and both existing website integrations; social channel connectors are review-only and do not yet send WhatsApp or Facebook messages.
 
 ## Current capabilities (October 2026)
 
@@ -16,7 +20,7 @@ Arabic-first web workspace for running multiple Facebook and Instagram brand wor
 - **Visual designer:** a separate explicitly confirmed action generates a real image with a supported OpenAI or Gemini image API and stores it in a **private** Supabase Storage bucket, limited to 3 images per mission. API usage may incur cost.
 - **Editorial approval:** humans review and approve drafts **internally only**. No publishing, automatic replies, Meta spending, or automated messaging actions are wired yet.
 - **CRM and internal inbox:** actual authenticated customer storage, notes, follow-up task creation, human-takeover mode. Internal notes are never sent to external channels.
-- **Original UI prototype:** `/` still contains demo conversations and does not represent real customer activity.
+- **Single active home:** `/` redirects to `/assistant`. Legacy demonstration screens have been removed from the unified preview.
 
 ## General assistant / skill-based chat (v1)
 
