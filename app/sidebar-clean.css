@@ -72,6 +72,7 @@
  border-top:1px solid rgba(115,147,161,.2)!important;
  padding-top:6px!important;
 }
+.workspace-shell .workspace-navigation .agent-secondary-items[hidden]{display:none!important}
 .workspace-shell .workspace-navigation .agent-secondary-items{
  display:flex;
  flex-direction:column;
