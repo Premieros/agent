@@ -42,3 +42,14 @@ test('Johna visitor endpoint has a hard boundary ahead of model/doc retrieval',(
  assert.ok(file.slice(bound,docs).includes('return response({answer:approved,mode:"ai",sources:[]},200,origin)'));
  assert.ok(!file.includes('JOHNA_PRODUCT_KNOWLEDGE'));
 });
+
+test('punctuation-only and short ambiguous messages remain in AI help flow',()=>{
+ for(const question of ['؟','???','|||','١٢٣٤','👍','..']){
+  const answer=johnaPublicAnswer(question);
+  assert.ok(answer?.includes('اكتب سؤالك'),question);
+ }
+ assert.ok(johnaPublicAnswer('hi')?.includes('أهلًا'));
+ assert.equal(johnaPublicAnswer('موظف'),null,'staff requests remain eligible for handoff');
+ assert.equal(johnaPublicAnswer('كيف تم بناء النظام؟'),null,'sensitive prompts remain protected');
+ assert.equal(johnaPublicAnswer('عندي سؤال عام'),null,'substantive unknown requests remain handoff');
+});
