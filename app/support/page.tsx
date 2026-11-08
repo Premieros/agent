@@ -22,6 +22,8 @@ export default function SupportAdmin(){
  const [question,setQuestion]=useState(""),[answer,setAnswer]=useState("");
  const [allowConditional,setAllowConditional]=useState(false);
  const [replyModel,setReplyModel]=useState("");
+ const [replyGrounded,setReplyGrounded]=useState<boolean|null>(null);
+ const [knowledgeStatus,setKnowledgeStatus]=useState("");
  const [sources,setSources]=useState<Array<{id:string;title:string}>>([]);
  const [origin,setOrigin]=useState("");
  const [notice,setNotice]=useState<Notice|null>(null);
@@ -74,6 +76,7 @@ export default function SupportAdmin(){
   let cancelled=false;
   setInstructions(project?.instructions||"");
   setAnswer("");setSources([]);setHealth(null);setReplyModel("");
+  setReplyGrounded(null);setKnowledgeStatus("");
   void Promise.all([
    request("/api/support/documents?projectId="+encodeURIComponent(chosen)),
    request("/api/support/widgets?projectId="+encodeURIComponent(chosen))
@@ -174,10 +177,19 @@ export default function SupportAdmin(){
     <textarea style={inputStyle} rows={3} value={question} onChange={e=>setQuestion(e.target.value)}
      placeholder="اسأل كما يسأل العميل"/>
     <button style={buttonStyle} disabled={busy||question.trim().length<3} onClick={()=>void act(async()=>{
+     setAnswer("");setSources([]);setReplyModel("");setReplyGrounded(null);setKnowledgeStatus("");
      const result=await request("/api/support/preview","POST",{projectId:chosen,question,allowConditionalFreeTier:allowConditional});
      setAnswer(result.answer||"");setSources(result.sources||[]);setReplyModel(result.model||"");
+     setReplyGrounded(result.grounded===true);setKnowledgeStatus(result.knowledgeStatus||"");
     },"ظهرت نتيجة الاختبار أدناه.")}>اختبار المساعد</button>
-    {answer&&<div className="support-simple-answer"><strong>الرد</strong>{replyModel&&<small style={{display:"block"}}>النموذج المستخدم: {replyModel}</small>}<p>{answer}</p>
+    {answer&&<div className="support-simple-answer">
+     <strong>الرد</strong>
+     {replyGrounded===false&&<p role="status" style={{fontSize:13,color:"#93541d",padding:"7px 10px",background:"#fff4df",borderRadius:9}}>
+      {knowledgeStatus==="no-documents"?"لا توجد ملفات معرفة في هذا المشروع بعد.":knowledgeStatus==="no-match"?"لم يُعثر على مصدر مطابق لهذا السؤال في ملفات المشروع.":""}
+      {" "}الإجابة التالية إرشادية فقط، وليست معلومة معتمدة عن مشروعك.
+     </p>}
+     {replyModel&&<small style={{display:"block"}}>النموذج المستخدم: {replyModel}</small>}
+     <p>{answer}</p>
      {sources.length>0&&<small>المصادر: {sources.map(s=>s.title).join("، ")}</small>}
     </div>}
    </section>
