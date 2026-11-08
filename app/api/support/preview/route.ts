@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAgentSession, errorResponse } from "@/lib/agent-server";
 import {answerSupportWithFreeModels} from "@/lib/support-auto-ai";
-import {selectSupportSources,requiresVerifiedProjectKnowledge} from "@/lib/support-preview-knowledge";
+import {selectSupportSources,requiresVerifiedProjectKnowledge,isMeaningfulSupportQuestion} from "@/lib/support-preview-knowledge";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -12,8 +12,8 @@ export async function POST(req:NextRequest){
   const session=await requireAgentSession(req);
   const body=await req.json() as {projectId?:unknown;question?:unknown;allowConditionalFreeTier?:unknown};
   if(typeof body.projectId!=="string"||!uuid.test(body.projectId)||
-     typeof body.question!=="string"||body.question.trim().length<3||body.question.length>1500)
-   return response({error:"حدد المشروع وسؤالًا من 3 إلى 1500 حرف."},400);
+     typeof body.question!=="string"||!isMeaningfulSupportQuestion(body.question))
+   return response({error:"حدد المشروع واكتب سؤالًا واضحًا لا يقل عن ثلاثة أحرف، وليس أرقامًا أو رموزًا فقط."},400);
   const {data:project,error:projectError}=await session.db.from("support_projects")
    .select("id,name,instructions").eq("id",body.projectId).eq("organization_id",session.organizationId).maybeSingle();
   if(projectError)return response({error:"تعذر قراءة المشروع. تحقق من تطبيق ترحيل Support AI."},503);

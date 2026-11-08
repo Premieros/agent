@@ -1,5 +1,6 @@
 import "server-only";
 import {askAutoAgent,discoverAutoModels} from "@/lib/auto-ai";
+import {preferSupportConversationModels} from "@/lib/support-chat-models";
 
 /**
  * The same centrally configured automatic routing used by the main assistant.
@@ -12,5 +13,5 @@ export async function answerSupportWithFreeModels(
  allowConditional:boolean
 ):Promise<{text:string;model:string;tried:number}>{
  const candidates=await discoverAutoModels(allowConditional);
- return askAutoAgent(candidates,role,instructions,context,650,"general");
+ return askAutoAgent(preferSupportConversationModels(candidates),role,instructions,context,650,"general");
 }
