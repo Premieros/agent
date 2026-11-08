@@ -34,7 +34,8 @@ const groups:Group[]=[
  {title:"خدمة العملاء الذكية",items:[
   {href:"/support",label:"المشاريع وقاعدة المعرفة",icon:Headphones},
   {href:"/support/conversations",label:"محادثات العملاء",icon:MessagesSquare},
-  {href:"/support/customer",label:"واجهة العملاء",icon:MonitorPlay}
+  {href:"/support/customer",label:"واجهة العملاء",icon:MonitorPlay},
+  {href:"/support/channels",label:"ربط قنوات التواصل",icon:PlugZap}
  ]},
  {title:"الربط والإعدادات",items:[
   {href:"/assistant/integrations",label:"الربط والتكاملات",icon:PlugZap}
@@ -46,7 +47,7 @@ export default function WorkspaceShell({children}:{children:ReactNode}){
  const searchParams=useSearchParams();
  const isWorkspace=pathname==="/"||pathname==="/studio"||pathname==="/assistant"||
    pathname.startsWith("/assistant/")||pathname==="/crm"||pathname.startsWith("/crm/")||
-   pathname==="/support"||pathname==="/support/conversations";
+   pathname==="/support"||pathname.startsWith("/support/");
  const [mobileOpen,setMobileOpen]=useState(false);
  useEffect(()=>{
   const close=()=>setMobileOpen(false);
