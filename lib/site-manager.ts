@@ -10,7 +10,7 @@ const BASE="https://api.github.com/repos/"+GITHUB_REPO;
 export const SITE_URL="https://premieros-ai-sales-agent.vercel.app";
 const safeFiles=[
   "app/page.tsx","app/workspace-dark.css",
-  "components/agent-home.tsx","components/workspace-shell.tsx",
+  "components/workspace-shell.tsx",
   "components/general-assistant.tsx","components/agent-studio.tsx",
   "components/live-crm.tsx","components/live-inbox.tsx",
   "components/assistant-integrations-hub.tsx","components/assistant-markdown.tsx",
@@ -59,7 +59,7 @@ export async function getSiteSource(path:string){
 }
 export function chooseSiteFile(task:string){
   if(/(?:ألوان|الوان|خلفي|ستايل|تنسيق|css|dark|theme|فونت|خط|تباين|مسافات)/i.test(task))return "app/workspace-dark.css";
-  if(/(?:رئيسية|الرئيسيه|dashboard|homepage|الاحصائيات|الإحصائيات)/i.test(task))return "components/agent-home.tsx";
+  if(/(?:رئيسية|الرئيسيه|dashboard|homepage|الاحصائيات|الإحصائيات)/i.test(task))return "components/general-assistant.tsx";
   if(/(?:قائمة|سايدبار|التنقل|sidebar|navigation|القسم|الأقسام)/i.test(task))return "components/workspace-shell.tsx";
   if(/(?:صندوق الوارد|inbox|رسائل العملاء|محادثات العملاء)/i.test(task))return "components/live-inbox.tsx";
   if(/(?:عميل|عملاء|leads|crm|مبيعات)/i.test(task))return "components/live-crm.tsx";
