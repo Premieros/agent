@@ -17,6 +17,12 @@ export function johnaPublicAnswer(question:string):string|null{
   return "أهلًا بك في خدمة عملاء Johna-S. أقدر أساعدك في استخدام وظائف النظام اليومية. ما العملية التي تريد تنفيذها؟";
  if(/^(?:شكرا|شكراً|متشكر|تسلم|thanks|thank you)[؟?!.\s]*$/i.test(q))
   return "العفو، هل تحتاج مساعدة في أي خطوة أخرى؟";
+ // Ambiguous punctuation, emoji and number-only input is not a support incident.
+ // A request for clarification preserves AI mode; private/system topics are
+ // still screened by the confidential filter above.
+ if((q.match(/\p{L}/gu)||[]).length<3)
+  return "من فضلك اكتب سؤالك أو صف العملية التي تحتاج المساعدة فيها، مثل البيع أو المنتجات أو المخزون. سأساعدك بالمعلومات المتاحة.";
+
  if(/(?:نقطه\s*البيع|pos|عمليه\s*بيع|تسجيل\s*بيع|عمل\s*فاتوره\s*بيع|البيع\s*فين|ازاي\s*ابيع)/i.test(q))
   return "افتح «نقطة البيع» من القائمة الجانبية، وتأكد من الفرع، ثم اختر الأصناف والكميات. راجع الطلب قبل الدفع، وتحقق من تسجيله قبل إعادة المحاولة.";
  if(/(?:اضافه\s*منتج|اضيف\s*منتج|انشاء\s*منتج|المنتجات|الاصناف|صنف\s*جديد)/i.test(q))
