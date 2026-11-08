@@ -1,12 +1,16 @@
-# AGENT — Multi-page AI Sales & Marketing
+# AGENT — Unified AI Workspace
 
-Arabic-first web workspace for running multiple Facebook and Instagram brand workspaces, producing AI-assisted marketing drafts, managing customer leads and internal team handoff.
+Arabic-first AI workspace combining a multi-skill assistant, sales/marketing Studio, authenticated CRM, internal inbox, and controlled integrations. Each feature has one maintained route; experimental additions are reviewed separately before merging.
 
 **Production site:** https://premieros-ai-sales-agent.vercel.app  
 **Multi-page AI Studio:** https://premieros-ai-sales-agent.vercel.app/studio  
 **General multi-skill assistant:** https://premieros-ai-sales-agent.vercel.app/assistant  
 **Authenticated CRM:** https://premieros-ai-sales-agent.vercel.app/crm  
 **Team Inbox:** https://premieros-ai-sales-agent.vercel.app/crm/inbox
+
+## Project structure
+
+See [docs/PROJECT_STRUCTURE.md](docs/PROJECT_STRUCTURE.md) for the single-source route map, module boundaries, and PR consolidation plan.
 
 ## Current capabilities (October 2026)
 
@@ -16,13 +20,13 @@ Arabic-first web workspace for running multiple Facebook and Instagram brand wor
 - **Visual designer:** a separate explicitly confirmed action generates a real image with a supported OpenAI or Gemini image API and stores it in a **private** Supabase Storage bucket, limited to 3 images per mission. API usage may incur cost.
 - **Editorial approval:** humans review and approve drafts **internally only**. No publishing, automatic replies, Meta spending, or automated messaging actions are wired yet.
 - **CRM and internal inbox:** actual authenticated customer storage, notes, follow-up task creation, human-takeover mode. Internal notes are never sent to external channels.
-- **Original UI prototype:** `/` still contains demo conversations and does not represent real customer activity.
+- **Single primary entry:** `/` redirects to the real `/assistant` workspace. Legacy demo-only screens are not part of the active application.
 
 ## General assistant / skill-based chat (v1)
 
 Open `/assistant` to chat freely with the user-scoped AGENT assistant. Built-in instruction skills: automatic task-type detection, general Q&A, writing, marketing, coding, analysis, planning, learning, and translation. The assistant switches automatically between discoverable configured Gemini/Groq free-tier candidate models (with a 3-attempt cap) when a provider rejects requests or runs out of quota. There is a visible checkbox consenting to provider free-tier candidates; provider billing or unlimited free usage is NOT guaranteed.
 
-Conversations and their last 12-message context live in `assistant_threads`/`assistant_messages` in Supabase. RLS restricts them to the creating signed-in admin/manager; users can start, view and permanently delete their own conversations. The server authenticates every operation with the Supabase user session, uses private Vercel keys only, and never returns API credentials. The assistant does NOT browse the web, run arbitrary code, read attachments, access private CRM entities or operate connected apps yet. It only responds with generated text; tools and actions will require separately authorized integrations.
+Conversations and their last 12-message context live in `assistant_threads`/`assistant_messages` in Supabase. RLS restricts them to the creating signed-in admin/manager; users can start, view and permanently delete their own conversations. The server authenticates every operation with the Supabase user session, uses private Vercel keys only, and never returns API credentials. The assistant supports bounded public research and configured read-only GitHub, library, and authorized workspace reads when available and enabled. It does not have unrestricted browser or repository write access; impactful operations require explicit approval and separately authorized integrations.
 
 The existing marketing Studio and CRM remain independent. Adding a skill only configures instructions; it does not grant permissions or execute real-world side effects.
 
