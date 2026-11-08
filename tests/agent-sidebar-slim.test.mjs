@@ -6,7 +6,7 @@ const read=path=>readFileSync(new URL("../"+path,import.meta.url),"utf8");
 const shell=read("components/workspace-shell.tsx");
 const assistant=read("components/general-assistant.tsx");
 
-const extract=(source:string)=>[...source.matchAll(/\{href:"([^"]+)",label:"([^"]+)"/g)].map(m=>m[1]);
+const extract=(source)=>[...source.matchAll(/\{href:"([^"]+)",label:"([^"]+)"/g)].map(m=>m[1]);
 
 test("daily navigation contains six distinct, meaningful destinations",()=>{
  const primary=shell.slice(shell.indexOf("const groups:Group[]=["),shell.indexOf("// Less frequently"));
