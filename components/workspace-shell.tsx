@@ -2,6 +2,7 @@
 
 import {useEffect,useState,type ReactNode} from "react";
 import Link from "next/link";
+import QuickPinControl from "@/components/quick-pin-control";
 import {usePathname,useSearchParams} from "next/navigation";
 import {
   Bot,BookOpen,ClipboardList,FileImage,Headphones,Home,Inbox,Library,
@@ -106,6 +107,7 @@ export default function WorkspaceShell({children}:{children:ReactNode}){
     <button type="button" className="workspace-mobile-menu" aria-label="فتح القائمة"
      onClick={()=>setMobileOpen(true)}><Menu size={21}/></button>
     <span className="workspace-current-title">{title}</span>
+    <QuickPinControl/>
    </header>
    <div className={"workspace-page"+(pathname==="/assistant"?" workspace-chat-page":"")}>
     {children}
