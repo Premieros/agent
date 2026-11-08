@@ -107,14 +107,14 @@ export default function WorkspaceShell({children}:{children:ReactNode}){
        <Settings2 size={17}/><span>المزيد</span>
        <ChevronDown size={15} className={moreOpen?"expanded":""}/>
      </button>
-     {moreOpen&&<div id="agent-nav-secondary" className="agent-secondary-items">
+     <div id="agent-nav-secondary" className="agent-secondary-items" hidden={!moreOpen}>
       {extraItems.map(item=><Link key={item.href} href={item.href}
        aria-current={itemSelected(item.href)?"page":undefined}
        className={"workspace-nav-link agent-primary-nav"+(itemSelected(item.href)?" selected":"")}
        onClick={()=>setMobileOpen(false)}>
        <item.icon size={16}/><span>{item.label}</span>
       </Link>)}
-     </div>}
+     </div>
     </section>
     {pathname==="/assistant"&&<section className="agent-saved-section" aria-label="سجل المحادثات">
      <button type="button" className="agent-nav-toggle agent-saved-toggle"
