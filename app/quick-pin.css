@@ -1,0 +1,39 @@
+/* Quick PIN: privacy lock only; existing Supabase auth remains authoritative. */
+.agent-pin-menu{display:flex;align-items:center;gap:7px;margin-inline-start:auto}
+.agent-pin-menu button{display:inline-flex;align-items:center;justify-content:center;gap:7px;
+ border-radius:9px;border:1px solid rgba(124,148,170,.4);padding:8px 12px;
+ background:rgba(124,148,170,.08);color:inherit;font:inherit;font-size:13px;cursor:pointer}
+.agent-pin-menu .agent-pin-remove{opacity:.76;padding-inline:9px}
+.agent-pin-menu button:focus-visible,.agent-pin-card button:focus-visible,
+.agent-pin-card input:focus-visible,.agent-pin-help:focus-visible{outline:3px solid #3e97c7;outline-offset:2px}
+.agent-pin-overlay{position:fixed;inset:0;z-index:2000000;
+ display:flex;align-items:center;justify-content:center;overflow:auto;padding:18px;
+ background:rgba(8,17,28,.96);color:#e9f2fb;direction:rtl}
+.agent-pin-card{width:min(100%,420px);border-radius:18px;
+ background:#152436;border:1px solid #405366;box-shadow:0 24px 70px #0008;
+ padding:26px 24px;text-align:center}
+.agent-pin-mark{display:inline-grid;place-items:center;background:#23465b;
+ width:52px;height:52px;border-radius:15px;margin-bottom:10px}
+.agent-pin-card h2{font-size:22px;font-weight:700;margin:5px 0 10px;color:#f5f9fe}
+.agent-pin-card p{font-size:14px;line-height:1.8;color:#c5d5e5;margin:6px 0 14px}
+.agent-pin-card form{display:grid;gap:11px}
+.agent-pin-card form label{text-align:right;font-size:13px;color:#d5e1ee}
+.agent-pin-card input{width:100%;height:52px;background:#0c1929;color:#fff;
+ border:1px solid #66819a;border-radius:10px;letter-spacing:14px;
+ text-align:center;font-size:24px;direction:ltr;outline:none}
+.agent-pin-dots{display:flex;justify-content:center;gap:9px;margin:3px auto}
+.agent-pin-dots span{width:9px;height:9px;border-radius:50%;border:1px solid #8ea8bf}
+.agent-pin-dots span.filled{background:#79cde8;border-color:#79cde8}
+.agent-pin-card form button{width:100%;min-height:43px;border:0;border-radius:9px;
+ background:#d5efff;color:#0b283d;font:inherit;font-weight:700;cursor:pointer;
+ display:flex;align-items:center;justify-content:center;gap:8px}
+.agent-pin-card button:disabled{opacity:.55;cursor:not-allowed}
+.agent-pin-card .agent-pin-secondary{border:0;background:transparent;color:#afdcff;
+ padding:11px;margin-top:8px;font:inherit;cursor:pointer}
+.agent-pin-card .agent-pin-error{background:#552e33;color:#ffe3e5;border-radius:8px;
+ padding:9px;margin:5px 0;font-size:13px}
+.agent-pin-card small{display:block;font-size:11px;line-height:1.8;color:#9cb1c5;margin-top:12px}
+.agent-pin-help{display:block;font-size:12px;color:#b7d6eb;margin-top:9px}
+@media(max-width:620px){.agent-pin-menu button{font-size:12px;padding:7px 8px}
+ .agent-pin-menu .agent-pin-remove{font-size:11px}
+ .agent-pin-card{padding:22px 17px}}
