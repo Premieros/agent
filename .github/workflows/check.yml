@@ -2,9 +2,9 @@ name: AGENT build check
 
 on:
   push:
-    branches: [main, 'feature/support-*']
+    branches: [main, 'feature/support-*', 'feature/quick-pin-*']
   pull_request:
-    branches: [main, 'feature/support-ai-multproject']
+    branches: [main, 'feature/support-ai-multproject', 'feature/support-unified-clean-20261108']
   workflow_dispatch:
 
 permissions:
