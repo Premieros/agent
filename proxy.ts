@@ -12,7 +12,8 @@ const openRoutes=new Set([
  "/api/support/public/history",
  "/api/support/premier-inbox",
  "/api/support/johna-inbox",
- "/support/widget.js"
+ "/support/widget.js",
+ "/api/support/channels/meta/webhook"
 ]);
 
 export function proxy(request:NextRequest){
