@@ -8,6 +8,12 @@ export function normalizedSupportText(value:string):string{
   .replace(/[أإآٱ]/g,"ا").replace(/ى/g,"ي").replace(/ة/g,"ه")
   .replace(/[^\p{L}\p{N}]+/gu," ").trim();
 }
+/** Reject punctuation-only or number-only preview inputs before any model call. */
+export function isMeaningfulSupportQuestion(value:string):boolean{
+ if(value.length>1500)return false;
+ const letters=normalizedSupportText(value).replace(/[^\p{L}]/gu,"");
+ return letters.length>=3;
+}
 const stop=new Set(["كيف","هل","الى","علي","متى","عندي","اريد","يمكن","انا","ايه","ماذا","هذا","هذه","اذا","عند","لدي","ليه","فين","what","how","the","does","can","with","from"]);
 function forms(word:string):string[]{
  const candidates=new Set([word]);
