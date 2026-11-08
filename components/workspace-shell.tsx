@@ -47,7 +47,7 @@ export default function WorkspaceShell({children}:{children:ReactNode}){
  const searchParams=useSearchParams();
  const isWorkspace=pathname==="/"||pathname==="/studio"||pathname==="/assistant"||
    pathname.startsWith("/assistant/")||pathname==="/crm"||pathname.startsWith("/crm/")||
-   pathname==="/support"||pathname.startsWith("/support/");
+   pathname==="/support"||pathname==="/support/conversations"||pathname==="/support/channels";
  const [mobileOpen,setMobileOpen]=useState(false);
  useEffect(()=>{
   const close=()=>setMobileOpen(false);
