@@ -12,7 +12,7 @@ test("one home redirect and live assistant for unified AGENT",()=>{
  const shell=read("components/workspace-shell.tsx");
  assert.doesNotMatch(shell,/href:"\/",label:"لوحة التحكم"/);
  assert.match(shell,/href:"\/assistant",label:"المحادثات الذكية"/);
- assert.match(shell,/href:"\/assistant" className="workspace-logo"/);
+ assert.match(shell,/href="\/assistant" className="workspace-logo"/);
 });
 
 test("new navigation preserves support channels, support inbox, CRM and Studio",()=>{
