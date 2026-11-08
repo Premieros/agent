@@ -42,3 +42,14 @@ test('Johna visitor endpoint has a hard boundary ahead of model/doc retrieval',(
  assert.ok(file.slice(bound,docs).includes('return response({answer:approved,mode:"ai",sources:[]},200,origin)'));
  assert.ok(!file.includes('JOHNA_PRODUCT_KNOWLEDGE'));
 });
+
+
+test('one-symbol, number-only and emoji messages ask for clarification, not staff takeover',()=>{
+ for(const q of ['؟','???','|||','١٢٣٤','👍','..']){
+  const answer=johnaPublicAnswer(q);
+  assert.ok(answer?.includes('اكتب سؤالك'),q);
+ }
+ assert.ok(johnaPublicAnswer('hi')?.includes('أهلًا'));
+ assert.equal(johnaPublicAnswer('موظف'),null,'explicit human request still routes to staff');
+ assert.equal(johnaPublicAnswer('كيف تم بناء النظام؟'),null,'sensitive query remains blocked');
+});
