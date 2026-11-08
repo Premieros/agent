@@ -13,7 +13,6 @@ type Item={href:string;label:string;icon:typeof Home};
 type Group={title:string;items:Item[]};
 const groups:Group[]=[
  {title:"الرئيسية والمساعد",items:[
-  {href:"/",label:"لوحة التحكم",icon:Home},
   {href:"/assistant",label:"المحادثات الذكية",icon:MessagesSquare},
   {href:"/assistant/library",label:"مكتبة المساعد",icon:Library}
  ]},
@@ -75,7 +74,7 @@ export default function WorkspaceShell({children}:{children:ReactNode}){
   <aside className={"workspace-navigation"+(mobileOpen?" workspace-navigation-open":"")}
    aria-label="أقسام AGENT">
    <div className="workspace-brand">
-    <Link href="/" className="workspace-logo" onClick={()=>setMobileOpen(false)}>
+    <Link href="/assistant" className="workspace-logo" onClick={()=>setMobileOpen(false)}>
      <span className="workspace-brand-symbol">✦</span><strong>AGENT</strong>
     </Link>
     <button type="button" className="workspace-close-mobile" aria-label="إغلاق القائمة"
