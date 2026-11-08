@@ -57,8 +57,8 @@ export function parseMetaTextEvents(payload:unknown):SupportMetaTextEvent[]{
     if(!change||change.field!=="messages")continue;
     const value=record(change.value),meta=record(value?.metadata);
     const accountId=id(meta?.phone_number_id);if(!accountId)continue;
-    for(const value of list(value?.messages)){
-     const msg=record(value);
+    for(const messageValue of list(value?.messages)){
+     const msg=record(messageValue);
      if(!msg||msg.type!=="text")continue;
      const senderId=id(msg.from),messageId=id(msg.id),text=bodyText(record(msg.text)?.body);
      if(!senderId||!messageId||!text)continue;
