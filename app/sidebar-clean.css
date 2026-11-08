@@ -1,0 +1,132 @@
+/* Unified AGENT sidebar — six daily-use links, with optional extras/history.
+   Scoped to the shell: no changes to public website customer widgets. */
+.workspace-shell .workspace-navigation .agent-clean-navigation{
+ display:flex!important;
+ flex-direction:column!important;
+ gap:7px!important;
+ padding:5px 3px 14px!important;
+ min-height:0;
+}
+.workspace-shell .workspace-navigation .agent-clean-navigation .agent-navigation-group{
+ display:flex!important;
+ flex-direction:column!important;
+ gap:2px!important;
+ border:0!important;
+ padding:0 0 5px!important;
+ margin:0!important;
+}
+.workspace-shell .workspace-navigation .agent-clean-navigation .agent-navigation-heading{
+ padding:7px 10px 3px!important;
+ margin:0!important;
+ font-size:10px!important;
+ line-height:1.5!important;
+ font-weight:700!important;
+ opacity:.7;
+}
+.workspace-shell .workspace-navigation .agent-clean-navigation .agent-primary-nav{
+ display:flex!important;
+ align-items:center!important;
+ gap:9px!important;
+ min-height:37px!important;
+ padding:8px 11px!important;
+ margin:0!important;
+ border-radius:9px!important;
+ font-size:12px!important;
+ font-weight:600!important;
+ line-height:1.45!important;
+}
+.workspace-shell .workspace-navigation .agent-clean-navigation .agent-primary-nav svg{
+ flex-shrink:0!important;
+ height:17px!important;
+ width:17px!important;
+}
+.workspace-shell .workspace-navigation .agent-clean-navigation :is(.agent-nav-toggle){
+ display:flex!important;
+ align-items:center!important;
+ gap:9px!important;
+ min-height:37px!important;
+ width:100%!important;
+ text-align:right!important;
+ padding:8px 11px!important;
+ border:0!important;
+ border-radius:9px!important;
+ font:600 12px/1.45 "Cairo",Tahoma,sans-serif!important;
+ background:transparent!important;
+ color:inherit!important;
+ cursor:pointer!important;
+}
+.workspace-shell .workspace-navigation .agent-clean-navigation .agent-nav-toggle>span{
+ flex:1;
+}
+.workspace-shell .workspace-navigation .agent-clean-navigation .agent-nav-toggle>.expanded{
+ transform:rotate(180deg);
+}
+.workspace-shell .workspace-navigation .agent-clean-navigation .agent-nav-toggle:hover{
+ background:rgba(78,142,165,.12)!important;
+}
+.workspace-shell .workspace-navigation .agent-clean-navigation .agent-nav-toggle:focus-visible{
+ outline:2px solid #2384a2;
+ outline-offset:2px;
+}
+.workspace-shell .workspace-navigation .agent-clean-navigation .agent-secondary-group{
+ border-top:1px solid rgba(115,147,161,.2)!important;
+ padding-top:6px!important;
+}
+.workspace-shell .workspace-navigation .agent-secondary-items[hidden]{display:none!important}
+.workspace-shell .workspace-navigation .agent-secondary-items{
+ display:flex;
+ flex-direction:column;
+ gap:2px;
+ padding-inline-start:9px;
+}
+.workspace-shell .workspace-navigation .agent-secondary-items .agent-primary-nav{
+ font-size:11.5px!important;
+ min-height:34px!important;
+}
+.workspace-shell .workspace-navigation .agent-saved-section{
+ display:block;
+ border-top:1px solid rgba(115,147,161,.2);
+ padding:7px 0 0;
+ margin-top:4px;
+}
+.workspace-shell .workspace-navigation .agent-saved-content[hidden]{
+ display:none!important;
+}
+.workspace-shell .workspace-navigation .agent-saved-content{
+ max-height:min(33dvh,300px);
+ overflow-y:auto;
+ padding:0 3px 5px;
+ scrollbar-width:thin;
+}
+.workspace-shell .workspace-navigation .agent-saved-content .workspace-sidebar-slot{
+ margin:2px 0 0!important;
+ padding:0!important;
+ border:0!important;
+}
+.workspace-shell .workspace-navigation .agent-saved-content .assistant-sidebar{
+ background:transparent!important;
+ margin:0!important;
+ padding:0!important;
+ box-shadow:none!important;
+ border:0!important;
+}
+.workspace-shell .workspace-navigation .agent-saved-content .assistant-thread-list{
+ max-height:280px!important;
+ overflow-y:auto!important;
+ padding:0!important;
+}
+.workspace-shell .workspace-navigation .agent-saved-content .assistant-sidebar-empty{
+ font-size:11px!important;
+ line-height:1.7!important;
+ padding:8px!important;
+}
+@media(max-width:780px){
+ .workspace-shell .workspace-navigation .agent-clean-navigation .agent-primary-nav,
+ .workspace-shell .workspace-navigation .agent-clean-navigation .agent-nav-toggle{
+  min-height:41px!important;
+  font-size:12.5px!important;
+ }
+ .workspace-shell .workspace-navigation .agent-saved-content{
+  max-height:35dvh;
+ }
+}

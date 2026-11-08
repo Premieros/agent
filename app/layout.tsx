@@ -4,6 +4,7 @@ import "./globals.css";
 import "./workspace-dark.css";
 import "./agent-light-theme.css";
 import "./quick-pin.css";
+import "./sidebar-clean.css";
 import WorkspaceShell from "@/components/workspace-shell";
 
 export const metadata: Metadata = {

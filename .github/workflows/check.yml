@@ -2,9 +2,9 @@ name: AGENT build check
 
 on:
   push:
-    branches: [main, 'feature/support-*', 'feature/quick-pin-*']
+    branches: [main, 'feature/support-*', 'feature/quick-pin-*', 'chore/slim-agent-sidebar-*']
   pull_request:
-    branches: [main, 'feature/support-ai-multproject', 'feature/support-unified-clean-20261108']
+    branches: [main, 'feature/support-ai-multproject', 'feature/support-unified-clean-20261108', 'feature/quick-pin-unlock-20261108']
   workflow_dispatch:
 
 permissions:

@@ -924,9 +924,6 @@ export default function GeneralAssistant() {
 
   const sidebar=(
           <aside className={"assistant-sidebar "+(showSidebar?"expanded":"")}>
-            <button className="assistant-new-chat" type="button" disabled={Boolean(busy)}
-              onClick={()=>void createThread()}><Plus size={18}/> محادثة جديدة</button>
-            <div className="assistant-sidebar-title">المحادثات المحفوظة</div>
             {threads.length===0 && <p className="assistant-sidebar-empty">ابدأ محادثة جديدة، وهتظهر هنا تلقائيًا.</p>}
             <div className="assistant-thread-list">
               {threads.map(t=><div key={t.id} className={"assistant-thread "+(threadId===t.id?"active":"")}>
@@ -937,7 +934,6 @@ export default function GeneralAssistant() {
                   disabled={Boolean(busy)} onClick={()=>void removeThread(t.id)}><Trash2 size={15}/></button>
               </div>)}
             </div>
-            <div className="assistant-sidebar-footer"><ShieldCheck size={14}/> المحادثات مخصصة لحسابك فقط داخل الشركة</div>
           </aside>
   );
   useEffect(()=>{
@@ -969,8 +965,10 @@ export default function GeneralAssistant() {
           {sidebarPortalTarget ? createPortal(sidebar,sidebarPortalTarget) : sidebar}
           <main className="assistant-panel">
             <div className="assistant-toolbar">
-              <button type="button" className="assistant-menu-button" onClick={()=>setShowSidebar(v=>!v)}
-                title="قائمة المحادثات"><Menu size={20}/></button>
+              <button type="button" className="assistant-menu-button" onClick={()=>{
+                 setShowSidebar(v=>!v);
+                 window.dispatchEvent(new Event("agent:open-saved-conversations"));
+                }} title="عرض المحادثات السابقة"><Menu size={20}/></button>
               <div className="assistant-toolbar-name"><Bot size={18}/><strong>{active?.title||"محادثة جديدة"}</strong></div>
               <div className="assistant-font-tools" aria-label="حجم خط المحادثة">
                 <button type="button" title="تصغير الخط" onClick={()=>setFontSize(x=>Math.max(14,x-1))} disabled={fontSize<=14}><Minus size={14}/></button>
