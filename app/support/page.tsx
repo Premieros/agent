@@ -4,6 +4,7 @@ import {useEffect,useState} from "react";
 import Link from "next/link";
 import {getSupabase} from "@/lib/supabase-browser";
 import {currentSession} from "@/lib/auth-session";
+import {isMeaningfulSupportQuestion} from "@/lib/support-preview-knowledge";
 
 type Project={id:string;name:string;slug:string;instructions:string};
 type Doc={id:string;title:string;created_at:string};
@@ -176,7 +177,8 @@ export default function SupportAdmin(){
     </label>
     <textarea style={inputStyle} rows={3} value={question} onChange={e=>setQuestion(e.target.value)}
      placeholder="اسأل كما يسأل العميل"/>
-    <button style={buttonStyle} disabled={busy||question.trim().length<3} onClick={()=>void act(async()=>{
+    {!isMeaningfulSupportQuestion(question)&&question.trim()&&<p role="status" style={{fontSize:12,color:"#9a602d"}}>اكتب سؤالًا مفهومًا مثل: كيف أضيف منتجًا جديدًا؟</p>}
+    <button style={buttonStyle} disabled={busy||!isMeaningfulSupportQuestion(question)} onClick={()=>void act(async()=>{
      setAnswer("");setSources([]);setReplyModel("");setReplyGrounded(null);setKnowledgeStatus("");
      const result=await request("/api/support/preview","POST",{projectId:chosen,question,allowConditionalFreeTier:allowConditional});
      setAnswer(result.answer||"");setSources(result.sources||[]);setReplyModel(result.model||"");
