@@ -173,7 +173,7 @@ export default function LiveInbox() {
   return <div className="crm-root live-inbox">
     <div className="crm-wrap">
       <header className="crm-header"><div><strong>AGENT</strong><span> · مركز المحادثات</span></div>
-        <div className="crm-actions"><Link href="/studio">مدير الوكلاء</Link><Link href="/crm"><ArrowRight size={17}/> إدارة العملاء</Link><Link href="/">الواجهة التجريبية</Link></div>
+        <div className="crm-actions"><Link href="/crm"><ArrowRight size={17}/> إدارة العملاء</Link></div>
       </header>
       <div className="crm-title"><div><span className="crm-overline">Team Inbox</span><h1>{channelView==="manual"?"المتابعات الداخلية":"صندوق الوارد"}</h1><p>متابعة فعلية محفوظة على Supabase، مع فصل الملاحظات الداخلية عن الرسائل المرسلة للعملاء.</p></div><span className="crm-status"><ShieldCheck size={15}/> بيانات محمية</span></div>
       <div className="inbox-safety"><CircleAlert size={18}/><span>واتساب وماسنجر لم يتم ربطهما بعد. أي ملاحظة تكتبها هنا <b>داخلية فقط</b> ولن تُرسل لأي عميل.</span></div>
@@ -181,7 +181,7 @@ export default function LiveInbox() {
       {notice && <div className="crm-success inbox-notice" role="status"><CheckCircle2 size={16}/>{notice}<button type="button" onClick={()=>setNotice("")}>×</button></div>}
       {!db && <div className="crm-card">لم تكتمل إعدادات الربط مع Supabase.</div>}
       {db && loading && <div className="crm-card"><LoaderCircle className="crm-spin" size={19}/> جارٍ تحميل المحادثات...</div>}
-      {db && !loading && !user && <div className="crm-card inbox-gate"><h2>يلزم تسجيل الدخول</h2><p>سجّل الدخول أولًا من صفحة إدارة المبيعات، ثم ارجع لمركز المحادثات.</p><Link href="/crm">الذهاب إلى تسجيل الدخول</Link></div>}
+      {db && !loading && !user && <div className="crm-card inbox-gate"><h2>يلزم تسجيل الدخول</h2><p>سجّل الدخول أولًا من صفحة إدارة العملاء، ثم ارجع لمركز المحادثات.</p><Link href="/crm">الذهاب إلى تسجيل الدخول</Link></div>}
       {db && !loading && user && !member && <div className="crm-card inbox-gate"><h2>حسابك ليس له عضوية مفعلة</h2><p>لا يمكنك رؤية محادثات الشركات بدون صلاحية.</p></div>}
       {db && !loading && member && <>
         {(member.role==="admin"||member.role==="manager")&&<AgentReplyRule canEdit />}
