@@ -5,7 +5,7 @@ const read=p=>readFileSync(new URL("../"+p,import.meta.url),"utf8");
 test("customer service pages remain",()=>{
   for(const path of ["app/crm/page.tsx","app/crm/inbox/page.tsx","components/live-crm.tsx","components/live-inbox.tsx"])
     assert.ok(existsSync(new URL("../"+path,import.meta.url)),path);
-  assert.match(read("app/page.tsx"),/redirect\("\/crm"\)/);
+  assert.match(read("app/page.tsx"),/redirect\("\/support"\)/);
 });
 test("inbox retains actual message and handoff workflows",()=>{
   const inbox=read("components/live-inbox.tsx");

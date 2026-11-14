@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start",
     "typecheck": "tsc --noEmit",
-    "test": "node --test tests/customer-service.test.mjs"
+    "test": "node --experimental-strip-types --test tests/customer-service.test.mjs tests/support-preview-knowledge.test.mjs tests/support-meta-webhook.test.mjs"
   },
   "dependencies": {
     "next": "^16.0.0",
